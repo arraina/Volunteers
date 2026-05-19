@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true;
+    }
+    
+    // Admin-only collection
+    match /admins/{document=**} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Volunteers collection
+    match /volunteers/{volunteerId} {
+      // Admins can read/write all
+      allow read, write: if isAdmin();
+      
+      // Volunteers can read/write only their own document
+      allow read, write: if request.auth.uid == volunteerId;
+    }
+    
+    // Service Events collection
+    match /serviceEvents/{eventId} {
+      // Admins can read/write all
+      allow read, write: if isAdmin();
+      
+      // Volunteers can read only events they are assigned to
+      allow read: if request.auth.uid in resource.data.assignedVolunteers;
+      
+      // Volunteers cannot write/update events
+      allow write: if false;
+    }
+    
+    // Reminders collection (admin only - no frontend writes)
+    match /reminders/{reminderId} {
+      // Admins can read/write all
+      allow read, write: if isAdmin();
+      
+      // Volunteers cannot read or write
+      allow read, write: if false;
+    }
+    
+    // Sent Messages collection (admin only - no frontend writes)
+    match /sentMessages/{messageId} {
+      // Admins can read all
+      allow read: if isAdmin();
+      
+      // No writes allowed from frontend
+      allow write: if false;
+    }
+    
+    // Reminder Rules collection (for storing reminder configuration)
+    match /reminderRules/{ruleId} {
+      // Admins can read/write all
+      allow read, write: if isAdmin();
+      
+      // Volunteers can only read
+      allow read: if request.auth.uid != null;
+    }
+  }
+}
