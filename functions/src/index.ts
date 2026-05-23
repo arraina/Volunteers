@@ -198,6 +198,53 @@ export const createRemindersForEvent = functions.https.onCall(
   }
 );
 
+// Callable function to create a new volunteer user and profile
+export const createVolunteer = functions.https.onCall(
+  async (data: any, context: functions.https.CallableContext) => {
+    // Verify user is authenticated
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    
+    // Verify user is admin
+    const userDoc = await db.collection('admins').doc(context.auth.uid).get();
+    if (!userDoc.exists || !userDoc.data()?.isAdmin) {
+      throw new functions.https.HttpsError('permission-denied', 'User is not an admin');
+    }
+
+    const { email, password, name, phoneNumber, address } = data;
+    if (!email || !password || !name || !phoneNumber) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing required volunteer fields');
+    }
+
+    try {
+      const userRecord = await admin.auth().createUser({
+        email,
+        password,
+        displayName: name,
+      });
+
+      await db.collection('volunteers').doc(userRecord.uid).set({
+        name,
+        email,
+        phoneNumber,
+        address: address || '',
+        joinDate: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      return {
+        success: true,
+        uid: userRecord.uid,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new functions.https.HttpsError('internal', `Failed to create volunteer: ${errorMessage}`);
+    }
+  }
+);
+
 // HTTP function to trigger reminder check manually (for testing)
 export const triggerReminderCheck = functions.https.onCall(
   async (data: any, context: functions.https.CallableContext) => {

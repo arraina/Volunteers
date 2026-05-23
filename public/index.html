@@ -531,76 +531,34 @@
                     <div class="form-section">
                         <h3>Create New Event</h3>
                         <form onsubmit="handleCreateEvent(event)">
-                            <input type="text" placeholder="Event Topic" required />
-                            <input type="text" placeholder="Description" />
-                            <input type="datetime-local" required />
-                            <input type="text" placeholder="Location" />
+                            <input id="new-event-topic" type="text" placeholder="Event Topic" required />
+                            <input id="new-event-description" type="text" placeholder="Description" />
+                            <input id="new-event-datetime" type="datetime-local" required />
+                            <input id="new-event-location" type="text" placeholder="Location" />
                             <button type="submit">Create Event</button>
                         </form>
                     </div>
 
-                    <div class="events-list">
-                        <div class="event-card">
-                            <h4>Community Cleanup</h4>
-                            <p><strong>Date:</strong> Oct 15, 2024 @ 9:00 AM</p>
-                            <p><strong>Location:</strong> Central Park</p>
-                            <p><strong>Assigned Volunteers:</strong> 5</p>
-                            <p><strong>Status:</strong> <span class="status-badge status-scheduled">Scheduled</span></p>
-                        </div>
-                        <div class="event-card">
-                            <h4>Soup Kitchen Shift</h4>
-                            <p><strong>Date:</strong> Oct 22, 2024 @ 2:00 PM</p>
-                            <p><strong>Location:</strong> Downtown Food Bank</p>
-                            <p><strong>Assigned Volunteers:</strong> 8</p>
-                            <p><strong>Status:</strong> <span class="status-badge status-scheduled">Scheduled</span></p>
-                        </div>
-                    </div>
+                    <div class="events-list" id="event-cards-container"></div>
                 </div>
 
                 <!-- Volunteers Tab -->
                 <div id="admin-volunteers" class="tab-content" style="display:none;">
                     <h2>Volunteers</h2>
-                    <div class="volunteers-list">
-                        <div class="volunteer-card">
-                            <h4>John Smith</h4>
-                            <p><strong>Email:</strong> john@example.com</p>
-                            <p><strong>Phone:</strong> +14155552671</p>
-                            <p><strong>Address:</strong> 123 Main St, NYC, NY 10001</p>
-                            <div class="volunteer-actions">
-                                <select onchange="handleAssignVolunteer(this)">
-                                    <option value="">Assign to Event...</option>
-                                    <option value="1">Community Cleanup</option>
-                                    <option value="2">Soup Kitchen Shift</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="volunteer-card">
-                            <h4>Jane Doe</h4>
-                            <p><strong>Email:</strong> jane@example.com</p>
-                            <p><strong>Phone:</strong> +14155552672</p>
-                            <p><strong>Address:</strong> 456 Oak Ave, NYC, NY 10002</p>
-                            <div class="volunteer-actions">
-                                <select onchange="handleAssignVolunteer(this)">
-                                    <option value="">Assign to Event...</option>
-                                    <option value="1">Community Cleanup</option>
-                                    <option value="2">Soup Kitchen Shift</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="volunteer-card">
-                            <h4>Mike Johnson</h4>
-                            <p><strong>Email:</strong> mike@example.com</p>
-                            <p><strong>Phone:</strong> +14155552673</p>
-                            <p><strong>Address:</strong> 789 Pine Rd, NYC, NY 10003</p>
-                            <div class="volunteer-actions">
-                                <select onchange="handleAssignVolunteer(this)">
-                                    <option value="">Assign to Event...</option>
-                                    <option value="1">Community Cleanup</option>
-                                    <option value="2">Soup Kitchen Shift</option>
-                                </select>
-                            </div>
-                        </div>
+
+                    <div class="form-section">
+                        <h3>Add New Volunteer</h3>
+                        <form onsubmit="handleCreateVolunteer(event)" class="admin-form">
+                            <input id="new-volunteer-name" type="text" placeholder="Full Name" required />
+                            <input id="new-volunteer-email" type="email" placeholder="Email" required />
+                            <input id="new-volunteer-phone" type="tel" placeholder="Phone Number" required />
+                            <input id="new-volunteer-address" type="text" placeholder="Address" />
+                            <input id="new-volunteer-password" type="password" placeholder="Temporary Password" required />
+                            <button type="submit">Create Volunteer</button>
+                        </form>
                     </div>
+
+                    <div class="volunteers-list" id="volunteer-cards-container"></div>
                 </div>
 
                 <!-- SMS Reminders Tab -->
@@ -754,9 +712,102 @@
     </div>
 
     <script>
+        const EVENT_STORAGE_KEY = 'volunteerApp_eventData';
+        const VOLUNTEER_STORAGE_KEY = 'volunteerApp_volunteerData';
+
+        let eventData = [
+            { topic: 'Community Cleanup', description: 'Join us for a community cleanup effort at Central Park. All supplies provided.', date: 'Oct 15, 2024 @ 9:00 AM', location: 'Central Park', assignedVolunteers: 5, status: 'Scheduled' },
+            { topic: 'Soup Kitchen Shift', description: 'Help prepare and serve meals to those in need. Experience appreciated but not required.', date: 'Oct 22, 2024 @ 2:00 PM', location: 'Downtown Food Bank', assignedVolunteers: 8, status: 'Scheduled' },
+        ];
+
+        let volunteerData = [
+            { name: 'John Smith', email: 'john@example.com', phone: '+14155552671', address: '123 Main St, NYC, NY 10001' },
+            { name: 'Jane Doe', email: 'jane@example.com', phone: '+14155552672', address: '456 Oak Ave, NYC, NY 10002' },
+            { name: 'Mike Johnson', email: 'mike@example.com', phone: '+14155552673', address: '789 Pine Rd, NYC, NY 10003' },
+        ];
+
+        function loadSavedData() {
+            try {
+                const savedEvents = localStorage.getItem(EVENT_STORAGE_KEY);
+                if (savedEvents) {
+                    eventData = JSON.parse(savedEvents);
+                }
+            } catch (error) {
+                console.warn('Unable to load saved events:', error);
+            }
+
+            try {
+                const savedVolunteers = localStorage.getItem(VOLUNTEER_STORAGE_KEY);
+                if (savedVolunteers) {
+                    volunteerData = JSON.parse(savedVolunteers);
+                }
+            } catch (error) {
+                console.warn('Unable to load saved volunteers:', error);
+            }
+        }
+
+        function saveData() {
+            try {
+                localStorage.setItem(EVENT_STORAGE_KEY, JSON.stringify(eventData));
+                localStorage.setItem(VOLUNTEER_STORAGE_KEY, JSON.stringify(volunteerData));
+            } catch (error) {
+                console.warn('Unable to save data locally:', error);
+            }
+        }
+
+        loadSavedData();
+
+        function renderEvents() {
+            const container = document.getElementById('event-cards-container');
+            if (!container) return;
+            container.innerHTML = '';
+
+            eventData.forEach((event) => {
+                const card = document.createElement('div');
+                card.className = 'event-card';
+                card.innerHTML = `
+                    <h4>${event.topic}</h4>
+                    <p><strong>Date:</strong> ${event.date}</p>
+                    <p><strong>Location:</strong> ${event.location}</p>
+                    <p><strong>Assigned Volunteers:</strong> ${event.assignedVolunteers}</p>
+                    <p><strong>Status:</strong> <span class="status-badge status-scheduled">${event.status}</span></p>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderVolunteers() {
+            const container = document.getElementById('volunteer-cards-container');
+            if (!container) return;
+            container.innerHTML = '';
+
+            volunteerData.forEach((volunteer, index) => {
+                const card = document.createElement('div');
+                card.className = 'volunteer-card';
+                card.innerHTML = `
+                    <h4>${volunteer.name}</h4>
+                    <p><strong>Email:</strong> ${volunteer.email}</p>
+                    <p><strong>Phone:</strong> ${volunteer.phone}</p>
+                    <p><strong>Address:</strong> ${volunteer.address}</p>
+                    <div class="volunteer-actions">
+                        <select onchange="handleAssignVolunteer(this)">
+                            <option value="">Assign to Event...</option>
+                            <option value="1">Community Cleanup</option>
+                            <option value="2">Soup Kitchen Shift</option>
+                        </select>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
         function showPage(pageId) {
             document.querySelectorAll('.container').forEach(el => el.classList.remove('active'));
             document.getElementById(pageId).classList.add('active');
+            if (pageId === 'admin-dashboard') {
+                renderVolunteers();
+                renderEvents();
+            }
         }
 
         function switchTab(tabId) {
@@ -767,6 +818,12 @@
             const tabs = document.querySelectorAll('.tab');
             tabs.forEach(tab => tab.classList.remove('active'));
             event.target.classList.add('active');
+            if (tabId === 'admin-volunteers') {
+                renderVolunteers();
+            }
+            if (tabId === 'admin-events') {
+                renderEvents();
+            }
         }
 
         function handleLogin(event) {
@@ -786,7 +843,36 @@
 
         function handleCreateEvent(event) {
             event.preventDefault();
+            const topic = document.getElementById('new-event-topic').value;
+            const description = document.getElementById('new-event-description').value;
+            const dateTime = document.getElementById('new-event-datetime').value;
+            const location = document.getElementById('new-event-location').value;
+
+            if (!topic || !dateTime) {
+                alert('Please provide an event name and date/time.');
+                return;
+            }
+
+            const formattedDate = new Date(dateTime).toLocaleString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true,
+            });
+
+            eventData.push({
+                topic,
+                description: description || 'Volunteer event',
+                date: formattedDate,
+                location: location || 'TBD',
+                assignedVolunteers: 0,
+                status: 'Scheduled',
+            });
+            saveData();
+            renderEvents();
+
             alert('Event created successfully!');
+            document.getElementById('new-event-topic').value = '';
+            document.getElementById('new-event-description').value = '';
+            document.getElementById('new-event-datetime').value = '';
+            document.getElementById('new-event-location').value = '';
         }
 
         function handleAssignVolunteer(select) {
@@ -794,6 +880,36 @@
                 alert('Volunteer assigned!');
                 select.value = '';
             }
+        }
+
+        function handleCreateVolunteer(event) {
+            event.preventDefault();
+            const name = document.getElementById('new-volunteer-name').value;
+            const email = document.getElementById('new-volunteer-email').value;
+            const phone = document.getElementById('new-volunteer-phone').value;
+            const address = document.getElementById('new-volunteer-address').value;
+            const password = document.getElementById('new-volunteer-password').value;
+
+            if (!name || !email || !phone || !password) {
+                alert('Please complete all required volunteer fields.');
+                return;
+            }
+
+            volunteerData.push({
+                name,
+                email,
+                phone,
+                address,
+            });
+            saveData();
+            renderVolunteers();
+
+            alert(`Volunteer ${name} has been added successfully!`);
+            document.getElementById('new-volunteer-name').value = '';
+            document.getElementById('new-volunteer-email').value = '';
+            document.getElementById('new-volunteer-phone').value = '';
+            document.getElementById('new-volunteer-address').value = '';
+            document.getElementById('new-volunteer-password').value = '';
         }
 
         function handleCreateReminders(event) {

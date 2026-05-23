@@ -24,6 +24,15 @@ export const AdminDashboard: React.FC = () => {
     location: '',
   });
 
+  // Volunteer creation state
+  const [newVolunteer, setNewVolunteer] = useState({
+    name: '',
+    email: '',
+    phoneNumber: '',
+    address: '',
+    password: '',
+  });
+
   // Reminder form state
   const [reminderConfig, setReminderConfig] = useState({
     eventId: '',
@@ -123,6 +132,36 @@ export const AdminDashboard: React.FC = () => {
     } catch (error) {
       console.error('Error assigning volunteer:', error);
       alert('Failed to assign volunteer');
+    }
+  };
+
+  const handleCreateVolunteer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    try {
+      const createVolunteerFunction = httpsCallable(functions, 'createVolunteer');
+      const result = await createVolunteerFunction({
+        name: newVolunteer.name,
+        email: newVolunteer.email,
+        password: newVolunteer.password,
+        phoneNumber: newVolunteer.phoneNumber,
+        address: newVolunteer.address,
+      });
+
+      console.log('Volunteer created:', result);
+      alert(`Volunteer created successfully! UID: ${(result.data as any).uid}`);
+      setNewVolunteer({
+        name: '',
+        email: '',
+        phoneNumber: '',
+        address: '',
+        password: '',
+      });
+      await loadData();
+    } catch (error: any) {
+      console.error('Error creating volunteer:', error);
+      alert(`Failed to create volunteer: ${error.message}`);
     }
   };
 
@@ -256,6 +295,47 @@ export const AdminDashboard: React.FC = () => {
         {activeTab === 'volunteers' && (
           <div className="tab-content">
             <h2>Volunteers</h2>
+            <div className="form-section">
+              <h3>Add New Volunteer</h3>
+              <form onSubmit={handleCreateVolunteer} className="admin-form">
+                <input
+                  type="text"
+                  placeholder="Full Name"
+                  value={newVolunteer.name}
+                  onChange={(e) => setNewVolunteer({...newVolunteer, name: e.target.value})}
+                  required
+                />
+                <input
+                  type="email"
+                  placeholder="Email"
+                  value={newVolunteer.email}
+                  onChange={(e) => setNewVolunteer({...newVolunteer, email: e.target.value})}
+                  required
+                />
+                <input
+                  type="tel"
+                  placeholder="Phone Number"
+                  value={newVolunteer.phoneNumber}
+                  onChange={(e) => setNewVolunteer({...newVolunteer, phoneNumber: e.target.value})}
+                  required
+                />
+                <input
+                  type="text"
+                  placeholder="Address"
+                  value={newVolunteer.address}
+                  onChange={(e) => setNewVolunteer({...newVolunteer, address: e.target.value})}
+                />
+                <input
+                  type="password"
+                  placeholder="Temporary Password"
+                  value={newVolunteer.password}
+                  onChange={(e) => setNewVolunteer({...newVolunteer, password: e.target.value})}
+                  required
+                />
+                <button type="submit">Create Volunteer</button>
+              </form>
+            </div>
+
             <div className="volunteers-list">
               {volunteers.map((volunteer) => (
                 <div key={volunteer.id} className="volunteer-card">
