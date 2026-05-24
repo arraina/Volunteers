@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { auth, db } from '../config/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { auth, db, isFirebaseConfigured } from '../config/firebase';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { isUserAdmin } from '../helpers/types';
+import { ensureDemoVolunteer, setDemoSession } from '../helpers/demoStore';
 import './Auth.css';
 
 interface AuthProps {
   type: 'login' | 'signup';
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
 }
 
 export const AuthPage: React.FC<AuthProps> = ({ type }) => {
@@ -25,6 +30,13 @@ export const AuthPage: React.FC<AuthProps> = ({ type }) => {
     setLoading(true);
 
     try {
+      if (!isFirebaseConfigured) {
+        const session = setDemoSession(email, name);
+        ensureDemoVolunteer(session, phoneNumber);
+        navigate('/dashboard');
+        return;
+      }
+
       // Create user in Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
@@ -34,13 +46,15 @@ export const AuthPage: React.FC<AuthProps> = ({ type }) => {
         name,
         email,
         phoneNumber,
-        joinedDate: new Date(),
-        createdAt: new Date(),
+        address: '',
+        joinedDate: Timestamp.now(),
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
       });
 
       navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Failed to sign up');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to sign up'));
     } finally {
       setLoading(false);
     }
@@ -52,6 +66,13 @@ export const AuthPage: React.FC<AuthProps> = ({ type }) => {
     setLoading(true);
 
     try {
+      if (!isFirebaseConfigured) {
+        const session = setDemoSession(email);
+        ensureDemoVolunteer(session);
+        navigate(session.isAdmin ? '/admin' : '/dashboard');
+        return;
+      }
+
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
@@ -63,8 +84,8 @@ export const AuthPage: React.FC<AuthProps> = ({ type }) => {
       } else {
         navigate('/dashboard');
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to log in');
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to log in'));
     } finally {
       setLoading(false);
     }

@@ -44,6 +44,8 @@ export interface Reminder {
   createdAt: Date;
 }
 
+export type FirestoreTimestampLike = Date | string | number | { toDate: () => Date };
+
 /**
  * Check if user is an admin
  */
@@ -81,9 +83,9 @@ export async function getUserProfile(userId: string): Promise<VolunteerProfile |
 /**
  * Convert Firestore Timestamp to Date
  */
-export function firestoreTimestampToDate(timestamp: any): Date {
+export function firestoreTimestampToDate(timestamp: FirestoreTimestampLike | null | undefined): Date {
   if (!timestamp) return new Date();
-  if (timestamp.toDate) return timestamp.toDate();
+  if (typeof timestamp === 'object' && 'toDate' in timestamp) return timestamp.toDate();
   return new Date(timestamp);
 }
 

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Temple Volunteers management app" />
+    <title>Temple Volunteers</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Temple Volunteers</h1>
+        <p>Service events, assignments, profiles, and SMS reminders</p>
+      </div>
+      <div class="header-actions">
+        <span id="currentUser"></span>
+        <button id="logoutBtn" class="btn secondary" style="display: none;">Logout</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="message" class="message"></div>
+
+      <section id="authPage" class="page active">
+        <div class="auth-card">
+          <div class="tabs">
+            <button class="tab active" data-auth-tab="loginForm">Login</button>
+            <button class="tab" data-auth-tab="signupForm">Sign up</button>
+          </div>
+
+          <form id="loginForm" class="auth-form active">
+            <label>Email <input name="email" type="email" placeholder="admin@example.com" required /></label>
+            <label>Password <input name="password" type="password" placeholder="Password" required /></label>
+            <button class="btn primary" type="submit">Login</button>
+            <p class="hint">Demo mode: use any email. Include "admin" in the email to open the admin dashboard.</p>
+          </form>
+
+          <form id="signupForm" class="auth-form">
+            <label>Name <input name="name" type="text" required /></label>
+            <label>Phone <input name="phoneNumber" type="tel" required /></label>
+            <label>Email <input name="email" type="email" required /></label>
+            <label>Password <input name="password" type="password" required /></label>
+            <button class="btn primary" type="submit">Create account</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="adminPage" class="page">
+        <nav class="admin-grid">
+          <section class="panel">
+            <h2>Create Event</h2>
+            <form id="eventForm" class="stack">
+              <input name="topic" placeholder="Event topic" required />
+              <input name="description" placeholder="Description" />
+              <input name="eventDateTime" type="datetime-local" required />
+              <input name="location" placeholder="Location" />
+              <button class="btn primary" type="submit">Create Event</button>
+            </form>
+          </section>
+
+          <section class="panel">
+            <h2>Add Volunteer</h2>
+            <form id="volunteerForm" class="stack">
+              <input name="name" placeholder="Full name" required />
+              <input name="email" type="email" placeholder="Email" required />
+              <input name="phoneNumber" type="tel" placeholder="Phone number" required />
+              <input name="address" placeholder="Address" />
+              <input name="password" type="password" placeholder="Temporary password" required />
+              <button class="btn primary" type="submit">Create Volunteer</button>
+            </form>
+          </section>
+
+          <section class="panel">
+            <h2>Reminder Rule</h2>
+            <form id="reminderForm" class="stack">
+              <select id="reminderEvent" name="eventId" required></select>
+              <input name="hoursBeforeEvent" type="number" min="1" max="168" value="24" required />
+              <textarea name="message" rows="4" required>Reminder: You have a volunteer event coming up!</textarea>
+              <button class="btn primary" type="submit">Create Reminders</button>
+            </form>
+          </section>
+        </nav>
+
+        <section>
+          <h2>Events</h2>
+          <div id="eventsList" class="card-grid"></div>
+        </section>
+
+        <section>
+          <h2>Volunteers</h2>
+          <div id="volunteersList" class="card-grid"></div>
+        </section>
+      </section>
+
+      <section id="volunteerPage" class="page">
+        <section class="panel">
+          <h2>My Profile</h2>
+          <form id="profileForm" class="stack">
+            <label>Name <input id="profileName" name="name" required /></label>
+            <label>Phone <input id="profilePhone" name="phoneNumber" type="tel" required /></label>
+            <label>Address <input id="profileAddress" name="address" /></label>
+            <button class="btn primary" type="submit">Save Profile</button>
+          </form>
+        </section>
+
+        <section>
+          <h2>My Assigned Events</h2>
+          <div id="assignedEvents" class="card-grid"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.1/firebase-functions-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="local-data.js"></script>
+    <script src="auth.js"></script>
+    <script src="storage.js"></script>
+    <script src="ui.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

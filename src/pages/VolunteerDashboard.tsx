@@ -1,14 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signOut, onAuthStateChanged, User, updateProfile } from 'firebase/auth';
-import { auth, db } from '../config/firebase';
-import { collection, query, where, getDocs, updateDoc, doc, getDoc } from 'firebase/firestore';
+import { auth, db, isFirebaseConfigured } from '../config/firebase';
+import { collection, query, where, getDocs, updateDoc, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { isUserAdmin, VolunteerProfile, ServiceEvent, formatDate } from '../helpers/types';
+import {
+  clearDemoSession,
+  ensureDemoVolunteer,
+  getDemoEvents,
+  getDemoSession,
+  getDemoVolunteers,
+  saveDemoVolunteers,
+} from '../helpers/demoStore';
 import './VolunteerDashboard.css';
 
 export const VolunteerDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<(User | { uid: string; email: string; displayName: string }) | null>(null);
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
   const [assignedEvents, setAssignedEvents] = useState<ServiceEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +28,25 @@ export const VolunteerDashboard: React.FC = () => {
   });
 
   useEffect(() => {
+    if (!isFirebaseConfigured) {
+      const session = getDemoSession();
+      if (!session) {
+        navigate('/login');
+      } else if (session.isAdmin) {
+        navigate('/admin');
+      } else {
+        setUser({
+          uid: session.uid,
+          email: session.email,
+          displayName: session.displayName,
+        });
+        ensureDemoVolunteer(session);
+        loadVolunteerData(session.uid);
+        setLoading(false);
+      }
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
@@ -42,6 +69,22 @@ export const VolunteerDashboard: React.FC = () => {
 
   const loadVolunteerData = async (userId: string) => {
     try {
+      if (!isFirebaseConfigured) {
+        const volunteer = getDemoVolunteers().find((item) => item.uid === userId);
+        if (volunteer) {
+          setProfile(volunteer);
+          setProfileData({
+            name: volunteer.name,
+            phoneNumber: volunteer.phoneNumber,
+            address: volunteer.address || '',
+          });
+        }
+        setAssignedEvents(
+          getDemoEvents().filter((event) => event.assignedVolunteers.includes(userId))
+        );
+        return;
+      }
+
       // Load volunteer profile
       const volunteerDoc = await getDoc(doc(db, 'volunteers', userId));
       if (volunteerDoc.exists()) {
@@ -59,7 +102,7 @@ export const VolunteerDashboard: React.FC = () => {
         setProfileData({
           name: volunteerProfile.name,
           phoneNumber: volunteerProfile.phoneNumber,
-          address: volunteerProfile.address,
+          address: volunteerProfile.address || '',
         });
       }
 
@@ -85,16 +128,36 @@ export const VolunteerDashboard: React.FC = () => {
     if (!user) return;
 
     try {
+      if (!isFirebaseConfigured) {
+        saveDemoVolunteers(
+          getDemoVolunteers().map((volunteer) =>
+            volunteer.uid === user.uid
+              ? {
+                  ...volunteer,
+                  name: profileData.name,
+                  phoneNumber: profileData.phoneNumber,
+                  address: profileData.address,
+                }
+              : volunteer
+          )
+        );
+        setEditingProfile(false);
+        await loadVolunteerData(user.uid);
+        alert('Profile updated successfully!');
+        return;
+      }
+
       const volunteerRef = doc(db, 'volunteers', user.uid);
       await updateDoc(volunteerRef, {
         name: profileData.name,
         phoneNumber: profileData.phoneNumber,
         address: profileData.address,
+        updatedAt: Timestamp.now(),
       });
 
       // Update Firebase Auth display name
-      if (profileData.name !== user.displayName) {
-        await updateProfile(user, { displayName: profileData.name });
+      if ('displayName' in user && profileData.name !== user.displayName) {
+        await updateProfile(user as User, { displayName: profileData.name });
       }
 
       setEditingProfile(false);
@@ -112,6 +175,12 @@ export const VolunteerDashboard: React.FC = () => {
 
   const handleLogout = async () => {
     try {
+      if (!isFirebaseConfigured) {
+        clearDemoSession();
+        navigate('/login');
+        return;
+      }
+
       await signOut(auth);
       navigate('/login');
     } catch (error) {
@@ -255,7 +324,7 @@ export const VolunteerDashboard: React.FC = () => {
 
         {/* Info Box */}
         <div className="info-box">
-          <h3>📱 SMS Reminders</h3>
+          <h3>SMS Reminders</h3>
           <p>
             Event administrators will send you SMS reminders before your scheduled events.
             Make sure your phone number is correct so you don't miss any updates!

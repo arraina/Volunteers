@@ -177,6 +177,35 @@
   font-size: 1.1rem;
 }
 
+.card-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.card-title-row h4 {
+  margin: 0;
+  min-width: 0;
+}
+
+.danger-btn {
+  flex: 0 0 auto;
+  padding: 0.45rem 0.75rem;
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.danger-btn:hover {
+  background: #fecaca;
+}
+
 .event-card p,
 .volunteer-card p {
   margin: 0.5rem 0;

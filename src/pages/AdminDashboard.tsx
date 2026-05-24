@@ -1,19 +1,52 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { auth, db, functions } from '../config/firebase';
-import { collection, addDoc, query, where, getDocs, Timestamp, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
+import { auth, db, functions, isFirebaseConfigured } from '../config/firebase';
+import { collection, addDoc, getDocs, Timestamp, updateDoc, doc, getDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { isUserAdmin, ServiceEvent, formatDate } from '../helpers/types';
+import {
+  clearDemoSession,
+  getDemoEvents,
+  getDemoSession,
+  getDemoVolunteers,
+  saveDemoEvents,
+  saveDemoVolunteers,
+} from '../helpers/demoStore';
 import './AdminDashboard.css';
+
+interface VolunteerRecord {
+  id: string;
+  name: string;
+  email: string;
+  phoneNumber: string;
+  address?: string;
+}
+
+interface CreateVolunteerResult {
+  uid: string;
+}
+
+interface CreateRemindersResult {
+  remindersCreated: number;
+}
+
+interface DeleteVolunteerResult {
+  authDeleted?: boolean;
+  authDeletionError?: string;
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<(User | { email: string }) | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<ServiceEvent[]>([]);
-  const [volunteers, setVolunteers] = useState<any[]>([]);
+  const [volunteers, setVolunteers] = useState<VolunteerRecord[]>([]);
   const [activeTab, setActiveTab] = useState<'events' | 'volunteers' | 'reminders'>('events');
   
   // Event form state
@@ -41,6 +74,21 @@ export const AdminDashboard: React.FC = () => {
   });
 
   useEffect(() => {
+    if (!isFirebaseConfigured) {
+      const session = getDemoSession();
+      if (!session) {
+        navigate('/login');
+      } else if (!session.isAdmin) {
+        navigate('/dashboard');
+      } else {
+        setUser({ email: session.email });
+        setIsAdmin(true);
+        loadData();
+        setLoading(false);
+      }
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
@@ -62,6 +110,12 @@ export const AdminDashboard: React.FC = () => {
 
   const loadData = async () => {
     try {
+      if (!isFirebaseConfigured) {
+        setEvents(getDemoEvents());
+        setVolunteers(getDemoVolunteers());
+        return;
+      }
+
       // Load events
       const eventsSnapshot = await getDocs(collection(db, 'serviceEvents'));
       const eventsData = eventsSnapshot.docs.map(doc => ({
@@ -76,7 +130,7 @@ export const AdminDashboard: React.FC = () => {
       const volunteersData = volunteersSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
-      }));
+      } as VolunteerRecord));
       setVolunteers(volunteersData);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -88,6 +142,25 @@ export const AdminDashboard: React.FC = () => {
     if (!user) return;
 
     try {
+      if (!isFirebaseConfigured) {
+        const createdEvent: ServiceEvent = {
+          id: `event-${Date.now()}`,
+          topic: newEvent.topic,
+          description: newEvent.description,
+          eventDateTime: new Date(newEvent.eventDateTime),
+          location: newEvent.location,
+          assignedVolunteers: [],
+          status: 'scheduled',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        saveDemoEvents([...getDemoEvents(), createdEvent]);
+        setNewEvent({ topic: '', description: '', eventDateTime: '', location: '' });
+        await loadData();
+        alert('Event created successfully!');
+        return;
+      }
+
       await addDoc(collection(db, 'serviceEvents'), {
         topic: newEvent.topic,
         description: newEvent.description,
@@ -116,6 +189,19 @@ export const AdminDashboard: React.FC = () => {
 
   const handleAssignVolunteer = async (eventId: string, volunteerId: string) => {
     try {
+      if (!isFirebaseConfigured) {
+        const events = getDemoEvents();
+        const updatedEvents = events.map((event) =>
+          event.id === eventId && !event.assignedVolunteers.includes(volunteerId)
+            ? { ...event, assignedVolunteers: [...event.assignedVolunteers, volunteerId], updatedAt: new Date() }
+            : event
+        );
+        saveDemoEvents(updatedEvents);
+        await loadData();
+        alert('Volunteer assigned!');
+        return;
+      }
+
       const eventRef = doc(db, 'serviceEvents', eventId);
       const eventDoc = await getDoc(eventRef);
       const assignedVolunteers = eventDoc.data()?.assignedVolunteers || [];
@@ -135,11 +221,112 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleUpdateEventStatus = async (eventId: string, status: ServiceEvent['status']) => {
+    try {
+      if (!isFirebaseConfigured) {
+        saveDemoEvents(
+          getDemoEvents().map((event) =>
+            event.id === eventId ? { ...event, status, updatedAt: new Date() } : event
+          )
+        );
+        await loadData();
+        return;
+      }
+
+      await updateDoc(doc(db, 'serviceEvents', eventId), {
+        status,
+        updatedAt: Timestamp.now(),
+      });
+      await loadData();
+    } catch (error) {
+      console.error('Error updating event status:', error);
+      alert('Failed to update event status');
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: string, topic: string) => {
+    const confirmed = window.confirm(
+      `Delete "${topic}"? This also removes reminder records for this event.`
+    );
+    if (!confirmed) return;
+
+    try {
+      if (!isFirebaseConfigured) {
+        saveDemoEvents(getDemoEvents().filter((event) => event.id !== eventId));
+        await loadData();
+        alert('Event deleted.');
+        return;
+      }
+
+      const deleteEventFunction = httpsCallable(functions, 'deleteServiceEvent');
+      await deleteEventFunction({ eventId });
+      await loadData();
+      alert('Event deleted.');
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      alert(`Failed to delete event: ${getErrorMessage(error, 'Unknown error')}`);
+    }
+  };
+
+  const handleDeleteVolunteer = async (volunteerId: string, name: string) => {
+    const confirmed = window.confirm(
+      `Remove ${name}? This deletes their volunteer profile, removes them from events, and deletes their Auth account.`
+    );
+    if (!confirmed) return;
+
+    try {
+      if (!isFirebaseConfigured) {
+        saveDemoVolunteers(getDemoVolunteers().filter((volunteer) => volunteer.id !== volunteerId));
+        saveDemoEvents(
+          getDemoEvents().map((event) => ({
+            ...event,
+            assignedVolunteers: event.assignedVolunteers.filter((id) => id !== volunteerId),
+          }))
+        );
+        await loadData();
+        alert('Volunteer removed.');
+        return;
+      }
+
+      const deleteVolunteerFunction = httpsCallable(functions, 'deleteVolunteer');
+      const result = await deleteVolunteerFunction({ volunteerId });
+      await loadData();
+
+      const data = result.data as DeleteVolunteerResult;
+      if (data.authDeleted === false) {
+        alert(`Volunteer removed, but Auth deletion failed: ${data.authDeletionError}`);
+      } else {
+        alert('Volunteer removed.');
+      }
+    } catch (error) {
+      console.error('Error deleting volunteer:', error);
+      alert(`Failed to remove volunteer: ${getErrorMessage(error, 'Unknown error')}`);
+    }
+  };
+
   const handleCreateVolunteer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
     try {
+      if (!isFirebaseConfigured) {
+        const volunteer: VolunteerRecord = {
+          id: `volunteer-${Date.now()}`,
+          name: newVolunteer.name,
+          email: newVolunteer.email,
+          phoneNumber: newVolunteer.phoneNumber,
+          address: newVolunteer.address,
+        };
+        saveDemoVolunteers([
+          ...getDemoVolunteers(),
+          { ...volunteer, uid: volunteer.id, availableHours: 0, joinedDate: new Date() },
+        ]);
+        setNewVolunteer({ name: '', email: '', phoneNumber: '', address: '', password: '' });
+        await loadData();
+        alert(`Volunteer created successfully! UID: ${volunteer.id}`);
+        return;
+      }
+
       const createVolunteerFunction = httpsCallable(functions, 'createVolunteer');
       const result = await createVolunteerFunction({
         name: newVolunteer.name,
@@ -150,7 +337,8 @@ export const AdminDashboard: React.FC = () => {
       });
 
       console.log('Volunteer created:', result);
-      alert(`Volunteer created successfully! UID: ${(result.data as any).uid}`);
+      const data = result.data as CreateVolunteerResult;
+      alert(`Volunteer created successfully! UID: ${data.uid}`);
       setNewVolunteer({
         name: '',
         email: '',
@@ -159,9 +347,9 @@ export const AdminDashboard: React.FC = () => {
         password: '',
       });
       await loadData();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating volunteer:', error);
-      alert(`Failed to create volunteer: ${error.message}`);
+      alert(`Failed to create volunteer: ${getErrorMessage(error, 'Unknown error')}`);
     }
   };
 
@@ -170,6 +358,16 @@ export const AdminDashboard: React.FC = () => {
     if (!user) return;
 
     try {
+      if (!isFirebaseConfigured) {
+        alert('Demo reminders created. SMS sending requires a real Firebase and Twilio setup.');
+        setReminderConfig({
+          eventId: '',
+          hoursBeforeEvent: 24,
+          message: 'Reminder: You have a volunteer event coming up!',
+        });
+        return;
+      }
+
       const createRemindersFunction = httpsCallable(functions, 'createRemindersForEvent');
       const result = await createRemindersFunction({
         eventId: reminderConfig.eventId,
@@ -178,21 +376,28 @@ export const AdminDashboard: React.FC = () => {
       });
 
       console.log('Reminders created:', result);
-      alert(`Reminders created! (${(result.data as any).remindersCreated} reminders)`);
+      const data = result.data as CreateRemindersResult;
+      alert(`Reminders created! (${data.remindersCreated} reminders)`);
       
       setReminderConfig({
         eventId: '',
         hoursBeforeEvent: 24,
         message: 'Reminder: You have a volunteer event coming up!',
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating reminders:', error);
-      alert(`Failed to create reminders: ${error.message}`);
+      alert(`Failed to create reminders: ${getErrorMessage(error, 'Unknown error')}`);
     }
   };
 
   const handleLogout = async () => {
     try {
+      if (!isFirebaseConfigured) {
+        clearDemoSession();
+        navigate('/login');
+        return;
+      }
+
       await signOut(auth);
       navigate('/login');
     } catch (error) {
@@ -280,11 +485,33 @@ export const AdminDashboard: React.FC = () => {
             <div className="events-list">
               {events.map((event) => (
                 <div key={event.id} className="event-card">
-                  <h4>{event.topic}</h4>
+                  <div className="card-title-row">
+                    <h4>{event.topic}</h4>
+                    <button
+                      type="button"
+                      className="danger-btn"
+                      onClick={() => handleDeleteEvent(event.id, event.topic)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                   <p><strong>Date:</strong> {formatDate(event.eventDateTime)}</p>
                   <p><strong>Location:</strong> {event.location || 'N/A'}</p>
                   <p><strong>Assigned Volunteers:</strong> {event.assignedVolunteers?.length || 0}</p>
-                  <p><strong>Status:</strong> {event.status}</p>
+                  <label>
+                    Status
+                    <select
+                      value={event.status}
+                      onChange={(e) =>
+                        handleUpdateEventStatus(event.id, e.target.value as ServiceEvent['status'])
+                      }
+                    >
+                      <option value="scheduled">Scheduled</option>
+                      <option value="ongoing">Ongoing</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </label>
                 </div>
               ))}
             </div>
@@ -339,7 +566,16 @@ export const AdminDashboard: React.FC = () => {
             <div className="volunteers-list">
               {volunteers.map((volunteer) => (
                 <div key={volunteer.id} className="volunteer-card">
-                  <h4>{volunteer.name}</h4>
+                  <div className="card-title-row">
+                    <h4>{volunteer.name}</h4>
+                    <button
+                      type="button"
+                      className="danger-btn"
+                      onClick={() => handleDeleteVolunteer(volunteer.id, volunteer.name)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                   <p><strong>Email:</strong> {volunteer.email}</p>
                   <p><strong>Phone:</strong> {volunteer.phoneNumber}</p>
                   <p><strong>Address:</strong> {volunteer.address || 'N/A'}</p>
