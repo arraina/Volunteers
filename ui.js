@@ -39,6 +39,14 @@ class UIManager {
       .map(
         (event) => {
           const rule = reminderRuleByEventId.get(event.id);
+          const assignedVolunteerNames = event.assignedVolunteers
+            .map((volunteerId) => volunteers.find((volunteer) => volunteer.id === volunteerId || volunteer.uid === volunteerId)?.name)
+            .filter(Boolean);
+          const unassignedVolunteers = volunteers.filter(
+            (volunteer) =>
+              !event.assignedVolunteers.includes(volunteer.id) &&
+              !event.assignedVolunteers.includes(volunteer.uid)
+          );
           return `
             <article class="card">
               <div class="card-title-row">
@@ -49,6 +57,17 @@ class UIManager {
               <p><strong>Date:</strong> ${this.formatDate(event.eventDateTime)}</p>
               <p><strong>Location:</strong> ${event.location || "TBD"}</p>
               <p><strong>Assigned:</strong> ${event.assignedVolunteers.length}</p>
+              <p><strong>Assigned volunteers:</strong> ${
+                assignedVolunteerNames.length ? assignedVolunteerNames.join(", ") : "None yet"
+              }</p>
+              <label>Assign existing volunteer
+                <select data-assign-event="${event.id}">
+                  <option value="">Choose volunteer...</option>
+                  ${unassignedVolunteers
+                    .map((volunteer) => `<option value="${volunteer.id}">${volunteer.name}</option>`)
+                    .join("")}
+                </select>
+              </label>
               <p><strong>Reminder:</strong> ${
                 rule
                   ? `${rule.hoursBeforeEvent} hours before${rule.sendTime ? ` at ${rule.sendTime}` : ""}`

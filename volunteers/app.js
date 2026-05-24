@@ -122,9 +122,17 @@ class App {
         await this.storage.updateEventStatus(event.target.dataset.statusEvent, event.target.value);
         await this.loadAdmin();
       }
+      if (event.target.dataset.assignEvent && event.target.value) {
+        await this.storage.assignVolunteer(event.target.dataset.assignEvent, event.target.value);
+        event.target.value = "";
+        await this.loadAdmin();
+        this.ui.message("Volunteer assigned to event.", "success");
+      }
       if (event.target.dataset.assignVolunteer && event.target.value) {
         await this.storage.assignVolunteer(event.target.value, event.target.dataset.assignVolunteer);
+        event.target.value = "";
         await this.loadAdmin();
+        this.ui.message("Volunteer assigned to event.", "success");
       }
     });
 
