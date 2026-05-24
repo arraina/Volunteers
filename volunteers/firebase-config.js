@@ -11,13 +11,15 @@ const firebaseConfig = {
 const isFirebaseConfigured =
   firebaseConfig.apiKey !== "YOUR_API_KEY" &&
   firebaseConfig.appId !== "YOUR_APP_ID";
+const useDemoMode =
+  new URLSearchParams(window.location.search).get("demo") === "true";
 
 let firebaseApp = null;
 let auth = null;
 let db = null;
 let functions = null;
 
-if (isFirebaseConfigured && window.firebase) {
+if (isFirebaseConfigured && !useDemoMode && window.firebase) {
   firebaseApp = firebase.initializeApp(firebaseConfig);
   auth = firebase.auth();
   db = firebase.firestore();

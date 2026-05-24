@@ -1,0 +1,73 @@
+{
+  "events": [
+    {
+      "id": "event-food-service",
+      "topic": "Food Service Shift",
+      "description": "Prepare and serve prasadam during the weekend program.",
+      "eventDateTime": "2026-05-29T15:46:36.648Z",
+      "location": "Community Hall",
+      "assignedVolunteers": [],
+      "status": "scheduled"
+    },
+    {
+      "topic": "Temple Volunteering",
+      "description": "Temple Volunteering",
+      "eventDateTime": "2026-07-12T15:00:00.000Z",
+      "location": "Temple",
+      "assignedVolunteers": [],
+      "status": "scheduled",
+      "id": "event-1779637897038"
+    },
+    {
+      "topic": "Tester",
+      "description": "Tester",
+      "eventDateTime": "2026-05-24T17:00:00.000Z",
+      "location": "Home",
+      "assignedVolunteers": [],
+      "status": "scheduled",
+      "id": "event-1779638156440"
+    }
+  ],
+  "volunteers": [
+    {
+      "id": "volunteer-demo",
+      "uid": "volunteer-demo",
+      "name": "Demo Volunteer",
+      "email": "volunteer@example.com",
+      "phoneNumber": "+15551234567",
+      "address": "123 Main St",
+      "joinedDate": "2026-05-24T15:46:36.648Z"
+    },
+    {
+      "name": "Arjun",
+      "email": "g@two.com",
+      "phoneNumber": "1947193991",
+      "address": "ads",
+      "password": "ads",
+      "id": "volunteer-1779637906026",
+      "uid": "volunteer-1779637906026",
+      "joinedDate": "2026-05-24T15:51:46.026Z"
+    },
+    {
+      "name": "Arjun Raina",
+      "email": "arjun1ra05@gmail.com",
+      "phoneNumber": "8623574484",
+      "address": "IDK",
+      "password": "arjun",
+      "id": "volunteer-1779638125626",
+      "uid": "volunteer-1779638125626",
+      "joinedDate": "2026-05-24T15:55:25.626Z"
+    }
+  ],
+  "reminderRules": [
+    {
+      "eventId": "event-community-cleanup",
+      "sendTime": "10:00",
+      "hoursBeforeEvent": 2,
+      "message": "Updated rule",
+      "id": "rule-event-community-cleanup",
+      "createdAt": "2026-05-24T15:58:22.733Z",
+      "updatedAt": "2026-05-24T15:58:22.785Z"
+    }
+  ]
+}

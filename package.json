@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "start": "react-scripts start",
+    "serve:local": "node serve-local.js",
+    "preview": "node serve-local.js",
+    "preview:demo": "node serve-local.js",
     "build": "react-scripts build",
     "test": "react-scripts test --watchAll=false",
     "deploy": "npm run build && firebase deploy",

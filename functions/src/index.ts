@@ -45,6 +45,30 @@ async function assertAdmin(uid?: string) {
   }
 }
 
+async function adminsCollectionIsEmpty() {
+  const snapshot = await db.collection('admins').limit(1).get();
+  return snapshot.empty;
+}
+
+export const claimInitialAdmin = onCall({ region: REGION }, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated.');
+  }
+
+  if (!(await adminsCollectionIsEmpty())) {
+    throw new HttpsError('failed-precondition', 'An admin already exists.');
+  }
+
+  await db.collection('admins').doc(request.auth.uid).set({
+    isAdmin: true,
+    email: request.auth.token.email || null,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    bootstrap: true,
+  });
+
+  return { success: true };
+});
+
 export const sendSMSReminders = onSchedule(
   {
     schedule: 'every 1 minutes',
@@ -142,7 +166,7 @@ export const sendSMSReminders = onSchedule(
 export const createRemindersForEvent = onCall({ region: REGION }, async (request) => {
   await assertAdmin(request.auth?.uid);
 
-  const { eventId, hoursBeforeEvent, message } = request.data || {};
+  const { eventId, hoursBeforeEvent, message, sendTime } = request.data || {};
   const hours = Number(hoursBeforeEvent);
 
   if (!eventId || !Number.isFinite(hours) || hours <= 0 || !message) {
@@ -173,13 +197,19 @@ export const createRemindersForEvent = onCall({ region: REGION }, async (request
   const batch = db.batch();
   let remindersCreated = 0;
 
-  batch.set(db.collection('reminderRules').doc(), {
-    eventId,
-    hoursBeforeEvent: hours,
-    message,
-    createdBy: request.auth?.uid,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+  batch.set(
+    db.collection('reminderRules').doc(eventId),
+    {
+      eventId,
+      hoursBeforeEvent: hours,
+      sendTime: sendTime || null,
+      message,
+      createdBy: request.auth?.uid,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
 
   for (const volunteerId of assignedVolunteers) {
     const volunteerDoc = await db.collection('volunteers').doc(volunteerId).get();

@@ -22,33 +22,41 @@ class AuthManager {
   }
 
   async login(email, password) {
-    if (!isFirebaseConfigured) {
+    if (!isFirebaseConfigured || useDemoMode) {
       return this.setLocalSession(email);
     }
 
-    const credential = await auth.signInWithEmailAndPassword(email, password);
-    return this.buildFirebaseSession(credential.user);
+    try {
+      const credential = await auth.signInWithEmailAndPassword(email, password);
+      return this.buildFirebaseSession(credential.user);
+    } catch (error) {
+      throw this.normalizeAuthError(error);
+    }
   }
 
   async signup({ name, email, password, phoneNumber }) {
-    if (!isFirebaseConfigured) {
+    if (!isFirebaseConfigured || useDemoMode) {
       const session = this.setLocalSession(email, name);
       window.storageManager.ensureVolunteer(session, phoneNumber);
       return session;
     }
 
-    const credential = await auth.createUserWithEmailAndPassword(email, password);
-    await credential.user.updateProfile({ displayName: name });
-    await db.collection("volunteers").doc(credential.user.uid).set({
-      name,
-      email,
-      phoneNumber,
-      address: "",
-      joinedDate: firebase.firestore.FieldValue.serverTimestamp(),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
-    return this.buildFirebaseSession(credential.user);
+    try {
+      const credential = await auth.createUserWithEmailAndPassword(email, password);
+      await credential.user.updateProfile({ displayName: name });
+      await db.collection("volunteers").doc(credential.user.uid).set({
+        name,
+        email,
+        phoneNumber,
+        address: "",
+        joinedDate: firebase.firestore.FieldValue.serverTimestamp(),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+      return this.buildFirebaseSession(credential.user);
+    } catch (error) {
+      throw this.normalizeAuthError(error);
+    }
   }
 
   async buildFirebaseSession(user) {
@@ -65,7 +73,7 @@ class AuthManager {
   }
 
   listen(callback) {
-    if (!isFirebaseConfigured) {
+    if (!isFirebaseConfigured || useDemoMode) {
       callback(this.getSession());
       return () => {};
     }
@@ -80,5 +88,15 @@ class AuthManager {
     if (isFirebaseConfigured) {
       await auth.signOut();
     }
+  }
+
+  normalizeAuthError(error) {
+    if (error?.code === "auth/configuration-not-found") {
+      return new Error(
+        "Firebase Authentication is not enabled yet. In Firebase Console, open Authentication, click Get started, then enable Email/Password sign-in."
+      );
+    }
+
+    return error instanceof Error ? error : new Error("Authentication failed.");
   }
 }

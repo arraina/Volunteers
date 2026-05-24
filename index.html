@@ -33,7 +33,7 @@
             <label>Email <input name="email" type="email" placeholder="admin@example.com" required /></label>
             <label>Password <input name="password" type="password" placeholder="Password" required /></label>
             <button class="btn primary" type="submit">Login</button>
-            <p class="hint">Demo mode: use any email. Include "admin" in the email to open the admin dashboard.</p>
+            <p class="hint">For local demo login, add <code>?demo=true</code> to this page URL. Include "admin" in the email to open the admin dashboard.</p>
           </form>
 
           <form id="signupForm" class="auth-form">
@@ -75,7 +75,16 @@
             <h2>Reminder Rule</h2>
             <form id="reminderForm" class="stack">
               <select id="reminderEvent" name="eventId" required></select>
-              <input name="hoursBeforeEvent" type="number" min="1" max="168" value="24" required />
+              <label>
+                Hours before event
+                <input name="hoursBeforeEvent" type="number" min="1" max="168" value="24" required />
+                <small>24 means the SMS reminder is created for one day before the event.</small>
+              </label>
+              <label>
+                Preferred send time
+                <input name="sendTime" type="time" aria-label="Preferred send time" />
+                <small>Optional. Leave blank to use the calculated reminder time.</small>
+              </label>
               <textarea name="message" rows="4" required>Reminder: You have a volunteer event coming up!</textarea>
               <button class="btn primary" type="submit">Create Reminders</button>
             </form>
@@ -91,9 +100,20 @@
           <h2>Volunteers</h2>
           <div id="volunteersList" class="card-grid"></div>
         </section>
+
+        <section>
+          <h2>Reminder Rules</h2>
+          <div id="reminderRulesList" class="card-grid"></div>
+        </section>
       </section>
 
       <section id="volunteerPage" class="page">
+        <section id="claimAdminPanel" class="panel" style="display: none;">
+          <h2>Initial Admin Setup</h2>
+          <p class="hint">If this is the first account in your Firebase project, claim admin access here.</p>
+          <button id="claimAdminBtn" class="btn primary" type="button">Claim Admin Access</button>
+        </section>
+
         <section class="panel">
           <h2>My Profile</h2>
           <form id="profileForm" class="stack">

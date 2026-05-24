@@ -130,18 +130,28 @@ class App {
 
     document.getElementById("reminderForm").addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!isFirebaseConfigured) {
-        this.ui.message("Demo reminder created. SMS requires Firebase and Twilio.", "info");
+      if (!isFirebaseConfigured || useDemoMode) {
+        const form = new FormData(event.target);
+        await this.storage.createRemindersForEvent({
+          eventId: form.get("eventId"),
+          hoursBeforeEvent: Number(form.get("hoursBeforeEvent")),
+          sendTime: form.get("sendTime"),
+          message: form.get("message"),
+        });
+        await this.loadAdmin();
+        this.ui.message("Demo reminder rule created. SMS requires Firebase and Twilio.", "info");
         event.target.reset();
         return;
       }
       const form = new FormData(event.target);
-      await functions.httpsCallable("createRemindersForEvent")({
+      await this.storage.createRemindersForEvent({
         eventId: form.get("eventId"),
         hoursBeforeEvent: Number(form.get("hoursBeforeEvent")),
+        sendTime: form.get("sendTime"),
         message: form.get("message"),
       });
       event.target.reset();
+      await this.loadAdmin();
       this.ui.message("Reminders created.", "success");
     });
   }
@@ -166,14 +176,29 @@ class App {
       this.session = null;
       this.route();
     });
+
+    document.getElementById("claimAdminBtn").addEventListener("click", async () => {
+      if (!isFirebaseConfigured || useDemoMode) {
+        this.ui.message("Demo mode already supports admin emails containing admin.", "info");
+        return;
+      }
+
+      try {
+        await functions.httpsCallable("claimInitialAdmin")();
+        this.ui.message("Admin access claimed. Please log out and log back in.", "success");
+      } catch (error) {
+        this.ui.message(error.message || "Unable to claim admin access.", "error");
+      }
+    });
   }
 
   async loadAdmin() {
-    const [events, volunteers] = await Promise.all([
+    const [events, volunteers, reminderRules] = await Promise.all([
       this.storage.getEvents(this.session),
       this.storage.getVolunteers(),
+      this.storage.getReminderRules(),
     ]);
-    this.ui.renderAdmin(events, volunteers);
+    this.ui.renderAdmin(events, volunteers, reminderRules);
   }
 
   async loadVolunteer() {
@@ -182,7 +207,7 @@ class App {
       this.storage.getVolunteers(),
     ]);
     const profile = volunteers.find((volunteer) => volunteer.uid === this.session.uid);
-    this.ui.renderVolunteer(profile, events);
+    this.ui.renderVolunteer(profile, events, this.session);
   }
 }
 

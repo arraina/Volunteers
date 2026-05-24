@@ -2,6 +2,9 @@ class StorageManager {
   constructor() {
     this.eventsKey = "volunteers.events";
     this.volunteersKey = "volunteers.volunteers";
+    this.reminderRulesKey = "volunteers.reminderRules";
+    this.useLocalServerDb =
+      useDemoMode && ["localhost", "127.0.0.1"].includes(window.location.hostname);
     this.seedLocalData();
   }
 
@@ -11,6 +14,9 @@ class StorageManager {
     }
     if (!localStorage.getItem(this.volunteersKey)) {
       localStorage.setItem(this.volunteersKey, JSON.stringify(window.LOCAL_APP_DATA.volunteers));
+    }
+    if (!localStorage.getItem(this.reminderRulesKey)) {
+      localStorage.setItem(this.reminderRulesKey, JSON.stringify([]));
     }
   }
 
@@ -30,9 +36,47 @@ class StorageManager {
     localStorage.setItem(key, JSON.stringify(value));
   }
 
+  async api(path, options = {}) {
+    const response = await fetch(path, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+      ...options,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || `Local API request failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async getLocalEvents() {
+    if (this.useLocalServerDb) {
+      return (await this.api("/api/events")).map((item) => this.parseDates(item));
+    }
+    return this.readLocal(this.eventsKey);
+  }
+
+  async getLocalVolunteers() {
+    if (this.useLocalServerDb) {
+      return (await this.api("/api/volunteers")).map((item) => this.parseDates(item));
+    }
+    return this.readLocal(this.volunteersKey);
+  }
+
+  async getLocalReminderRules() {
+    if (this.useLocalServerDb) {
+      return (await this.api("/api/reminder-rules")).map((item) => this.parseDates(item));
+    }
+    return this.readLocal(this.reminderRulesKey);
+  }
+
   async getEvents(session) {
-    if (!isFirebaseConfigured) {
-      const events = this.readLocal(this.eventsKey);
+    if (!isFirebaseConfigured || useDemoMode) {
+      const events = await this.getLocalEvents();
       return session?.isAdmin
         ? events
         : events.filter((event) => event.assignedVolunteers.includes(session?.uid));
@@ -56,16 +100,37 @@ class StorageManager {
   }
 
   async getVolunteers() {
-    if (!isFirebaseConfigured) {
-      return this.readLocal(this.volunteersKey);
+    if (!isFirebaseConfigured || useDemoMode) {
+      return this.getLocalVolunteers();
     }
 
     const snapshot = await db.collection("volunteers").get();
     return snapshot.docs.map((doc) => ({ id: doc.id, uid: doc.id, ...doc.data() }));
   }
 
+  async getReminderRules() {
+    if (!isFirebaseConfigured || useDemoMode) {
+      return this.getLocalReminderRules();
+    }
+
+    const snapshot = await db.collection("reminderRules").get();
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toDate?.() || new Date(),
+    }));
+  }
+
   async createEvent(event) {
-    if (!isFirebaseConfigured) {
+    if (!isFirebaseConfigured || useDemoMode) {
+      if (this.useLocalServerDb) {
+        await this.api("/api/events", {
+          method: "POST",
+          body: JSON.stringify(event),
+        });
+        return;
+      }
+
       const events = this.readLocal(this.eventsKey);
       events.push({ ...event, id: `event-${Date.now()}` });
       this.writeLocal(this.eventsKey, events);
@@ -81,7 +146,12 @@ class StorageManager {
   }
 
   async deleteEvent(eventId) {
-    if (!isFirebaseConfigured) {
+    if (!isFirebaseConfigured || useDemoMode) {
+      if (this.useLocalServerDb) {
+        await this.api(`/api/events/${eventId}`, { method: "DELETE" });
+        return;
+      }
+
       this.writeLocal(
         this.eventsKey,
         this.readLocal(this.eventsKey).filter((event) => event.id !== eventId)
@@ -93,7 +163,15 @@ class StorageManager {
   }
 
   async updateEventStatus(eventId, status) {
-    if (!isFirebaseConfigured) {
+    if (!isFirebaseConfigured || useDemoMode) {
+      if (this.useLocalServerDb) {
+        await this.api(`/api/events/${eventId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ status }),
+        });
+        return;
+      }
+
       this.writeLocal(
         this.eventsKey,
         this.readLocal(this.eventsKey).map((event) =>
@@ -110,7 +188,15 @@ class StorageManager {
   }
 
   async createVolunteer(volunteer) {
-    if (!isFirebaseConfigured) {
+    if (!isFirebaseConfigured || useDemoMode) {
+      if (this.useLocalServerDb) {
+        await this.api("/api/volunteers", {
+          method: "POST",
+          body: JSON.stringify(volunteer),
+        });
+        return;
+      }
+
       const volunteers = this.readLocal(this.volunteersKey);
       volunteers.push({
         ...volunteer,
@@ -126,7 +212,12 @@ class StorageManager {
   }
 
   async deleteVolunteer(volunteerId) {
-    if (!isFirebaseConfigured) {
+    if (!isFirebaseConfigured || useDemoMode) {
+      if (this.useLocalServerDb) {
+        await this.api(`/api/volunteers/${volunteerId}`, { method: "DELETE" });
+        return;
+      }
+
       this.writeLocal(
         this.volunteersKey,
         this.readLocal(this.volunteersKey).filter((volunteer) => volunteer.id !== volunteerId)
@@ -145,7 +236,20 @@ class StorageManager {
   }
 
   async assignVolunteer(eventId, volunteerId) {
-    if (!isFirebaseConfigured) {
+    if (!isFirebaseConfigured || useDemoMode) {
+      if (this.useLocalServerDb) {
+        const events = await this.getLocalEvents();
+        const event = events.find((item) => item.id === eventId);
+        if (!event || event.assignedVolunteers.includes(volunteerId)) return;
+        await this.api(`/api/events/${eventId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            assignedVolunteers: [...event.assignedVolunteers, volunteerId],
+          }),
+        });
+        return;
+      }
+
       this.writeLocal(
         this.eventsKey,
         this.readLocal(this.eventsKey).map((event) =>
@@ -165,7 +269,15 @@ class StorageManager {
   }
 
   async updateVolunteerProfile(uid, profile) {
-    if (!isFirebaseConfigured) {
+    if (!isFirebaseConfigured || useDemoMode) {
+      if (this.useLocalServerDb) {
+        await this.api(`/api/volunteers/${uid}`, {
+          method: "PATCH",
+          body: JSON.stringify(profile),
+        });
+        return;
+      }
+
       this.writeLocal(
         this.volunteersKey,
         this.readLocal(this.volunteersKey).map((volunteer) =>
@@ -181,7 +293,58 @@ class StorageManager {
     });
   }
 
+  async createRemindersForEvent(rule) {
+    if (!isFirebaseConfigured) {
+      if (this.useLocalServerDb) {
+        await this.api("/api/reminder-rules", {
+          method: "POST",
+          body: JSON.stringify(rule),
+        });
+        return { remindersCreated: 0 };
+      }
+
+      const rules = this.readLocal(this.reminderRulesKey);
+      const savedRule = {
+        ...rule,
+        id: `rule-${rule.eventId}`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const existingIndex = rules.findIndex((item) => item.eventId === rule.eventId);
+      if (existingIndex >= 0) {
+        rules[existingIndex] = {
+          ...rules[existingIndex],
+          ...savedRule,
+          createdAt: rules[existingIndex].createdAt,
+        };
+      } else {
+        rules.push(savedRule);
+      }
+      this.writeLocal(this.reminderRulesKey, rules);
+      return { remindersCreated: 0 };
+    }
+
+    const result = await functions.httpsCallable("createRemindersForEvent")(rule);
+    return result.data;
+  }
+
   ensureVolunteer(session, phoneNumber) {
+    if (this.useLocalServerDb) {
+      this.api("/api/volunteers", {
+        method: "POST",
+        body: JSON.stringify({
+          id: session.uid,
+          uid: session.uid,
+          name: session.displayName,
+          email: session.email,
+          phoneNumber,
+          address: "",
+          joinedDate: new Date(),
+        }),
+      }).catch((error) => console.error("Unable to create local volunteer:", error));
+      return;
+    }
+
     const volunteers = this.readLocal(this.volunteersKey);
     if (volunteers.some((volunteer) => volunteer.uid === session.uid)) return;
     volunteers.push({

@@ -33,28 +33,37 @@ class UIManager {
     document.getElementById("logoutBtn").style.display = session ? "inline-flex" : "none";
   }
 
-  renderAdmin(events, volunteers) {
+  renderAdmin(events, volunteers, reminderRules) {
+    const reminderRuleByEventId = new Map(reminderRules.map((rule) => [rule.eventId, rule]));
     document.getElementById("eventsList").innerHTML = events
       .map(
-        (event) => `
-          <article class="card">
-            <div class="card-title-row">
-              <h3>${event.topic}</h3>
-              <button class="btn danger" data-delete-event="${event.id}">Delete</button>
-            </div>
-            <p>${event.description || ""}</p>
-            <p><strong>Date:</strong> ${this.formatDate(event.eventDateTime)}</p>
-            <p><strong>Location:</strong> ${event.location || "TBD"}</p>
-            <p><strong>Assigned:</strong> ${event.assignedVolunteers.length}</p>
-            <label>Status
-              <select data-status-event="${event.id}">
-                ${["scheduled", "ongoing", "completed", "cancelled"]
-                  .map((status) => `<option value="${status}" ${event.status === status ? "selected" : ""}>${status}</option>`)
-                  .join("")}
-              </select>
-            </label>
-          </article>
-        `
+        (event) => {
+          const rule = reminderRuleByEventId.get(event.id);
+          return `
+            <article class="card">
+              <div class="card-title-row">
+                <h3>${event.topic}</h3>
+                <button class="btn danger" data-delete-event="${event.id}">Delete</button>
+              </div>
+              <p>${event.description || ""}</p>
+              <p><strong>Date:</strong> ${this.formatDate(event.eventDateTime)}</p>
+              <p><strong>Location:</strong> ${event.location || "TBD"}</p>
+              <p><strong>Assigned:</strong> ${event.assignedVolunteers.length}</p>
+              <p><strong>Reminder:</strong> ${
+                rule
+                  ? `${rule.hoursBeforeEvent} hours before${rule.sendTime ? ` at ${rule.sendTime}` : ""}`
+                  : "No rule saved"
+              }</p>
+              <label>Status
+                <select data-status-event="${event.id}">
+                  ${["scheduled", "ongoing", "completed", "cancelled"]
+                    .map((status) => `<option value="${status}" ${event.status === status ? "selected" : ""}>${status}</option>`)
+                    .join("")}
+                </select>
+              </label>
+            </article>
+          `;
+        }
       )
       .join("");
 
@@ -81,9 +90,30 @@ class UIManager {
     document.getElementById("reminderEvent").innerHTML =
       '<option value="">Select event</option>' +
       events.map((event) => `<option value="${event.id}">${event.topic}</option>`).join("");
+
+    const eventNameById = new Map(events.map((event) => [event.id, event.topic]));
+    document.getElementById("reminderRulesList").innerHTML =
+      reminderRules.length === 0
+        ? '<p class="empty">No reminder rules yet.</p>'
+        : reminderRules
+            .map(
+              (rule) => `
+                <article class="card">
+                  <h3>${eventNameById.get(rule.eventId) || "Deleted event"}</h3>
+                  <p><strong>Hours before:</strong> ${rule.hoursBeforeEvent}</p>
+                  <p><strong>Send time:</strong> ${rule.sendTime || "Calculated from event time"}</p>
+                  <p>${rule.message}</p>
+                </article>
+              `
+            )
+            .join("");
   }
 
-  renderVolunteer(profile, events) {
+  renderVolunteer(profile, events, session) {
+    const claimPanel = document.getElementById("claimAdminPanel");
+    claimPanel.style.display =
+      isFirebaseConfigured && !useDemoMode && session && !session.isAdmin ? "block" : "none";
+
     document.getElementById("profileName").value = profile?.name || "";
     document.getElementById("profilePhone").value = profile?.phoneNumber || "";
     document.getElementById("profileAddress").value = profile?.address || "";

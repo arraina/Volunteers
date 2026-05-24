@@ -37,8 +37,14 @@ header h1 {
 
 header p,
 .hint,
-.empty {
+.empty,
+small {
   color: #64748b;
+}
+
+small {
+  font-size: 0.82rem;
+  font-weight: 500;
 }
 
 main {
