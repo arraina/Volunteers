@@ -139,6 +139,7 @@ class StorageManager {
 
     await db.collection("serviceEvents").add({
       ...event,
+      assignedVolunteers: event.assignedVolunteers || [],
       eventDateTime: firebase.firestore.Timestamp.fromDate(event.eventDateTime),
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -202,6 +203,7 @@ class StorageManager {
         ...volunteer,
         id: `volunteer-${Date.now()}`,
         uid: `volunteer-${Date.now()}`,
+        assignedEvents: volunteer.assignedEvents || [],
         joinedDate: new Date(),
       });
       this.writeLocal(this.volunteersKey, volunteers);
@@ -209,6 +211,14 @@ class StorageManager {
     }
 
     await functions.httpsCallable("createVolunteer")(volunteer);
+  }
+
+  async createVolunteerProfile(volunteer) {
+    if (!isFirebaseConfigured || useDemoMode) {
+      return this.createVolunteer(volunteer);
+    }
+
+    await functions.httpsCallable("createVolunteerProfile")(volunteer);
   }
 
   async deleteVolunteer(volunteerId) {
@@ -238,34 +248,30 @@ class StorageManager {
   async assignVolunteer(eventId, volunteerId) {
     if (!isFirebaseConfigured || useDemoMode) {
       if (this.useLocalServerDb) {
-        const events = await this.getLocalEvents();
-        const event = events.find((item) => item.id === eventId);
-        if (!event || event.assignedVolunteers.includes(volunteerId)) return;
-        await this.api(`/api/events/${eventId}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            assignedVolunteers: [...event.assignedVolunteers, volunteerId],
-          }),
+        await this.api("/api/assignments", {
+          method: "POST",
+          body: JSON.stringify({ eventId, volunteerId }),
         });
         return;
       }
 
-      this.writeLocal(
-        this.eventsKey,
-        this.readLocal(this.eventsKey).map((event) =>
-          event.id === eventId && !event.assignedVolunteers.includes(volunteerId)
-            ? { ...event, assignedVolunteers: [...event.assignedVolunteers, volunteerId] }
-            : event
-        )
+      const events = this.readLocal(this.eventsKey).map((event) =>
+        event.id === eventId && !(event.assignedVolunteers || []).includes(volunteerId)
+          ? { ...event, assignedVolunteers: [...(event.assignedVolunteers || []), volunteerId] }
+          : event
       );
+      const volunteers = this.readLocal(this.volunteersKey).map((volunteer) =>
+        (volunteer.id === volunteerId || volunteer.uid === volunteerId) &&
+        !(volunteer.assignedEvents || []).includes(eventId)
+          ? { ...volunteer, assignedEvents: [...(volunteer.assignedEvents || []), eventId] }
+          : volunteer
+      );
+      this.writeLocal(this.eventsKey, events);
+      this.writeLocal(this.volunteersKey, volunteers);
       return;
     }
 
-    const eventRef = db.collection("serviceEvents").doc(eventId);
-    await eventRef.update({
-      assignedVolunteers: firebase.firestore.FieldValue.arrayUnion(volunteerId),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
+    await functions.httpsCallable("assignVolunteerToEvent")({ eventId, volunteerId });
   }
 
   async updateVolunteerProfile(uid, profile) {
@@ -294,7 +300,7 @@ class StorageManager {
   }
 
   async createRemindersForEvent(rule) {
-    if (!isFirebaseConfigured) {
+    if (!isFirebaseConfigured || useDemoMode) {
       if (this.useLocalServerDb) {
         await this.api("/api/reminder-rules", {
           method: "POST",

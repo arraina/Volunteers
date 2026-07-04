@@ -1,62 +1,56 @@
 {
   "events": [
     {
-      "id": "event-food-service",
-      "topic": "Food Service Shift",
-      "description": "Prepare and serve prasadam during the weekend program.",
-      "eventDateTime": "2026-05-29T15:46:36.648Z",
-      "location": "Community Hall",
-      "assignedVolunteers": [],
-      "status": "scheduled"
-    },
-    {
-      "topic": "Temple Volunteering",
-      "description": "Temple Volunteering",
-      "eventDateTime": "2026-07-12T15:00:00.000Z",
-      "location": "Temple",
-      "assignedVolunteers": [],
-      "status": "scheduled",
-      "id": "event-1779637897038"
-    },
-    {
       "topic": "Tester",
-      "description": "Tester",
-      "eventDateTime": "2026-05-24T17:00:00.000Z",
-      "location": "Home",
-      "assignedVolunteers": [],
+      "description": "Testering",
+      "eventDateTime": "2026-05-24T18:56:00.000Z",
+      "location": "Here",
+      "assignedVolunteers": [
+        "volunteer-1779645270879",
+        "volunteer-1779645645199"
+      ],
       "status": "scheduled",
-      "id": "event-1779638156440"
+      "id": "event-1779645255436",
+      "updatedAt": "2026-05-24T18:10:36.170Z"
     }
   ],
   "volunteers": [
-    {
-      "id": "volunteer-demo",
-      "uid": "volunteer-demo",
-      "name": "Demo Volunteer",
-      "email": "volunteer@example.com",
-      "phoneNumber": "+15551234567",
-      "address": "123 Main St",
-      "joinedDate": "2026-05-24T15:46:36.648Z"
-    },
-    {
-      "name": "Arjun",
-      "email": "g@two.com",
-      "phoneNumber": "1947193991",
-      "address": "ads",
-      "password": "ads",
-      "id": "volunteer-1779637906026",
-      "uid": "volunteer-1779637906026",
-      "joinedDate": "2026-05-24T15:51:46.026Z"
-    },
     {
       "name": "Arjun Raina",
       "email": "arjun1ra05@gmail.com",
       "phoneNumber": "8623574484",
       "address": "IDK",
-      "password": "arjun",
-      "id": "volunteer-1779638125626",
-      "uid": "volunteer-1779638125626",
-      "joinedDate": "2026-05-24T15:55:25.626Z"
+      "password": "Timepass12",
+      "id": "volunteer-1779645270879",
+      "uid": "volunteer-1779645270879",
+      "joinedDate": "2026-05-24T17:54:30.879Z",
+      "assignedEvents": [
+        "event-1779645255436"
+      ]
+    },
+    {
+      "email": "assign-1779645645051@example.com",
+      "name": "Assign Test Volunteer 1779645645051",
+      "phoneNumber": "+15550001111",
+      "address": "Assignment Test",
+      "id": "volunteer-1779645645199",
+      "uid": "volunteer-1779645645199",
+      "assignedEvents": [
+        "event-1779645255436"
+      ],
+      "joinedDate": "2026-05-24T18:00:45.199Z",
+      "updatedAt": "2026-05-24T18:10:36.170Z"
+    },
+    {
+      "id": "volunteer-demo",
+      "uid": "volunteer-demo",
+      "name": "adfwaef",
+      "email": "a@b.com",
+      "phoneNumber": "4179053",
+      "address": "",
+      "joinedDate": "2026-05-24T18:40:54.495Z",
+      "assignedEvents": [],
+      "updatedAt": "2026-07-04T14:33:43.453Z"
     }
   ],
   "reminderRules": [

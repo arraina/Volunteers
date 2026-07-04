@@ -176,6 +176,20 @@ class App {
       await this.loadVolunteer();
       this.ui.message("Profile updated.", "success");
     });
+
+    document.getElementById("userVolunteerForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(event.target);
+      await this.storage.createVolunteerProfile({
+        name: form.get("name"),
+        email: form.get("email"),
+        phoneNumber: form.get("phoneNumber"),
+        address: form.get("address"),
+      });
+      event.target.reset();
+      await this.loadVolunteer();
+      this.ui.message("Volunteer added.", "success");
+    });
   }
 
   bindGlobalActions() {

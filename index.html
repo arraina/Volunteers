@@ -124,6 +124,18 @@
           </form>
         </section>
 
+        <section class="panel">
+          <h2>Add Volunteer</h2>
+          <form id="userVolunteerForm" class="stack">
+            <input name="name" placeholder="Full name" required />
+            <input name="email" type="email" placeholder="Email" required />
+            <input name="phoneNumber" type="tel" placeholder="Phone number" required />
+            <input name="address" placeholder="Address" />
+            <button class="btn primary" type="submit">Add Volunteer</button>
+          </form>
+          <p class="hint">This adds a volunteer profile only. Admins still manage event assignments.</p>
+        </section>
+
         <section>
           <h2>My Assigned Events</h2>
           <div id="assignedEvents" class="card-grid"></div>

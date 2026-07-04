@@ -74,7 +74,8 @@ class AuthManager {
 
   listen(callback) {
     if (!isFirebaseConfigured || useDemoMode) {
-      callback(this.getSession());
+      const session = this.getSession() || (useDemoMode ? this.setLocalSession("admin@example.com", "Demo Admin") : null);
+      callback(session);
       return () => {};
     }
 

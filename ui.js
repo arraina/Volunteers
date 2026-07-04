@@ -6,6 +6,7 @@ class UIManager {
   showPage(pageId) {
     document.querySelectorAll(".page").forEach((page) => page.classList.remove("active"));
     document.getElementById(pageId).classList.add("active");
+    document.body.classList.toggle("admin-mode", pageId === "adminPage");
   }
 
   message(text, type = "info") {
@@ -39,13 +40,14 @@ class UIManager {
       .map(
         (event) => {
           const rule = reminderRuleByEventId.get(event.id);
-          const assignedVolunteerNames = event.assignedVolunteers
+          const assignedVolunteerIds = event.assignedVolunteers || [];
+          const assignedVolunteerNames = assignedVolunteerIds
             .map((volunteerId) => volunteers.find((volunteer) => volunteer.id === volunteerId || volunteer.uid === volunteerId)?.name)
             .filter(Boolean);
           const unassignedVolunteers = volunteers.filter(
             (volunteer) =>
-              !event.assignedVolunteers.includes(volunteer.id) &&
-              !event.assignedVolunteers.includes(volunteer.uid)
+              !assignedVolunteerIds.includes(volunteer.id) &&
+              !assignedVolunteerIds.includes(volunteer.uid)
           );
           return `
             <article class="card">
@@ -56,7 +58,7 @@ class UIManager {
               <p>${event.description || ""}</p>
               <p><strong>Date:</strong> ${this.formatDate(event.eventDateTime)}</p>
               <p><strong>Location:</strong> ${event.location || "TBD"}</p>
-              <p><strong>Assigned:</strong> ${event.assignedVolunteers.length}</p>
+              <p><strong>Assigned:</strong> ${assignedVolunteerIds.length}</p>
               <p><strong>Assigned volunteers:</strong> ${
                 assignedVolunteerNames.length ? assignedVolunteerNames.join(", ") : "None yet"
               }</p>
@@ -66,6 +68,7 @@ class UIManager {
                   ${unassignedVolunteers
                     .map((volunteer) => `<option value="${volunteer.id}">${volunteer.name}</option>`)
                     .join("")}
+                  ${unassignedVolunteers.length === 0 ? '<option value="" disabled>No unassigned volunteers</option>' : ""}
                 </select>
               </label>
               <p><strong>Reminder:</strong> ${
@@ -88,21 +91,40 @@ class UIManager {
 
     document.getElementById("volunteersList").innerHTML = volunteers
       .map(
-        (volunteer) => `
-          <article class="card">
-            <div class="card-title-row">
-              <h3>${volunteer.name}</h3>
-              <button class="btn danger" data-delete-volunteer="${volunteer.id}">Remove</button>
-            </div>
-            <p><strong>Email:</strong> ${volunteer.email}</p>
-            <p><strong>Phone:</strong> ${volunteer.phoneNumber}</p>
-            <p><strong>Address:</strong> ${volunteer.address || "N/A"}</p>
-            <select data-assign-volunteer="${volunteer.id}">
-              <option value="">Assign to event...</option>
-              ${events.map((event) => `<option value="${event.id}">${event.topic}</option>`).join("")}
-            </select>
-          </article>
-        `
+        (volunteer) => {
+          const assignedEventIds = volunteer.assignedEvents || [];
+          const assignedEventNames = assignedEventIds
+            .map((eventId) => events.find((event) => event.id === eventId)?.topic)
+            .filter(Boolean);
+          const unassignedEvents = events.filter(
+            (event) =>
+              !assignedEventIds.includes(event.id) &&
+              !(event.assignedVolunteers || []).includes(volunteer.id) &&
+              !(event.assignedVolunteers || []).includes(volunteer.uid)
+          );
+
+          return `
+            <article class="card">
+              <div class="card-title-row">
+                <h3>${volunteer.name}</h3>
+                <button class="btn danger" data-delete-volunteer="${volunteer.id}">Remove</button>
+              </div>
+              <p><strong>Email:</strong> ${volunteer.email}</p>
+              <p><strong>Phone:</strong> ${volunteer.phoneNumber}</p>
+              <p><strong>Address:</strong> ${volunteer.address || "N/A"}</p>
+              <p><strong>Assigned events:</strong> ${
+                assignedEventNames.length ? assignedEventNames.join(", ") : "None yet"
+              }</p>
+              <label>Assign event to volunteer
+                <select data-assign-volunteer="${volunteer.id}">
+                  <option value="">Choose event...</option>
+                  ${unassignedEvents.map((event) => `<option value="${event.id}">${event.topic}</option>`).join("")}
+                  ${unassignedEvents.length === 0 ? '<option value="" disabled>No unassigned events</option>' : ""}
+                </select>
+              </label>
+            </article>
+          `;
+        }
       )
       .join("");
 

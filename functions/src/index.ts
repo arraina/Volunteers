@@ -258,12 +258,74 @@ export const createVolunteer = onCall({ region: REGION }, async (request) => {
     email,
     phoneNumber,
     address: address || '',
+    assignedEvents: [],
     joinedDate: admin.firestore.FieldValue.serverTimestamp(),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   return { success: true, uid: userRecord.uid };
+});
+
+export const createVolunteerProfile = onCall({ region: REGION }, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated.');
+  }
+
+  const { email, name, phoneNumber, address } = request.data || {};
+  if (!email || !name || !phoneNumber) {
+    throw new HttpsError('invalid-argument', 'email, name, and phoneNumber are required.');
+  }
+
+  const profileRef = db.collection('volunteers').doc();
+  await profileRef.set({
+    name,
+    email,
+    phoneNumber,
+    address: address || '',
+    assignedEvents: [],
+    addedBy: request.auth.uid,
+    joinedDate: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { success: true, id: profileRef.id };
+});
+
+export const assignVolunteerToEvent = onCall({ region: REGION }, async (request) => {
+  await assertAdmin(request.auth?.uid);
+
+  const { eventId, volunteerId } = request.data || {};
+  if (!eventId || !volunteerId) {
+    throw new HttpsError('invalid-argument', 'eventId and volunteerId are required.');
+  }
+
+  const eventRef = db.collection('serviceEvents').doc(eventId);
+  const volunteerRef = db.collection('volunteers').doc(volunteerId);
+
+  await db.runTransaction(async (transaction) => {
+    const [eventDoc, volunteerDoc] = await Promise.all([
+      transaction.get(eventRef),
+      transaction.get(volunteerRef),
+    ]);
+
+    if (!eventDoc.exists || !volunteerDoc.exists) {
+      throw new HttpsError('not-found', 'Event or volunteer not found.');
+    }
+
+    transaction.update(eventRef, {
+      assignedVolunteers: admin.firestore.FieldValue.arrayUnion(volunteerId),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    transaction.update(volunteerRef, {
+      assignedEvents: admin.firestore.FieldValue.arrayUnion(eventId),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  return { success: true };
 });
 
 export const deleteServiceEvent = onCall({ region: REGION }, async (request) => {
@@ -282,6 +344,16 @@ export const deleteServiceEvent = onCall({ region: REGION }, async (request) => 
 
   const batch = db.batch();
   batch.delete(eventRef);
+
+  const assignedVolunteers = Array.isArray(eventDoc.data()?.assignedVolunteers)
+    ? eventDoc.data()?.assignedVolunteers
+    : [];
+  assignedVolunteers.forEach((volunteerId: string) => {
+    batch.update(db.collection('volunteers').doc(volunteerId), {
+      assignedEvents: admin.firestore.FieldValue.arrayRemove(eventId),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
 
   const remindersSnapshot = await db
     .collection('reminders')

@@ -48,6 +48,7 @@ const seedData = {
       email: "volunteer@example.com",
       phoneNumber: "+15551234567",
       address: "123 Main St",
+      assignedEvents: ["event-community-cleanup"],
       joinedDate: new Date().toISOString(),
     },
   ],
@@ -66,12 +67,56 @@ function ensureDataFile() {
 
 function readDb() {
   ensureDataFile();
-  return JSON.parse(fs.readFileSync(dataFile, "utf8"));
+  const data = JSON.parse(fs.readFileSync(dataFile, "utf8"));
+  return normalizeDb(data);
 }
 
 function writeDb(data) {
   ensureDataFile();
-  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
+  fs.writeFileSync(dataFile, JSON.stringify(normalizeDb(data), null, 2));
+}
+
+function normalizeDb(data) {
+  const events = Array.isArray(data.events) ? data.events : [];
+  const volunteers = Array.isArray(data.volunteers) ? data.volunteers : [];
+
+  events.forEach((event) => {
+    event.assignedVolunteers = Array.isArray(event.assignedVolunteers)
+      ? event.assignedVolunteers
+      : [];
+  });
+
+  volunteers.forEach((volunteer) => {
+    volunteer.assignedEvents = Array.isArray(volunteer.assignedEvents)
+      ? volunteer.assignedEvents
+      : [];
+  });
+
+  events.forEach((event) => {
+    event.assignedVolunteers.forEach((volunteerId) => {
+      const volunteer = volunteers.find((item) => item.id === volunteerId || item.uid === volunteerId);
+      if (volunteer && !volunteer.assignedEvents.includes(event.id)) {
+        volunteer.assignedEvents.push(event.id);
+      }
+    });
+  });
+
+  volunteers.forEach((volunteer) => {
+    volunteer.assignedEvents.forEach((eventId) => {
+      const event = events.find((item) => item.id === eventId);
+      const volunteerId = volunteer.id || volunteer.uid;
+      if (event && volunteerId && !event.assignedVolunteers.includes(volunteerId)) {
+        event.assignedVolunteers.push(volunteerId);
+      }
+    });
+  });
+
+  return {
+    ...data,
+    events,
+    volunteers,
+    reminderRules: Array.isArray(data.reminderRules) ? data.reminderRules : [],
+  };
 }
 
 function sendJson(response, statusCode, body) {
@@ -135,6 +180,10 @@ async function handleApi(request, response, urlPath) {
   if (request.method === "DELETE" && urlPath.startsWith("/api/events/")) {
     const eventId = urlPath.split("/").pop();
     db.events = db.events.filter((event) => event.id !== eventId);
+    db.volunteers = db.volunteers.map((volunteer) => ({
+      ...volunteer,
+      assignedEvents: (volunteer.assignedEvents || []).filter((id) => id !== eventId),
+    }));
     db.reminderRules = db.reminderRules.filter((rule) => rule.eventId !== eventId);
     writeDb(db);
     sendJson(response, 200, { success: true });
@@ -153,6 +202,7 @@ async function handleApi(request, response, urlPath) {
       ...volunteer,
       id,
       uid: volunteer.uid || id,
+      assignedEvents: volunteer.assignedEvents || [],
       joinedDate: volunteer.joinedDate || new Date().toISOString(),
     };
     const existingIndex = db.volunteers.findIndex(
@@ -188,7 +238,7 @@ async function handleApi(request, response, urlPath) {
     );
     db.events = db.events.map((event) => ({
       ...event,
-      assignedVolunteers: event.assignedVolunteers.filter((id) => id !== volunteerId),
+      assignedVolunteers: (event.assignedVolunteers || []).filter((id) => id !== volunteerId),
     }));
     db.reminderRules = db.reminderRules.filter((rule) => rule.volunteerId !== volunteerId);
     writeDb(db);
@@ -221,6 +271,55 @@ async function handleApi(request, response, urlPath) {
     }
     writeDb(db);
     sendJson(response, 201, savedRule);
+    return true;
+  }
+
+  if (request.method === "POST" && urlPath === "/api/assignments") {
+    const assignment = await readRequestJson(request);
+    const eventId = String(assignment.eventId || "");
+    const volunteerId = String(assignment.volunteerId || "");
+
+    if (!eventId || !volunteerId) {
+      sendJson(response, 400, { error: "eventId and volunteerId are required" });
+      return true;
+    }
+
+    let eventFound = false;
+    let volunteerFound = false;
+
+    db.events = db.events.map((event) => {
+      if (event.id !== eventId) return event;
+      eventFound = true;
+      const assignedVolunteers = event.assignedVolunteers || [];
+      return {
+        ...event,
+        assignedVolunteers: assignedVolunteers.includes(volunteerId)
+          ? assignedVolunteers
+          : [...assignedVolunteers, volunteerId],
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    db.volunteers = db.volunteers.map((volunteer) => {
+      if (volunteer.id !== volunteerId && volunteer.uid !== volunteerId) return volunteer;
+      volunteerFound = true;
+      const assignedEvents = volunteer.assignedEvents || [];
+      return {
+        ...volunteer,
+        assignedEvents: assignedEvents.includes(eventId)
+          ? assignedEvents
+          : [...assignedEvents, eventId],
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    if (!eventFound || !volunteerFound) {
+      sendJson(response, 404, { error: "Event or volunteer not found" });
+      return true;
+    }
+
+    writeDb(db);
+    sendJson(response, 200, { success: true });
     return true;
   }
 

@@ -13,7 +13,11 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID || 'G-3XXH67RBBF',
 };
 
+export const useDemoMode =
+  new URLSearchParams(window.location.search).get('demo') === 'true';
+
 export const isFirebaseConfigured =
+  !useDemoMode &&
   firebaseConfig.apiKey !== 'YOUR_API_KEY' &&
   firebaseConfig.projectId !== 'YOUR_PROJECT_ID' &&
   firebaseConfig.appId !== 'YOUR_APP_ID';

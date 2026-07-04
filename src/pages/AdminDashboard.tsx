@@ -4,7 +4,7 @@ import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db, functions, isFirebaseConfigured } from '../config/firebase';
 import { collection, addDoc, getDocs, Timestamp, updateDoc, doc, getDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { isUserAdmin, ServiceEvent, formatDate } from '../helpers/types';
+import { isUserAdmin, ReminderRule, ServiceEvent, formatDate } from '../helpers/types';
 import {
   clearDemoSession,
   getDemoEvents,
@@ -12,6 +12,7 @@ import {
   getDemoVolunteers,
   saveDemoEvents,
   saveDemoVolunteers,
+  setDemoSession,
 } from '../helpers/demoStore';
 import './AdminDashboard.css';
 
@@ -47,7 +48,7 @@ export const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<ServiceEvent[]>([]);
   const [volunteers, setVolunteers] = useState<VolunteerRecord[]>([]);
-  const [activeTab, setActiveTab] = useState<'events' | 'volunteers' | 'reminders'>('events');
+  const [reminderRules, setReminderRules] = useState<ReminderRule[]>([]);
   
   // Event form state
   const [newEvent, setNewEvent] = useState({
@@ -75,7 +76,7 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
-      const session = getDemoSession();
+      const session = getDemoSession() || setDemoSession('admin@example.com', 'Demo Admin');
       if (!session) {
         navigate('/login');
       } else if (!session.isAdmin) {
@@ -113,6 +114,7 @@ export const AdminDashboard: React.FC = () => {
       if (!isFirebaseConfigured) {
         setEvents(getDemoEvents());
         setVolunteers(getDemoVolunteers());
+        setReminderRules([]);
         return;
       }
 
@@ -132,6 +134,14 @@ export const AdminDashboard: React.FC = () => {
         ...doc.data(),
       } as VolunteerRecord));
       setVolunteers(volunteersData);
+
+      const reminderRulesSnapshot = await getDocs(collection(db, 'reminderRules'));
+      const reminderRulesData = reminderRulesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate?.() || new Date(),
+      } as ReminderRule));
+      setReminderRules(reminderRulesData);
     } catch (error) {
       console.error('Error loading data:', error);
     }
@@ -331,9 +341,9 @@ export const AdminDashboard: React.FC = () => {
       const result = await createVolunteerFunction({
         name: newVolunteer.name,
         email: newVolunteer.email,
-        password: newVolunteer.password,
+        password: newVolunteer.password || 'TempPass123!',
         phoneNumber: newVolunteer.phoneNumber,
-        address: newVolunteer.address,
+        address: newVolunteer.address || '',
       });
 
       console.log('Volunteer created:', result);
@@ -359,6 +369,16 @@ export const AdminDashboard: React.FC = () => {
 
     try {
       if (!isFirebaseConfigured) {
+        setReminderRules((rules) => [
+          ...rules.filter((rule) => rule.eventId !== reminderConfig.eventId),
+          {
+            id: `rule-${reminderConfig.eventId}`,
+            eventId: reminderConfig.eventId,
+            hoursBeforeEvent: reminderConfig.hoursBeforeEvent,
+            message: reminderConfig.message,
+            createdAt: new Date(),
+          },
+        ]);
         alert('Demo reminders created. SMS sending requires a real Firebase and Twilio setup.');
         setReminderConfig({
           eventId: '',
@@ -378,6 +398,7 @@ export const AdminDashboard: React.FC = () => {
       console.log('Reminders created:', result);
       const data = result.data as CreateRemindersResult;
       alert(`Reminders created! (${data.remindersCreated} reminders)`);
+      await loadData();
       
       setReminderConfig({
         eventId: '',
@@ -416,77 +437,130 @@ export const AdminDashboard: React.FC = () => {
   return (
     <div className="admin-dashboard">
       <header className="dashboard-header">
-        <h1>Admin Dashboard</h1>
+        <div>
+          <h1>Temple Volunteers</h1>
+          <p>Service events, assignments, profiles, and SMS reminders</p>
+        </div>
         <div className="header-actions">
           <span className="user-info">{user?.email}</span>
           <button onClick={handleLogout} className="logout-btn">Logout</button>
         </div>
       </header>
 
-      <nav className="tabs">
-        <button
-          className={`tab ${activeTab === 'events' ? 'active' : ''}`}
-          onClick={() => setActiveTab('events')}
-        >
-          Events
-        </button>
-        <button
-          className={`tab ${activeTab === 'volunteers' ? 'active' : ''}`}
-          onClick={() => setActiveTab('volunteers')}
-        >
-          Volunteers
-        </button>
-        <button
-          className={`tab ${activeTab === 'reminders' ? 'active' : ''}`}
-          onClick={() => setActiveTab('reminders')}
-        >
-          SMS Reminders
-        </button>
-      </nav>
-
       <div className="dashboard-content">
-        {/* Events Tab */}
-        {activeTab === 'events' && (
-          <div className="tab-content">
-            <h2>Service Events</h2>
-            
-            <div className="form-section">
-              <h3>Create New Event</h3>
-              <form onSubmit={handleCreateEvent}>
-                <input
-                  type="text"
-                  placeholder="Event Topic"
-                  value={newEvent.topic}
-                  onChange={(e) => setNewEvent({...newEvent, topic: e.target.value})}
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="Description"
-                  value={newEvent.description}
-                  onChange={(e) => setNewEvent({...newEvent, description: e.target.value})}
-                />
-                <input
-                  type="datetime-local"
-                  value={newEvent.eventDateTime}
-                  onChange={(e) => setNewEvent({...newEvent, eventDateTime: e.target.value})}
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="Location"
-                  value={newEvent.location}
-                  onChange={(e) => setNewEvent({...newEvent, location: e.target.value})}
-                />
-                <button type="submit">Create Event</button>
-              </form>
-            </div>
+        <section className="admin-columns">
+          <div className="form-section">
+            <h2>Create Event</h2>
+            <form onSubmit={handleCreateEvent}>
+              <input
+                type="text"
+                placeholder="Event topic"
+                value={newEvent.topic}
+                onChange={(e) => setNewEvent({...newEvent, topic: e.target.value})}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Description"
+                value={newEvent.description}
+                onChange={(e) => setNewEvent({...newEvent, description: e.target.value})}
+              />
+              <input
+                type="datetime-local"
+                value={newEvent.eventDateTime}
+                onChange={(e) => setNewEvent({...newEvent, eventDateTime: e.target.value})}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Location"
+                value={newEvent.location}
+                onChange={(e) => setNewEvent({...newEvent, location: e.target.value})}
+              />
+              <button type="submit">Create Event</button>
+            </form>
+          </div>
 
-            <div className="events-list">
-              {events.map((event) => (
+          <div className="form-section">
+            <h2>Add Volunteer</h2>
+            <form onSubmit={handleCreateVolunteer}>
+              <input
+                type="text"
+                placeholder="Full name"
+                value={newVolunteer.name}
+                onChange={(e) => setNewVolunteer({...newVolunteer, name: e.target.value})}
+                required
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={newVolunteer.email}
+                onChange={(e) => setNewVolunteer({...newVolunteer, email: e.target.value})}
+                required
+              />
+              <input
+                type="tel"
+                placeholder="Phone number"
+                value={newVolunteer.phoneNumber}
+                onChange={(e) => setNewVolunteer({...newVolunteer, phoneNumber: e.target.value})}
+                required
+              />
+              <button type="submit">Create Volunteer</button>
+            </form>
+          </div>
+
+          <div className="form-section">
+            <h2>Reminder Rule</h2>
+            <form onSubmit={handleCreateReminders}>
+              <select
+                value={reminderConfig.eventId}
+                onChange={(e) => setReminderConfig({...reminderConfig, eventId: e.target.value})}
+                required
+              >
+                <option value="">Select event</option>
+                {events.map((event) => (
+                  <option key={event.id} value={event.id}>
+                    {event.topic}
+                  </option>
+                ))}
+              </select>
+              <label>
+                Hours before event
+                <input
+                  type="number"
+                  value={reminderConfig.hoursBeforeEvent}
+                  onChange={(e) => setReminderConfig({...reminderConfig, hoursBeforeEvent: parseInt(e.target.value, 10)})}
+                  min="1"
+                  max="168"
+                  required
+                />
+              </label>
+              <label>
+                Message
+                <textarea
+                  value={reminderConfig.message}
+                  onChange={(e) => setReminderConfig({...reminderConfig, message: e.target.value})}
+                  rows={4}
+                  required
+                />
+              </label>
+              <button type="submit">Create Reminders</button>
+            </form>
+          </div>
+        </section>
+
+        <section className="records-section">
+          <h2>Events</h2>
+          <div className="events-list">
+            {events.map((event) => {
+              const assignedNames = (event.assignedVolunteers || [])
+                .map((id) => volunteers.find((volunteer) => volunteer.id === id)?.name)
+                .filter(Boolean);
+
+              return (
                 <div key={event.id} className="event-card">
                   <div className="card-title-row">
-                    <h4>{event.topic}</h4>
+                    <h3>{event.topic}</h3>
                     <button
                       type="button"
                       className="danger-btn"
@@ -495,9 +569,29 @@ export const AdminDashboard: React.FC = () => {
                       Delete
                     </button>
                   </div>
+                  <p>{event.description || 'No description yet.'}</p>
                   <p><strong>Date:</strong> {formatDate(event.eventDateTime)}</p>
                   <p><strong>Location:</strong> {event.location || 'N/A'}</p>
-                  <p><strong>Assigned Volunteers:</strong> {event.assignedVolunteers?.length || 0}</p>
+                  <p><strong>Assigned volunteers:</strong> {assignedNames.length ? assignedNames.join(', ') : 'None yet'}</p>
+                  <label>
+                    Assign existing volunteer
+                    <select
+                      defaultValue=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleAssignVolunteer(event.id, e.target.value);
+                          e.target.value = '';
+                        }
+                      }}
+                    >
+                      <option value="">Choose volunteer...</option>
+                      {volunteers.map((volunteer) => (
+                        <option key={volunteer.id} value={volunteer.id}>
+                          {volunteer.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <label>
                     Status
                     <select
@@ -506,158 +600,75 @@ export const AdminDashboard: React.FC = () => {
                         handleUpdateEventStatus(event.id, e.target.value as ServiceEvent['status'])
                       }
                     >
-                      <option value="scheduled">Scheduled</option>
-                      <option value="ongoing">Ongoing</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
+                      <option value="scheduled">scheduled</option>
+                      <option value="ongoing">ongoing</option>
+                      <option value="completed">completed</option>
+                      <option value="cancelled">cancelled</option>
                     </select>
                   </label>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        )}
+        </section>
 
-        {/* Volunteers Tab */}
-        {activeTab === 'volunteers' && (
-          <div className="tab-content">
-            <h2>Volunteers</h2>
-            <div className="form-section">
-              <h3>Add New Volunteer</h3>
-              <form onSubmit={handleCreateVolunteer} className="admin-form">
-                <input
-                  type="text"
-                  placeholder="Full Name"
-                  value={newVolunteer.name}
-                  onChange={(e) => setNewVolunteer({...newVolunteer, name: e.target.value})}
-                  required
-                />
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={newVolunteer.email}
-                  onChange={(e) => setNewVolunteer({...newVolunteer, email: e.target.value})}
-                  required
-                />
-                <input
-                  type="tel"
-                  placeholder="Phone Number"
-                  value={newVolunteer.phoneNumber}
-                  onChange={(e) => setNewVolunteer({...newVolunteer, phoneNumber: e.target.value})}
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="Address"
-                  value={newVolunteer.address}
-                  onChange={(e) => setNewVolunteer({...newVolunteer, address: e.target.value})}
-                />
-                <input
-                  type="password"
-                  placeholder="Temporary Password"
-                  value={newVolunteer.password}
-                  onChange={(e) => setNewVolunteer({...newVolunteer, password: e.target.value})}
-                  required
-                />
-                <button type="submit">Create Volunteer</button>
-              </form>
-            </div>
-
-            <div className="volunteers-list">
-              {volunteers.map((volunteer) => (
-                <div key={volunteer.id} className="volunteer-card">
-                  <div className="card-title-row">
-                    <h4>{volunteer.name}</h4>
-                    <button
-                      type="button"
-                      className="danger-btn"
-                      onClick={() => handleDeleteVolunteer(volunteer.id, volunteer.name)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  <p><strong>Email:</strong> {volunteer.email}</p>
-                  <p><strong>Phone:</strong> {volunteer.phoneNumber}</p>
-                  <p><strong>Address:</strong> {volunteer.address || 'N/A'}</p>
-                  
-                  <div className="volunteer-actions">
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          handleAssignVolunteer(e.target.value, volunteer.id);
-                          e.target.value = '';
-                        }
-                      }}
-                      defaultValue=""
-                    >
-                      <option value="">Assign to Event...</option>
-                      {events.map((event) => (
-                        <option key={event.id} value={event.id}>
-                          {event.topic}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+        <section className="records-section">
+          <h2>Volunteers</h2>
+          <div className="volunteers-list">
+            {volunteers.map((volunteer) => (
+              <div key={volunteer.id} className="volunteer-card">
+                <div className="card-title-row">
+                  <h3>{volunteer.name}</h3>
+                  <button
+                    type="button"
+                    className="danger-btn"
+                    onClick={() => handleDeleteVolunteer(volunteer.id, volunteer.name)}
+                  >
+                    Remove
+                  </button>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Reminders Tab */}
-        {activeTab === 'reminders' && (
-          <div className="tab-content">
-            <h2>SMS Reminders Configuration</h2>
-            
-            <div className="form-section">
-              <h3>Create SMS Reminders for Event</h3>
-              <form onSubmit={handleCreateReminders}>
-                <select
-                  value={reminderConfig.eventId}
-                  onChange={(e) => setReminderConfig({...reminderConfig, eventId: e.target.value})}
-                  required
-                >
-                  <option value="">Select Event</option>
-                  {events.map((event) => (
-                    <option key={event.id} value={event.id}>
-                      {event.topic} - {formatDate(event.eventDateTime)}
-                    </option>
-                  ))}
-                </select>
-
+                <p><strong>Email:</strong> {volunteer.email}</p>
+                <p><strong>Phone:</strong> {volunteer.phoneNumber}</p>
                 <label>
-                  Hours Before Event:
-                  <input
-                    type="number"
-                    value={reminderConfig.hoursBeforeEvent}
-                    onChange={(e) => setReminderConfig({...reminderConfig, hoursBeforeEvent: parseInt(e.target.value)})}
-                    min="1"
-                    max="168"
-                    required
-                  />
+                  Assign event to volunteer
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleAssignVolunteer(e.target.value, volunteer.id);
+                        e.target.value = '';
+                      }
+                    }}
+                  >
+                    <option value="">Choose event...</option>
+                    {events.map((event) => (
+                      <option key={event.id} value={event.id}>
+                        {event.topic}
+                      </option>
+                    ))}
+                  </select>
                 </label>
-
-                <label>
-                  Message:
-                  <textarea
-                    value={reminderConfig.message}
-                    onChange={(e) => setReminderConfig({...reminderConfig, message: e.target.value})}
-                    placeholder="Enter SMS message"
-                    rows={3}
-                    required
-                  />
-                </label>
-
-                <button type="submit">Create Reminders for All Assigned Volunteers</button>
-              </form>
-            </div>
-
-            <p className="reminder-info">
-              This will create SMS reminders for all volunteers assigned to the selected event.
-              Reminders will be automatically sent {reminderConfig.hoursBeforeEvent} hours before the event time.
-            </p>
+              </div>
+            ))}
           </div>
-        )}
+        </section>
+
+        <section className="records-section">
+          <h2>Reminder Rules</h2>
+          <div className="reminder-rules-list">
+            {reminderRules.length === 0 ? (
+              <p className="empty">No reminder rules yet.</p>
+            ) : (
+              reminderRules.map((rule) => (
+                <div key={rule.id} className="reminder-card">
+                  <h3>{events.find((event) => event.id === rule.eventId)?.topic || 'Deleted event'}</h3>
+                  <p><strong>Hours before event:</strong> {rule.hoursBeforeEvent}</p>
+                  <p>{rule.message}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );
