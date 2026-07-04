@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db, functions, isFirebaseConfigured } from '../config/firebase';
-import { collection, addDoc, getDocs, Timestamp, updateDoc, doc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, Timestamp, updateDoc, doc, getDoc, arrayUnion } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { isUserAdmin, ReminderRule, ServiceEvent, formatDate } from '../helpers/types';
 import {
@@ -22,10 +22,7 @@ interface VolunteerRecord {
   email: string;
   phoneNumber: string;
   address?: string;
-}
-
-interface CreateVolunteerResult {
-  uid: string;
+  assignedEvents?: string[];
 }
 
 interface CreateRemindersResult {
@@ -58,15 +55,6 @@ export const AdminDashboard: React.FC = () => {
     location: '',
   });
 
-  // Volunteer creation state
-  const [newVolunteer, setNewVolunteer] = useState({
-    name: '',
-    email: '',
-    phoneNumber: '',
-    address: '',
-    password: '',
-  });
-
   // Reminder form state
   const [reminderConfig, setReminderConfig] = useState({
     eventId: '',
@@ -76,7 +64,7 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
-      const session = getDemoSession() || setDemoSession('admin@example.com', 'Demo Admin');
+      const session = getDemoSession() || setDemoSession('admin123', 'Admin', true);
       if (!session) {
         navigate('/login');
       } else if (!session.isAdmin) {
@@ -112,8 +100,16 @@ export const AdminDashboard: React.FC = () => {
   const loadData = async () => {
     try {
       if (!isFirebaseConfigured) {
-        setEvents(getDemoEvents());
-        setVolunteers(getDemoVolunteers());
+        const demoEvents = getDemoEvents();
+        const demoVolunteers = getDemoVolunteers().map((volunteer) => ({
+          ...volunteer,
+          assignedEvents: demoEvents
+            .filter((event) => (event.assignedVolunteers || []).includes(volunteer.id))
+            .map((event) => event.id),
+        }));
+        saveDemoVolunteers(demoVolunteers);
+        setEvents(demoEvents);
+        setVolunteers(demoVolunteers);
         setReminderRules([]);
         return;
       }
@@ -133,7 +129,14 @@ export const AdminDashboard: React.FC = () => {
         id: doc.id,
         ...doc.data(),
       } as VolunteerRecord));
-      setVolunteers(volunteersData);
+      setVolunteers(
+        volunteersData.map((volunteer) => ({
+          ...volunteer,
+          assignedEvents: eventsData
+            .filter((event) => (event.assignedVolunteers || []).includes(volunteer.id))
+            .map((event) => event.id),
+        }))
+      );
 
       const reminderRulesSnapshot = await getDocs(collection(db, 'reminderRules'));
       const reminderRulesData = reminderRulesSnapshot.docs.map(doc => ({
@@ -202,11 +205,17 @@ export const AdminDashboard: React.FC = () => {
       if (!isFirebaseConfigured) {
         const events = getDemoEvents();
         const updatedEvents = events.map((event) =>
-          event.id === eventId && !event.assignedVolunteers.includes(volunteerId)
-            ? { ...event, assignedVolunteers: [...event.assignedVolunteers, volunteerId], updatedAt: new Date() }
+          event.id === eventId && !(event.assignedVolunteers || []).includes(volunteerId)
+            ? { ...event, assignedVolunteers: [...(event.assignedVolunteers || []), volunteerId], updatedAt: new Date() }
             : event
         );
+        const updatedVolunteers = getDemoVolunteers().map((volunteer) =>
+          volunteer.id === volunteerId && !(volunteer.assignedEvents || []).includes(eventId)
+            ? { ...volunteer, assignedEvents: [...(volunteer.assignedEvents || []), eventId] }
+            : volunteer
+        );
         saveDemoEvents(updatedEvents);
+        saveDemoVolunteers(updatedVolunteers);
         await loadData();
         alert('Volunteer assigned!');
         return;
@@ -218,7 +227,10 @@ export const AdminDashboard: React.FC = () => {
 
       if (!assignedVolunteers.includes(volunteerId)) {
         await updateDoc(eventRef, {
-          assignedVolunteers: [...assignedVolunteers, volunteerId],
+          assignedVolunteers: arrayUnion(volunteerId),
+        });
+        await updateDoc(doc(db, 'volunteers', volunteerId), {
+          assignedEvents: arrayUnion(eventId),
         });
         alert('Volunteer assigned!');
         await loadData();
@@ -311,55 +323,6 @@ export const AdminDashboard: React.FC = () => {
     } catch (error) {
       console.error('Error deleting volunteer:', error);
       alert(`Failed to remove volunteer: ${getErrorMessage(error, 'Unknown error')}`);
-    }
-  };
-
-  const handleCreateVolunteer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-
-    try {
-      if (!isFirebaseConfigured) {
-        const volunteer: VolunteerRecord = {
-          id: `volunteer-${Date.now()}`,
-          name: newVolunteer.name,
-          email: newVolunteer.email,
-          phoneNumber: newVolunteer.phoneNumber,
-          address: newVolunteer.address,
-        };
-        saveDemoVolunteers([
-          ...getDemoVolunteers(),
-          { ...volunteer, uid: volunteer.id, availableHours: 0, joinedDate: new Date() },
-        ]);
-        setNewVolunteer({ name: '', email: '', phoneNumber: '', address: '', password: '' });
-        await loadData();
-        alert(`Volunteer created successfully! UID: ${volunteer.id}`);
-        return;
-      }
-
-      const createVolunteerFunction = httpsCallable(functions, 'createVolunteer');
-      const result = await createVolunteerFunction({
-        name: newVolunteer.name,
-        email: newVolunteer.email,
-        password: newVolunteer.password || 'TempPass123!',
-        phoneNumber: newVolunteer.phoneNumber,
-        address: newVolunteer.address || '',
-      });
-
-      console.log('Volunteer created:', result);
-      const data = result.data as CreateVolunteerResult;
-      alert(`Volunteer created successfully! UID: ${data.uid}`);
-      setNewVolunteer({
-        name: '',
-        email: '',
-        phoneNumber: '',
-        address: '',
-        password: '',
-      });
-      await loadData();
-    } catch (error) {
-      console.error('Error creating volunteer:', error);
-      alert(`Failed to create volunteer: ${getErrorMessage(error, 'Unknown error')}`);
     }
   };
 
@@ -482,34 +445,6 @@ export const AdminDashboard: React.FC = () => {
           </div>
 
           <div className="form-section">
-            <h2>Add Volunteer</h2>
-            <form onSubmit={handleCreateVolunteer}>
-              <input
-                type="text"
-                placeholder="Full name"
-                value={newVolunteer.name}
-                onChange={(e) => setNewVolunteer({...newVolunteer, name: e.target.value})}
-                required
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                value={newVolunteer.email}
-                onChange={(e) => setNewVolunteer({...newVolunteer, email: e.target.value})}
-                required
-              />
-              <input
-                type="tel"
-                placeholder="Phone number"
-                value={newVolunteer.phoneNumber}
-                onChange={(e) => setNewVolunteer({...newVolunteer, phoneNumber: e.target.value})}
-                required
-              />
-              <button type="submit">Create Volunteer</button>
-            </form>
-          </div>
-
-          <div className="form-section">
             <h2>Reminder Rule</h2>
             <form onSubmit={handleCreateReminders}>
               <select
@@ -585,11 +520,13 @@ export const AdminDashboard: React.FC = () => {
                       }}
                     >
                       <option value="">Choose volunteer...</option>
-                      {volunteers.map((volunteer) => (
-                        <option key={volunteer.id} value={volunteer.id}>
-                          {volunteer.name}
-                        </option>
-                      ))}
+                      {volunteers
+                        .filter((volunteer) => !(event.assignedVolunteers || []).includes(volunteer.id))
+                        .map((volunteer) => (
+                          <option key={volunteer.id} value={volunteer.id}>
+                            {volunteer.name}
+                          </option>
+                        ))}
                     </select>
                   </label>
                   <label>
@@ -615,41 +552,54 @@ export const AdminDashboard: React.FC = () => {
         <section className="records-section">
           <h2>Volunteers</h2>
           <div className="volunteers-list">
-            {volunteers.map((volunteer) => (
-              <div key={volunteer.id} className="volunteer-card">
-                <div className="card-title-row">
-                  <h3>{volunteer.name}</h3>
-                  <button
-                    type="button"
-                    className="danger-btn"
-                    onClick={() => handleDeleteVolunteer(volunteer.id, volunteer.name)}
-                  >
-                    Remove
-                  </button>
+            {volunteers.map((volunteer) => {
+              const assignedEventIds = volunteer.assignedEvents || [];
+              const assignedEventNames = assignedEventIds
+                .map((id) => events.find((event) => event.id === id)?.topic)
+                .filter(Boolean);
+              const availableEvents = events.filter(
+                (event) =>
+                  !assignedEventIds.includes(event.id) &&
+                  !(event.assignedVolunteers || []).includes(volunteer.id)
+              );
+
+              return (
+                <div key={volunteer.id} className="volunteer-card">
+                  <div className="card-title-row">
+                    <h3>{volunteer.name}</h3>
+                    <button
+                      type="button"
+                      className="danger-btn"
+                      onClick={() => handleDeleteVolunteer(volunteer.id, volunteer.name)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <p><strong>Email:</strong> {volunteer.email}</p>
+                  <p><strong>Phone:</strong> {volunteer.phoneNumber}</p>
+                  <p><strong>Assigned events:</strong> {assignedEventNames.length ? assignedEventNames.join(', ') : 'None yet'}</p>
+                  <label>
+                    Assign event to volunteer
+                    <select
+                      defaultValue=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleAssignVolunteer(e.target.value, volunteer.id);
+                          e.target.value = '';
+                        }
+                      }}
+                    >
+                      <option value="">Choose event...</option>
+                      {availableEvents.map((event) => (
+                        <option key={event.id} value={event.id}>
+                          {event.topic}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
-                <p><strong>Email:</strong> {volunteer.email}</p>
-                <p><strong>Phone:</strong> {volunteer.phoneNumber}</p>
-                <label>
-                  Assign event to volunteer
-                  <select
-                    defaultValue=""
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleAssignVolunteer(e.target.value, volunteer.id);
-                        e.target.value = '';
-                      }
-                    }}
-                  >
-                    <option value="">Choose event...</option>
-                    {events.map((event) => (
-                      <option key={event.id} value={event.id}>
-                        {event.topic}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 

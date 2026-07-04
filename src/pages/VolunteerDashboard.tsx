@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signOut, onAuthStateChanged, User, updateProfile } from 'firebase/auth';
+import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth, db, isFirebaseConfigured } from '../config/firebase';
-import { collection, query, where, getDocs, updateDoc, doc, getDoc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { isUserAdmin, VolunteerProfile, ServiceEvent, formatDate } from '../helpers/types';
 import {
   clearDemoSession,
@@ -10,22 +10,15 @@ import {
   getDemoEvents,
   getDemoSession,
   getDemoVolunteers,
-  saveDemoVolunteers,
 } from '../helpers/demoStore';
 import './VolunteerDashboard.css';
 
 export const VolunteerDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<(User | { uid: string; email: string; displayName: string }) | null>(null);
-  const [profile, setProfile] = useState<VolunteerProfile | null>(null);
-  const [assignedEvents, setAssignedEvents] = useState<ServiceEvent[]>([]);
+  const [events, setEvents] = useState<ServiceEvent[]>([]);
+  const [volunteers, setVolunteers] = useState<VolunteerProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingProfile, setEditingProfile] = useState(false);
-  const [profileData, setProfileData] = useState({
-    name: '',
-    phoneNumber: '',
-    address: '',
-  });
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
@@ -41,7 +34,7 @@ export const VolunteerDashboard: React.FC = () => {
           displayName: session.displayName,
         });
         ensureDemoVolunteer(session);
-        loadVolunteerData(session.uid);
+        loadVolunteerData();
         setLoading(false);
       }
       return;
@@ -57,7 +50,7 @@ export const VolunteerDashboard: React.FC = () => {
           return;
         }
 
-        await loadVolunteerData(currentUser.uid);
+        await loadVolunteerData();
       } else {
         navigate('/login');
       }
@@ -67,109 +60,40 @@ export const VolunteerDashboard: React.FC = () => {
     return unsubscribe;
   }, [navigate]);
 
-  const loadVolunteerData = async (userId: string) => {
+  const loadVolunteerData = async () => {
     try {
       if (!isFirebaseConfigured) {
-        const volunteer = getDemoVolunteers().find((item) => item.uid === userId);
-        if (volunteer) {
-          setProfile(volunteer);
-          setProfileData({
-            name: volunteer.name,
-            phoneNumber: volunteer.phoneNumber,
-            address: volunteer.address || '',
-          });
-        }
-        setAssignedEvents(
-          getDemoEvents().filter((event) => event.assignedVolunteers.includes(userId))
-        );
+        setEvents(getDemoEvents());
+        setVolunteers(getDemoVolunteers());
         return;
       }
 
-      // Load volunteer profile
-      const volunteerDoc = await getDoc(doc(db, 'volunteers', userId));
-      if (volunteerDoc.exists()) {
-        const data = volunteerDoc.data();
-        const volunteerProfile: VolunteerProfile = {
-          uid: volunteerDoc.id,
-          name: data.name,
-          email: data.email,
-          phoneNumber: data.phoneNumber,
-          address: data.address || '',
-          availableHours: data.availableHours || 0,
-          joinedDate: data.joinedDate?.toDate?.() || new Date(),
-        };
-        setProfile(volunteerProfile);
-        setProfileData({
-          name: volunteerProfile.name,
-          phoneNumber: volunteerProfile.phoneNumber,
-          address: volunteerProfile.address || '',
-        });
-      }
-
-      // Load assigned events
-      const eventsQuery = query(
-        collection(db, 'serviceEvents'),
-        where('assignedVolunteers', 'array-contains', userId)
-      );
-      const eventsSnapshot = await getDocs(eventsQuery);
+      const eventsSnapshot = await getDocs(collection(db, 'serviceEvents'));
       const eventsData = eventsSnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
         eventDateTime: doc.data().eventDateTime?.toDate?.() || new Date(),
       } as ServiceEvent));
-      setAssignedEvents(eventsData);
-    } catch (error) {
-      console.error('Error loading volunteer data:', error);
-    }
-  };
 
-  const handleUpdateProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-
-    try {
-      if (!isFirebaseConfigured) {
-        saveDemoVolunteers(
-          getDemoVolunteers().map((volunteer) =>
-            volunteer.uid === user.uid
-              ? {
-                  ...volunteer,
-                  name: profileData.name,
-                  phoneNumber: profileData.phoneNumber,
-                  address: profileData.address,
-                }
-              : volunteer
-          )
-        );
-        setEditingProfile(false);
-        await loadVolunteerData(user.uid);
-        alert('Profile updated successfully!');
-        return;
-      }
-
-      const volunteerRef = doc(db, 'volunteers', user.uid);
-      await updateDoc(volunteerRef, {
-        name: profileData.name,
-        phoneNumber: profileData.phoneNumber,
-        address: profileData.address,
-        updatedAt: Timestamp.now(),
+      const volunteersSnapshot = await getDocs(collection(db, 'volunteers'));
+      const volunteersData = volunteersSnapshot.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          uid: doc.id,
+          name: data.name,
+          email: data.email,
+          phoneNumber: data.phoneNumber,
+          address: data.address || '',
+          assignedEvents: data.assignedEvents || [],
+          availableHours: data.availableHours || 0,
+          joinedDate: data.joinedDate?.toDate?.() || new Date(),
+        } as VolunteerProfile;
       });
 
-      // Update Firebase Auth display name
-      if ('displayName' in user && profileData.name !== user.displayName) {
-        await updateProfile(user as User, { displayName: profileData.name });
-      }
-
-      setEditingProfile(false);
-      alert('Profile updated successfully!');
-      
-      // Reload profile
-      if (user) {
-        await loadVolunteerData(user.uid);
-      }
+      setEvents(eventsData);
+      setVolunteers(volunteersData);
     } catch (error) {
-      console.error('Error updating profile:', error);
-      alert('Failed to update profile');
+      console.error('Error loading volunteer data:', error);
     }
   };
 
@@ -203,91 +127,16 @@ export const VolunteerDashboard: React.FC = () => {
       </header>
 
       <div className="dashboard-content">
-        {/* Profile Section */}
-        <div className="profile-section">
-          <div className="profile-card">
-            <h2>My Profile</h2>
-            
-            {!editingProfile ? (
-              <div className="profile-view">
-                <div className="profile-item">
-                  <label>Name</label>
-                  <p>{profile?.name}</p>
-                </div>
-                <div className="profile-item">
-                  <label>Email</label>
-                  <p>{profile?.email}</p>
-                </div>
-                <div className="profile-item">
-                  <label>Phone Number</label>
-                  <p>{profile?.phoneNumber}</p>
-                </div>
-                <div className="profile-item">
-                  <label>Address</label>
-                  <p>{profile?.address || 'Not provided'}</p>
-                </div>
-                <div className="profile-item">
-                  <label>Member Since</label>
-                  <p>{formatDate(profile?.joinedDate)}</p>
-                </div>
-                <button onClick={() => setEditingProfile(true)} className="edit-btn">
-                  Edit Profile
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleUpdateProfile} className="profile-form">
-                <div className="form-group">
-                  <label>Name</label>
-                  <input
-                    type="text"
-                    value={profileData.name}
-                    onChange={(e) => setProfileData({...profileData, name: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Phone Number</label>
-                  <input
-                    type="tel"
-                    value={profileData.phoneNumber}
-                    onChange={(e) => setProfileData({...profileData, phoneNumber: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Address</label>
-                  <input
-                    type="text"
-                    value={profileData.address}
-                    onChange={(e) => setProfileData({...profileData, address: e.target.value})}
-                  />
-                </div>
-                <div className="form-actions">
-                  <button type="submit" className="save-btn">Save Changes</button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingProfile(false)}
-                    className="cancel-btn"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-
-        {/* Events Section */}
         <div className="events-section">
-          <h2>My Assigned Events ({assignedEvents.length})</h2>
+          <h2>Events</h2>
           
-          {assignedEvents.length === 0 ? (
+          {events.length === 0 ? (
             <div className="empty-state">
-              <p>You have no assigned events yet. Check back soon!</p>
+              <p>No events are available yet.</p>
             </div>
           ) : (
             <div className="events-list">
-              {assignedEvents.map((event) => (
+              {events.map((event) => (
                 <div key={event.id} className="event-card">
                   <div className="event-header">
                     <h3>{event.topic}</h3>
@@ -322,13 +171,31 @@ export const VolunteerDashboard: React.FC = () => {
           )}
         </div>
 
-        {/* Info Box */}
-        <div className="info-box">
-          <h3>SMS Reminders</h3>
-          <p>
-            Event administrators will send you SMS reminders before your scheduled events.
-            Make sure your phone number is correct so you don't miss any updates!
-          </p>
+        <div className="volunteers-section">
+          <h2>Volunteers</h2>
+
+          {volunteers.length === 0 ? (
+            <div className="empty-state">
+              <p>No volunteers are available yet.</p>
+            </div>
+          ) : (
+            <div className="volunteers-list">
+              {volunteers.map((volunteer) => {
+                const assignedEventNames = (volunteer.assignedEvents || [])
+                  .map((eventId) => events.find((event) => event.id === eventId)?.topic)
+                  .filter(Boolean);
+
+                return (
+                  <div key={volunteer.uid} className="volunteer-card">
+                    <h3>{volunteer.name}</h3>
+                    <p><strong>Email:</strong> {volunteer.email}</p>
+                    <p><strong>Phone:</strong> {volunteer.phoneNumber}</p>
+                    <p><strong>Assigned events:</strong> {assignedEventNames.length ? assignedEventNames.join(', ') : 'None yet'}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -87,8 +87,8 @@ export function getDemoSession() {
   return stored ? (JSON.parse(stored) as DemoSession) : null;
 }
 
-export function setDemoSession(email: string, name?: string) {
-  const isAdmin = email.toLowerCase().includes('admin');
+export function setDemoSession(email: string, name?: string, forceAdmin?: boolean) {
+  const isAdmin = forceAdmin ?? email === 'admin123';
   const session: DemoSession = {
     uid: isAdmin ? 'admin-demo' : 'volunteer-demo',
     email,

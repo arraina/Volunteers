@@ -8,6 +8,7 @@ export interface VolunteerProfile {
   email: string;
   phoneNumber: string;
   address?: string;
+  assignedEvents?: string[];
   availableHours?: number;
   joinedDate: Date;
 }

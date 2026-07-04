@@ -17,7 +17,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 export const AuthPage: React.FC<AuthProps> = ({ type }) => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -30,21 +30,26 @@ export const AuthPage: React.FC<AuthProps> = ({ type }) => {
     setLoading(true);
 
     try {
+      const session = setDemoSession(username, name, false);
+      ensureDemoVolunteer(session, phoneNumber);
+      window.location.assign('/dashboard?demo=true');
+      return;
+
       if (!isFirebaseConfigured) {
-        const session = setDemoSession(email, name);
+        const session = setDemoSession(username, name, false);
         ensureDemoVolunteer(session, phoneNumber);
         navigate('/dashboard');
         return;
       }
 
       // Create user in Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, username, password);
       const user = userCredential.user;
 
       // Create volunteer profile in Firestore
       await setDoc(doc(db, 'volunteers', user.uid), {
         name,
-        email,
+        email: username,
         phoneNumber,
         address: '',
         joinedDate: Timestamp.now(),
@@ -66,14 +71,27 @@ export const AuthPage: React.FC<AuthProps> = ({ type }) => {
     setLoading(true);
 
     try {
+      if (username === 'admin123' && password === 'admin123') {
+        setDemoSession('admin123', 'Admin', true);
+        window.location.assign('/admin?demo=true');
+        return;
+      }
+
+      if (username === 'user123' && password === 'user123') {
+        const session = setDemoSession('user123', 'Demo Volunteer', false);
+        ensureDemoVolunteer(session, '+15551234567');
+        window.location.assign('/dashboard?demo=true');
+        return;
+      }
+
       if (!isFirebaseConfigured) {
-        const session = setDemoSession(email);
+        const session = setDemoSession(username);
         ensureDemoVolunteer(session);
         navigate(session.isAdmin ? '/admin' : '/dashboard');
         return;
       }
 
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, username, password);
       const user = userCredential.user;
 
       // Check if admin
@@ -99,7 +117,13 @@ export const AuthPage: React.FC<AuthProps> = ({ type }) => {
   return (
     <div className="auth-container">
       <div className="auth-card">
-        <h1>{pageTitle}</h1>
+        <h1>{type === 'login' ? 'Volunteer Portal Login' : 'Volunteer Sign Up'}</h1>
+        {type === 'login' && (
+          <div className="credential-hint">
+            <p><strong>Admin:</strong> admin123 / admin123</p>
+            <p><strong>User:</strong> user123 / user123</p>
+          </div>
+        )}
         
         {error && <div className="error-message">{error}</div>}
 
@@ -133,13 +157,13 @@ export const AuthPage: React.FC<AuthProps> = ({ type }) => {
           )}
 
           <div className="form-group">
-            <label htmlFor="email">Email</label>
+            <label htmlFor="username">{type === 'login' ? 'Username' : 'Email'}</label>
             <input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="username"
+              type={type === 'login' ? 'text' : 'email'}
+              placeholder={type === 'login' ? 'admin123 or user123' : 'you@example.com'}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               required
             />
           </div>

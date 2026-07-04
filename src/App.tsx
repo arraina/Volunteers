@@ -13,7 +13,7 @@ function App() {
         <Route path="/signup" element={<AuthPage type="signup" />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/dashboard" element={<VolunteerDashboard />} />
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
   );
