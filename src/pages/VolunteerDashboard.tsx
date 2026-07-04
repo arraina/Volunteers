@@ -18,6 +18,8 @@ export const VolunteerDashboard: React.FC = () => {
   const [user, setUser] = useState<(User | { uid: string; email: string; displayName: string }) | null>(null);
   const [events, setEvents] = useState<ServiceEvent[]>([]);
   const [volunteers, setVolunteers] = useState<VolunteerProfile[]>([]);
+  const [eventSearch, setEventSearch] = useState('');
+  const [volunteerSearch, setVolunteerSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -116,6 +118,20 @@ export const VolunteerDashboard: React.FC = () => {
     return <div className="loading">Loading...</div>;
   }
 
+  const sortedEvents = [...events].sort(
+    (a, b) => new Date(a.eventDateTime).getTime() - new Date(b.eventDateTime).getTime()
+  );
+  const filteredEvents = sortedEvents.filter((event) => {
+    const query = eventSearch.trim().toLowerCase();
+    if (!query) return true;
+    return event.topic.toLowerCase().includes(query);
+  });
+  const filteredVolunteers = volunteers.filter((volunteer) => {
+    const query = volunteerSearch.trim().toLowerCase();
+    if (!query) return true;
+    return volunteer.name.toLowerCase().includes(query);
+  });
+
   return (
     <div className="volunteer-dashboard">
       <header className="dashboard-header">
@@ -129,14 +145,23 @@ export const VolunteerDashboard: React.FC = () => {
       <div className="dashboard-content">
         <div className="events-section">
           <h2>Events</h2>
+          <div className="list-toolbar">
+            <input
+              type="search"
+              placeholder="Search events..."
+              value={eventSearch}
+              onChange={(e) => setEventSearch(e.target.value)}
+            />
+            <span>Sorted by closest date</span>
+          </div>
           
-          {events.length === 0 ? (
+          {filteredEvents.length === 0 ? (
             <div className="empty-state">
               <p>No events are available yet.</p>
             </div>
           ) : (
             <div className="events-list">
-              {events.map((event) => (
+              {filteredEvents.map((event) => (
                 <div key={event.id} className="event-card">
                   <div className="event-header">
                     <h3>{event.topic}</h3>
@@ -173,14 +198,22 @@ export const VolunteerDashboard: React.FC = () => {
 
         <div className="volunteers-section">
           <h2>Volunteers</h2>
+          <div className="list-toolbar">
+            <input
+              type="search"
+              placeholder="Search volunteers..."
+              value={volunteerSearch}
+              onChange={(e) => setVolunteerSearch(e.target.value)}
+            />
+          </div>
 
-          {volunteers.length === 0 ? (
+          {filteredVolunteers.length === 0 ? (
             <div className="empty-state">
               <p>No volunteers are available yet.</p>
             </div>
           ) : (
             <div className="volunteers-list">
-              {volunteers.map((volunteer) => {
+              {filteredVolunteers.map((volunteer) => {
                 const assignedEventNames = (volunteer.assignedEvents || [])
                   .map((eventId) => events.find((event) => event.id === eventId)?.topic)
                   .filter(Boolean);

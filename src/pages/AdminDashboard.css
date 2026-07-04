@@ -157,6 +157,30 @@
   padding-left: 40px;
 }
 
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: -8px 0 18px;
+}
+
+.list-toolbar input {
+  width: min(360px, calc(100vw - 80px));
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 1px solid #c9d3e3;
+  border-radius: 6px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 15px;
+}
+
+.list-toolbar span {
+  color: #5f718d;
+  font-size: 14px;
+  font-weight: 650;
+}
+
 .events-list,
 .volunteers-list,
 .reminder-rules-list {
@@ -269,5 +293,10 @@
     width: auto;
     margin-left: 0;
     padding-left: 0;
+  }
+
+  .list-toolbar {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

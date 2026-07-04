@@ -46,6 +46,8 @@ export const AdminDashboard: React.FC = () => {
   const [events, setEvents] = useState<ServiceEvent[]>([]);
   const [volunteers, setVolunteers] = useState<VolunteerRecord[]>([]);
   const [reminderRules, setReminderRules] = useState<ReminderRule[]>([]);
+  const [eventSearch, setEventSearch] = useState('');
+  const [volunteerSearch, setVolunteerSearch] = useState('');
   
   // Event form state
   const [newEvent, setNewEvent] = useState({
@@ -397,6 +399,20 @@ export const AdminDashboard: React.FC = () => {
     return <div className="error">Unauthorized access</div>;
   }
 
+  const sortedEvents = [...events].sort(
+    (a, b) => new Date(a.eventDateTime).getTime() - new Date(b.eventDateTime).getTime()
+  );
+  const filteredEvents = sortedEvents.filter((event) => {
+    const query = eventSearch.trim().toLowerCase();
+    if (!query) return true;
+    return event.topic.toLowerCase().includes(query);
+  });
+  const filteredVolunteers = volunteers.filter((volunteer) => {
+    const query = volunteerSearch.trim().toLowerCase();
+    if (!query) return true;
+    return volunteer.name.toLowerCase().includes(query);
+  });
+
   return (
     <div className="admin-dashboard">
       <header className="dashboard-header">
@@ -486,8 +502,17 @@ export const AdminDashboard: React.FC = () => {
 
         <section className="records-section">
           <h2>Events</h2>
+          <div className="list-toolbar">
+            <input
+              type="search"
+              placeholder="Search events..."
+              value={eventSearch}
+              onChange={(e) => setEventSearch(e.target.value)}
+            />
+            <span>Sorted by closest date</span>
+          </div>
           <div className="events-list">
-            {events.map((event) => {
+            {filteredEvents.map((event) => {
               const assignedNames = (event.assignedVolunteers || [])
                 .map((id) => volunteers.find((volunteer) => volunteer.id === id)?.name)
                 .filter(Boolean);
@@ -551,8 +576,16 @@ export const AdminDashboard: React.FC = () => {
 
         <section className="records-section">
           <h2>Volunteers</h2>
+          <div className="list-toolbar">
+            <input
+              type="search"
+              placeholder="Search volunteers..."
+              value={volunteerSearch}
+              onChange={(e) => setVolunteerSearch(e.target.value)}
+            />
+          </div>
           <div className="volunteers-list">
-            {volunteers.map((volunteer) => {
+            {filteredVolunteers.map((volunteer) => {
               const assignedEventIds = volunteer.assignedEvents || [];
               const assignedEventNames = assignedEventIds
                 .map((id) => events.find((event) => event.id === id)?.topic)
