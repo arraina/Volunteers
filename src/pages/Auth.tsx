@@ -118,13 +118,6 @@ export const AuthPage: React.FC<AuthProps> = ({ type }) => {
     <div className="auth-container">
       <div className="auth-card">
         <h1>{type === 'login' ? 'Volunteer Portal Login' : 'Volunteer Sign Up'}</h1>
-        {type === 'login' && (
-          <div className="credential-hint">
-            <p><strong>Admin:</strong> admin123 / admin123</p>
-            <p><strong>User:</strong> user123 / user123</p>
-          </div>
-        )}
-        
         {error && <div className="error-message">{error}</div>}
 
         <form onSubmit={handleSubmit}>
@@ -161,7 +154,7 @@ export const AuthPage: React.FC<AuthProps> = ({ type }) => {
             <input
               id="username"
               type={type === 'login' ? 'text' : 'email'}
-              placeholder={type === 'login' ? 'admin123 or user123' : 'you@example.com'}
+              placeholder={type === 'login' ? 'Enter username' : 'you@example.com'}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required

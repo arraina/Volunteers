@@ -23,20 +23,6 @@
   font-size: 1.55rem;
 }
 
-.credential-hint {
-  background: #eef4ff;
-  border: 1px solid #c9d9ff;
-  border-radius: 6px;
-  color: #0f1f36;
-  margin-bottom: 1rem;
-  padding: 0.8rem;
-}
-
-.credential-hint p {
-  margin: 0.25rem 0;
-  font-size: 0.85rem;
-}
-
 .form-group {
   margin-bottom: 0.8rem;
 }
