@@ -119,6 +119,26 @@ function normalizeDb(data) {
   };
 }
 
+function normalizeVolunteerInput(volunteer) {
+  const firstName = String(volunteer.firstName || "").trim();
+  const lastName = String(volunteer.lastName || "").trim();
+  const email = String(volunteer.email || "").trim().toLowerCase();
+
+  if (!firstName || !lastName || !email) {
+    return { error: "firstName, lastName, and email are required" };
+  }
+
+  return {
+    ...volunteer,
+    firstName,
+    lastName,
+    name: `${firstName} ${lastName}`,
+    email,
+    phoneNumber: String(volunteer.phoneNumber || "").trim(),
+    address: String(volunteer.address || "").trim(),
+  };
+}
+
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(body));
@@ -197,13 +217,18 @@ async function handleApi(request, response, urlPath) {
 
   if (request.method === "POST" && urlPath === "/api/volunteers") {
     const volunteer = await readRequestJson(request);
-    const id = volunteer.id || `volunteer-${Date.now()}`;
+    const normalizedVolunteer = normalizeVolunteerInput(volunteer);
+    if (normalizedVolunteer.error) {
+      sendJson(response, 400, { error: normalizedVolunteer.error });
+      return true;
+    }
+    const id = normalizedVolunteer.id || `volunteer-${Date.now()}`;
     const savedVolunteer = {
-      ...volunteer,
+      ...normalizedVolunteer,
       id,
-      uid: volunteer.uid || id,
-      assignedEvents: volunteer.assignedEvents || [],
-      joinedDate: volunteer.joinedDate || new Date().toISOString(),
+      uid: normalizedVolunteer.uid || id,
+      assignedEvents: normalizedVolunteer.assignedEvents || [],
+      joinedDate: normalizedVolunteer.joinedDate || new Date().toISOString(),
     };
     const existingIndex = db.volunteers.findIndex(
       (item) => item.id === savedVolunteer.id || item.uid === savedVolunteer.uid

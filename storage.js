@@ -4,8 +4,32 @@ class StorageManager {
     this.volunteersKey = "volunteers.volunteers";
     this.reminderRulesKey = "volunteers.reminderRules";
     this.useLocalServerDb =
-      useDemoMode && ["localhost", "127.0.0.1"].includes(window.location.hostname);
+      ["localhost", "127.0.0.1"].includes(window.location.hostname);
     this.seedLocalData();
+  }
+
+  useLocalData(session = null) {
+    return !isFirebaseConfigured || useDemoMode || this.useLocalServerDb || session?.local === true;
+  }
+
+  normalizeVolunteer(volunteer) {
+    const firstName = String(volunteer.firstName || "").trim();
+    const lastName = String(volunteer.lastName || "").trim();
+    const email = String(volunteer.email || "").trim().toLowerCase();
+
+    if (!firstName || !lastName || !email) {
+      throw new Error("First name, last name, and email are required.");
+    }
+
+    return {
+      ...volunteer,
+      firstName,
+      lastName,
+      name: `${firstName} ${lastName}`,
+      email,
+      phoneNumber: String(volunteer.phoneNumber || "").trim(),
+      address: String(volunteer.address || "").trim(),
+    };
   }
 
   seedLocalData() {
@@ -75,7 +99,7 @@ class StorageManager {
   }
 
   async getEvents(session) {
-    if (!isFirebaseConfigured || useDemoMode) {
+    if (this.useLocalData(session)) {
       const events = await this.getLocalEvents();
       return session?.isAdmin
         ? events
@@ -99,8 +123,8 @@ class StorageManager {
     }));
   }
 
-  async getVolunteers() {
-    if (!isFirebaseConfigured || useDemoMode) {
+  async getVolunteers(session = null) {
+    if (this.useLocalData(session)) {
       return this.getLocalVolunteers();
     }
 
@@ -108,8 +132,8 @@ class StorageManager {
     return snapshot.docs.map((doc) => ({ id: doc.id, uid: doc.id, ...doc.data() }));
   }
 
-  async getReminderRules() {
-    if (!isFirebaseConfigured || useDemoMode) {
+  async getReminderRules(session = null) {
+    if (this.useLocalData(session)) {
       return this.getLocalReminderRules();
     }
 
@@ -121,8 +145,8 @@ class StorageManager {
     }));
   }
 
-  async createEvent(event) {
-    if (!isFirebaseConfigured || useDemoMode) {
+  async createEvent(event, session = null) {
+    if (this.useLocalData(session)) {
       if (this.useLocalServerDb) {
         await this.api("/api/events", {
           method: "POST",
@@ -146,8 +170,8 @@ class StorageManager {
     });
   }
 
-  async deleteEvent(eventId) {
-    if (!isFirebaseConfigured || useDemoMode) {
+  async deleteEvent(eventId, session = null) {
+    if (this.useLocalData(session)) {
       if (this.useLocalServerDb) {
         await this.api(`/api/events/${eventId}`, { method: "DELETE" });
         return;
@@ -163,8 +187,8 @@ class StorageManager {
     await functions.httpsCallable("deleteServiceEvent")({ eventId });
   }
 
-  async updateEventStatus(eventId, status) {
-    if (!isFirebaseConfigured || useDemoMode) {
+  async updateEventStatus(eventId, status, session = null) {
+    if (this.useLocalData(session)) {
       if (this.useLocalServerDb) {
         await this.api(`/api/events/${eventId}`, {
           method: "PATCH",
@@ -188,41 +212,44 @@ class StorageManager {
     });
   }
 
-  async createVolunteer(volunteer) {
-    if (!isFirebaseConfigured || useDemoMode) {
+  async createVolunteer(volunteer, session = null) {
+    const savedVolunteer = this.normalizeVolunteer(volunteer);
+
+    if (this.useLocalData(session)) {
       if (this.useLocalServerDb) {
         await this.api("/api/volunteers", {
           method: "POST",
-          body: JSON.stringify(volunteer),
+          body: JSON.stringify(savedVolunteer),
         });
         return;
       }
 
       const volunteers = this.readLocal(this.volunteersKey);
+      const id = `volunteer-${Date.now()}`;
       volunteers.push({
-        ...volunteer,
-        id: `volunteer-${Date.now()}`,
-        uid: `volunteer-${Date.now()}`,
-        assignedEvents: volunteer.assignedEvents || [],
+        ...savedVolunteer,
+        id,
+        uid: id,
+        assignedEvents: savedVolunteer.assignedEvents || [],
         joinedDate: new Date(),
       });
       this.writeLocal(this.volunteersKey, volunteers);
       return;
     }
 
-    await functions.httpsCallable("createVolunteer")(volunteer);
+    await functions.httpsCallable("createVolunteer")(savedVolunteer);
   }
 
-  async createVolunteerProfile(volunteer) {
-    if (!isFirebaseConfigured || useDemoMode) {
-      return this.createVolunteer(volunteer);
+  async createVolunteerProfile(volunteer, session = null) {
+    if (this.useLocalData(session)) {
+      return this.createVolunteer(volunteer, session);
     }
 
-    await functions.httpsCallable("createVolunteerProfile")(volunteer);
+    await functions.httpsCallable("createVolunteerProfile")(this.normalizeVolunteer(volunteer));
   }
 
-  async deleteVolunteer(volunteerId) {
-    if (!isFirebaseConfigured || useDemoMode) {
+  async deleteVolunteer(volunteerId, session = null) {
+    if (this.useLocalData(session)) {
       if (this.useLocalServerDb) {
         await this.api(`/api/volunteers/${volunteerId}`, { method: "DELETE" });
         return;
@@ -245,8 +272,8 @@ class StorageManager {
     await functions.httpsCallable("deleteVolunteer")({ volunteerId });
   }
 
-  async assignVolunteer(eventId, volunteerId) {
-    if (!isFirebaseConfigured || useDemoMode) {
+  async assignVolunteer(eventId, volunteerId, session = null) {
+    if (this.useLocalData(session)) {
       if (this.useLocalServerDb) {
         await this.api("/api/assignments", {
           method: "POST",
@@ -299,8 +326,8 @@ class StorageManager {
     });
   }
 
-  async createRemindersForEvent(rule) {
-    if (!isFirebaseConfigured || useDemoMode) {
+  async createRemindersForEvent(rule, session = null) {
+    if (this.useLocalData(session)) {
       if (this.useLocalServerDb) {
         await this.api("/api/reminder-rules", {
           method: "POST",

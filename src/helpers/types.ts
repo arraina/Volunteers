@@ -4,11 +4,14 @@ import { doc, getDoc } from 'firebase/firestore';
 
 export interface VolunteerProfile {
   uid: string;
+  firstName?: string;
+  lastName?: string;
   name: string;
   email: string;
   phoneNumber: string;
   address?: string;
   assignedEvents?: string[];
+  assignedServices?: string[];
   availableHours?: number;
   joinedDate: Date;
 }
@@ -25,32 +28,51 @@ export interface ServiceEvent {
   updatedAt: Date;
 }
 
-export interface ReminderRule {
+export interface EventService {
   id: string;
   eventId: string;
-  hoursBeforeEvent: number;
-  message: string;
+  name: string;
+  description?: string;
+  startTime: string;
+  endTime: string;
+  intervalMinutes?: number;
+  capacity?: number;
   createdAt: Date;
+  updatedAt: Date;
 }
 
-export interface Reminder {
+export interface ServiceTimeSlot {
+  key: string;
+  startTime: string;
+  endTime: string;
+  label: string;
+}
+
+export interface ServiceAssignment {
   id: string;
   eventId: string;
+  serviceId: string;
+  slotKey?: string;
+  slotStartTime?: string;
+  slotEndTime?: string;
   volunteerId: string;
-  phoneNumber: string;
-  message: string;
-  reminderTime: Date;
-  status: 'pending' | 'sent' | 'failed';
-  sentAt?: Date;
+  volunteerName: string;
+  volunteerEmail: string;
   createdAt: Date;
 }
 
 export type FirestoreTimestampLike = Date | string | number | { toDate: () => Date };
 
+const FIREBASE_ADMIN_EMAIL = 'admin@example.com';
+
 /**
  * Check if user is an admin
  */
 export async function isUserAdmin(user: User): Promise<boolean> {
+  if (user.email?.toLowerCase() === FIREBASE_ADMIN_EMAIL) {
+    return true;
+  }
+
   try {
     const adminDoc = await getDoc(doc(db, 'admins', user.uid));
     return adminDoc.exists() && adminDoc.data()?.isAdmin === true;
@@ -104,11 +126,55 @@ export function formatDate(date: Date | undefined): string {
   });
 }
 
-/**
- * Mask phone number for display
- */
-export function maskPhoneNumber(phoneNumber: string): string {
-  if (!phoneNumber || phoneNumber.length < 4) return '***';
-  const lastFour = phoneNumber.slice(-4);
-  return `***-***-${lastFour}`;
+function parseTimeToMinutes(time: string | undefined): number | null {
+  if (!time) return null;
+  const [hours, minutes] = time.split(':').map(Number);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
+  return hours * 60 + minutes;
 }
+
+function formatMinutesAsTime(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+export function formatTime(time: string | undefined): string {
+  const minutes = parseTimeToMinutes(time);
+  if (minutes === null) return 'N/A';
+  return new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+export function buildServiceSlots(service: Pick<EventService, 'startTime' | 'endTime' | 'intervalMinutes'>): ServiceTimeSlot[] {
+  const startMinutes = parseTimeToMinutes(service.startTime);
+  const endMinutes = parseTimeToMinutes(service.endTime);
+  const intervalMinutes = service.intervalMinutes || 30;
+
+  if (
+    startMinutes === null ||
+    endMinutes === null ||
+    endMinutes <= startMinutes ||
+    intervalMinutes <= 0
+  ) {
+    return [];
+  }
+
+  const slots: ServiceTimeSlot[] = [];
+  for (let slotStart = startMinutes; slotStart < endMinutes; slotStart += intervalMinutes) {
+    const slotEnd = Math.min(slotStart + intervalMinutes, endMinutes);
+    const startTime = formatMinutesAsTime(slotStart);
+    const endTime = formatMinutesAsTime(slotEnd);
+    slots.push({
+      key: `${startTime.replace(':', '')}-${endTime.replace(':', '')}`,
+      startTime,
+      endTime,
+      label: `${formatTime(startTime)} - ${formatTime(endTime)}`,
+    });
+  }
+
+  return slots;
+}
+

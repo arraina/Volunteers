@@ -1,56 +1,17 @@
 {
-  "events": [
-    {
-      "topic": "Tester",
-      "description": "Testering",
-      "eventDateTime": "2026-05-24T18:56:00.000Z",
-      "location": "Here",
-      "assignedVolunteers": [
-        "volunteer-1779645270879",
-        "volunteer-1779645645199"
-      ],
-      "status": "scheduled",
-      "id": "event-1779645255436",
-      "updatedAt": "2026-05-24T18:10:36.170Z"
-    }
-  ],
+  "events": [],
   "volunteers": [
     {
-      "name": "Arjun Raina",
+      "firstName": "Arjun",
+      "lastName": "Raina",
       "email": "arjun1ra05@gmail.com",
-      "phoneNumber": "8623574484",
-      "address": "IDK",
-      "password": "Timepass12",
-      "id": "volunteer-1779645270879",
-      "uid": "volunteer-1779645270879",
-      "joinedDate": "2026-05-24T17:54:30.879Z",
-      "assignedEvents": [
-        "event-1779645255436"
-      ]
-    },
-    {
-      "email": "assign-1779645645051@example.com",
-      "name": "Assign Test Volunteer 1779645645051",
-      "phoneNumber": "+15550001111",
-      "address": "Assignment Test",
-      "id": "volunteer-1779645645199",
-      "uid": "volunteer-1779645645199",
-      "assignedEvents": [
-        "event-1779645255436"
-      ],
-      "joinedDate": "2026-05-24T18:00:45.199Z",
-      "updatedAt": "2026-05-24T18:10:36.170Z"
-    },
-    {
-      "id": "volunteer-demo",
-      "uid": "volunteer-demo",
-      "name": "adfwaef",
-      "email": "a@b.com",
-      "phoneNumber": "4179053",
+      "phoneNumber": "",
       "address": "",
-      "joinedDate": "2026-05-24T18:40:54.495Z",
+      "name": "Arjun Raina",
+      "id": "volunteer-1785352307106",
+      "uid": "volunteer-1785352307106",
       "assignedEvents": [],
-      "updatedAt": "2026-07-04T14:33:43.453Z"
+      "joinedDate": "2026-07-29T19:11:47.106Z"
     }
   ],
   "reminderRules": [

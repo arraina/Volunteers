@@ -52,16 +52,87 @@
 }
 
 .events-section,
-.volunteers-section {
+.volunteers-section,
+.services-section,
+.profile-section {
   margin-bottom: 36px;
 }
 
 .events-section h2,
-.volunteers-section h2 {
+.volunteers-section h2,
+.services-section h2,
+.profile-section h2 {
   margin: 0 0 20px;
   font-size: 26px;
   line-height: 1.15;
   font-weight: 800;
+}
+
+.profile-section {
+  background: #ffffff;
+  border: 1px solid #ccd6e4;
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+  padding: 20px;
+}
+
+.profile-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.profile-form input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid #c9d3e3;
+  border-radius: 6px;
+  background: #ffffff;
+  font: inherit;
+  font-size: 15px;
+}
+
+.profile-form button,
+.service-card button,
+.service-option button {
+  min-height: 42px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: #2f64e9;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.profile-email {
+  margin: 14px 0 0;
+  color: #071426;
+  font-size: 15px;
+}
+
+.error-message {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 18px;
+}
+
+.service-card button:disabled,
+.service-option button:disabled {
+  background: #d9e2ef;
+  color: #4b5f7a;
+  cursor: default;
+}
+
+.service-card .remove-slot-btn {
+  border: 1px solid #ffb9c1;
+  background: #ffe6e9;
+  color: #a4101c;
 }
 
 .list-toolbar {
@@ -89,13 +160,15 @@
 }
 
 .events-list,
-.volunteers-list {
+.volunteers-list,
+.services-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 20px;
 }
 
 .event-card,
+.service-card,
 .volunteer-card,
 .empty-state {
   background: #ffffff;
@@ -114,6 +187,7 @@
 }
 
 .event-card h3,
+.service-card h3,
 .volunteer-card h3 {
   margin: 0 0 12px;
   color: #0f1f36;
@@ -122,11 +196,24 @@
   font-weight: 800;
 }
 
+.service-card .service-name {
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.service-card .service-time {
+  color: #0f1f36;
+  font-size: 19px;
+  font-weight: 900;
+}
+
 .event-header h3 {
   margin-bottom: 0;
 }
 
 .event-card p,
+.service-card p,
 .volunteer-card p,
 .empty-state p {
   margin: 0 0 12px;
@@ -136,6 +223,7 @@
 }
 
 .event-card p:last-child,
+.service-card p:last-child,
 .volunteer-card p:last-child,
 .empty-state p:last-child {
   margin-bottom: 0;
@@ -152,6 +240,51 @@
   border-top: 1px solid #e3e9f3;
 }
 
+.service-options {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.service-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e3e9f3;
+  border-radius: 7px;
+  background: #fbfdff;
+}
+
+.service-option p {
+  margin: 4px 0 0;
+  color: #5f718d;
+}
+
+.slot-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.slot-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #d7e0ed;
+  border-radius: 7px;
+  background: #fbfdff;
+}
+
+.slot-label {
+  color: #071426;
+  font-size: 15px;
+  font-weight: 600;
+}
+
 .detail-item {
   display: grid;
   gap: 4px;
@@ -159,6 +292,7 @@
 }
 
 .detail-item strong,
+.service-card strong,
 .volunteer-card strong {
   font-weight: 800;
 }
@@ -214,7 +348,12 @@
   }
 
   .events-list,
+  .services-list,
   .volunteers-list {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-form {
     grid-template-columns: 1fr;
   }
 

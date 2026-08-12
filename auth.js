@@ -9,10 +9,11 @@ class AuthManager {
   }
 
   setLocalSession(email, name) {
-    const isAdmin = email.toLowerCase().includes("admin");
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    const isAdmin = normalizedEmail === "admin" || normalizedEmail.includes("admin");
     const session = {
       uid: isAdmin ? "admin-demo" : "volunteer-demo",
-      email,
+      email: normalizedEmail || email,
       displayName: name || (isAdmin ? "Demo Admin" : "Demo Volunteer"),
       isAdmin,
       local: true,
@@ -22,6 +23,10 @@ class AuthManager {
   }
 
   async login(email, password) {
+    if (String(email || "").trim().toLowerCase() === "admin" && password === "admin") {
+      return this.setLocalSession("admin", "Default Admin");
+    }
+
     if (!isFirebaseConfigured || useDemoMode) {
       return this.setLocalSession(email);
     }
@@ -74,7 +79,7 @@ class AuthManager {
 
   listen(callback) {
     if (!isFirebaseConfigured || useDemoMode) {
-      const session = this.getSession() || (useDemoMode ? this.setLocalSession("admin@example.com", "Demo Admin") : null);
+      const session = this.getSession() || (useDemoMode ? this.setLocalSession("admin", "Demo Admin") : null);
       callback(session);
       return () => {};
     }

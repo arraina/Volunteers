@@ -88,10 +88,12 @@ export function getDemoSession() {
 }
 
 export function setDemoSession(email: string, name?: string, forceAdmin?: boolean) {
-  const isAdmin = forceAdmin ?? email === 'admin123';
+  const isAdmin = forceAdmin ?? email === 'admin';
+  const normalizedEmail = email.trim().toLowerCase();
+  const volunteerUid = `volunteer-${normalizedEmail.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'demo'}`;
   const session: DemoSession = {
-    uid: isAdmin ? 'admin-demo' : 'volunteer-demo',
-    email,
+    uid: isAdmin ? 'admin-demo' : volunteerUid,
+    email: normalizedEmail || email,
     displayName: name || (isAdmin ? 'Demo Admin' : 'Demo Volunteer'),
     isAdmin,
   };

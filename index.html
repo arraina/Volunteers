@@ -24,26 +24,28 @@
 
       <section id="authPage" class="page active">
         <div class="auth-card">
-          <div class="tabs">
-            <button class="tab active" data-auth-tab="loginForm">Login</button>
-            <button class="tab" data-auth-tab="signupForm">Sign up</button>
-          </div>
-
           <form id="loginForm" class="auth-form active">
-            <label>Email <input name="email" type="email" placeholder="admin@example.com" required /></label>
+            <label>Username <input name="email" type="text" placeholder="admin" required /></label>
             <label>Password <input name="password" type="password" placeholder="Password" required /></label>
             <button class="btn primary" type="submit">Login</button>
-            <p class="hint">For local demo login, add <code>?demo=true</code> to this page URL. Include "admin" in the email to open the admin dashboard.</p>
           </form>
 
-          <form id="signupForm" class="auth-form">
-            <label>Name <input name="name" type="text" required /></label>
-            <label>Phone <input name="phoneNumber" type="tel" required /></label>
-            <label>Email <input name="email" type="email" required /></label>
-            <label>Password <input name="password" type="password" required /></label>
-            <button class="btn primary" type="submit">Create account</button>
-          </form>
+          <button class="btn secondary" type="button" data-open-public-add>Create Account</button>
         </div>
+      </section>
+
+      <section id="publicVolunteerPage" class="page">
+        <section class="panel public-panel">
+          <h2>Create Account</h2>
+          <form id="publicVolunteerForm" class="stack">
+            <input name="firstName" placeholder="First name" autocomplete="given-name" required />
+            <input name="lastName" placeholder="Last name" autocomplete="family-name" required />
+            <input name="email" type="email" placeholder="Email" autocomplete="email" required />
+            <input name="phoneNumber" type="tel" placeholder="Phone number" autocomplete="tel" />
+            <button class="btn primary" type="submit">Add Volunteer</button>
+            <button class="btn secondary" type="button" data-open-login>Back to Login</button>
+          </form>
+        </section>
       </section>
 
       <section id="adminPage" class="page">
@@ -62,12 +64,11 @@
           <section class="panel">
             <h2>Add Volunteer</h2>
             <form id="volunteerForm" class="stack">
-              <input name="name" placeholder="Full name" required />
+              <input name="firstName" placeholder="First name" required />
+              <input name="lastName" placeholder="Last name" required />
               <input name="email" type="email" placeholder="Email" required />
-              <input name="phoneNumber" type="tel" placeholder="Phone number" required />
-              <input name="address" placeholder="Address" />
-              <input name="password" type="password" placeholder="Temporary password" required />
-              <button class="btn primary" type="submit">Create Volunteer</button>
+              <input name="phoneNumber" type="tel" placeholder="Phone number" />
+              <button class="btn primary" type="submit">Add Volunteer</button>
             </form>
           </section>
 
@@ -127,10 +128,10 @@
         <section class="panel">
           <h2>Add Volunteer</h2>
           <form id="userVolunteerForm" class="stack">
-            <input name="name" placeholder="Full name" required />
+            <input name="firstName" placeholder="First name" required />
+            <input name="lastName" placeholder="Last name" required />
             <input name="email" type="email" placeholder="Email" required />
-            <input name="phoneNumber" type="tel" placeholder="Phone number" required />
-            <input name="address" placeholder="Address" />
+            <input name="phoneNumber" type="tel" placeholder="Phone number" />
             <button class="btn primary" type="submit">Add Volunteer</button>
           </form>
           <p class="hint">This adds a volunteer profile only. Admins still manage event assignments.</p>

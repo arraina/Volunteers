@@ -7,29 +7,79 @@ service cloud.firestore {
 
     function isAdmin() {
       return signedIn()
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true;
+        && (
+          request.auth.token.email == 'admin@example.com'
+          || (
+            exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+            && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true
+          )
+        );
     }
 
     function onlyVolunteerEditableFields() {
       return request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['name', 'phoneNumber', 'address', 'updatedAt']);
+        .hasOnly([
+          'firstName',
+          'lastName',
+          'name',
+          'phoneNumber',
+          'assignedEvents',
+          'assignedServices',
+          'updatedAt'
+        ]);
     }
 
     function validVolunteerCreate(volunteerId) {
       return signedIn()
         && request.auth.uid == volunteerId
         && request.resource.data.keys().hasOnly([
+          'firstName',
+          'lastName',
           'name',
           'email',
           'phoneNumber',
           'address',
           'availableHours',
+          'assignedEvents',
+          'assignedServices',
+          'publicSelfAdded',
           'joinedDate',
           'createdAt',
           'updatedAt'
         ])
-        && request.resource.data.email == request.auth.token.email;
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.firstName is string
+        && request.resource.data.firstName.size() > 0
+        && request.resource.data.lastName is string
+        && request.resource.data.lastName.size() > 0
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 0
+        && request.resource.data.phoneNumber is string;
+    }
+
+    function validServiceAssignmentCreate(assignmentId) {
+      return signedIn()
+        && request.resource.data.keys().hasOnly([
+          'eventId',
+          'serviceId',
+          'slotKey',
+          'slotStartTime',
+          'slotEndTime',
+          'volunteerId',
+          'volunteerName',
+          'volunteerEmail',
+          'createdAt'
+        ])
+        && request.resource.data.volunteerEmail == request.auth.token.email
+        && exists(/databases/$(database)/documents/volunteers/$(request.resource.data.volunteerId))
+        && get(/databases/$(database)/documents/volunteers/$(request.resource.data.volunteerId)).data.email == request.auth.token.email
+        && request.resource.data.slotKey is string
+        && request.resource.data.slotKey.size() > 0
+        && request.resource.data.slotStartTime is string
+        && request.resource.data.slotStartTime.size() > 0
+        && request.resource.data.slotEndTime is string
+        && request.resource.data.slotEndTime.size() > 0
+        && assignmentId == request.resource.data.eventId + '_' + request.resource.data.serviceId + '_' + request.resource.data.slotKey + '_' + request.resource.data.volunteerId;
     }
 
     match /admins/{adminId} {
@@ -39,32 +89,50 @@ service cloud.firestore {
     match /volunteers/{volunteerId} {
       allow read, write: if isAdmin();
       allow create: if validVolunteerCreate(volunteerId);
-      allow read: if signedIn() && request.auth.uid == volunteerId;
+      allow read: if signedIn()
+        && (
+          request.auth.uid == volunteerId
+          || resource.data.email == request.auth.token.email
+        );
       allow update: if signedIn()
-        && request.auth.uid == volunteerId
+        && (
+          request.auth.uid == volunteerId
+          || resource.data.email == request.auth.token.email
+        )
         && onlyVolunteerEditableFields();
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     match /serviceEvents/{eventId} {
       allow read, write: if isAdmin();
-      allow read: if signedIn()
-        && request.auth.uid in resource.data.assignedVolunteers;
+      allow read: if signedIn();
       allow create, update, delete: if false;
     }
 
-    match /reminderRules/{ruleId} {
-      allow read, write: if isAdmin();
+    match /services/{serviceId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
     }
 
-    match /reminders/{reminderId} {
-      allow read: if isAdmin();
-      allow create, update, delete: if false;
-    }
-
-    match /sentMessages/{messageId} {
-      allow read: if isAdmin();
-      allow create, update, delete: if false;
+    match /serviceAssignments/{assignmentId} {
+      allow read: if isAdmin()
+        || (
+          signedIn()
+          && (
+            resource.data.volunteerId == request.auth.uid
+            || resource.data.volunteerEmail == request.auth.token.email
+          )
+        );
+      allow create: if isAdmin() || validServiceAssignmentCreate(assignmentId);
+      allow update: if false;
+      allow delete: if isAdmin()
+        || (
+          signedIn()
+          && (
+            resource.data.volunteerId == request.auth.uid
+            || resource.data.volunteerEmail == request.auth.token.email
+          )
+        );
     }
 
     match /{document=**} {

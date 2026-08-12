@@ -73,9 +73,40 @@
   cursor: not-allowed;
 }
 
+.gmail-create-btn {
+  width: 100%;
+  padding: 0.65rem;
+  background: #ffffff;
+  color: #0f1f36;
+  border: 1px solid #c9d3e3;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.75rem;
+}
+
+.gmail-create-btn:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.gmail-create-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .error-message {
   background: #fee;
   color: #c00;
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.success-message {
+  background: #e7f8ee;
+  color: #047857;
   padding: 0.75rem;
   border-radius: 4px;
   margin-bottom: 1rem;

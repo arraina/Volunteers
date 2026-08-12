@@ -1,38 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { auth, db, functions, isFirebaseConfigured } from '../config/firebase';
-import { collection, addDoc, getDocs, Timestamp, updateDoc, doc, getDoc, arrayUnion } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { isUserAdmin, ReminderRule, ServiceEvent, formatDate } from '../helpers/types';
+import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import {
-  clearDemoSession,
-  getDemoEvents,
-  getDemoSession,
-  getDemoVolunteers,
-  saveDemoEvents,
-  saveDemoVolunteers,
-  setDemoSession,
-} from '../helpers/demoStore';
+  addDoc,
+  arrayRemove,
+  arrayUnion,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  query,
+  setDoc,
+  Timestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
+import { auth, db, isFirebaseConfigured } from '../config/firebase';
+import {
+  EventService,
+  ServiceAssignment,
+  ServiceEvent,
+  ServiceTimeSlot,
+  VolunteerProfile,
+  buildServiceSlots,
+  formatDate,
+  formatTime,
+  isUserAdmin,
+} from '../helpers/types';
 import './AdminDashboard.css';
-
-interface VolunteerRecord {
-  id: string;
-  name: string;
-  email: string;
-  phoneNumber: string;
-  address?: string;
-  assignedEvents?: string[];
-}
-
-interface CreateRemindersResult {
-  remindersCreated: number;
-}
-
-interface DeleteVolunteerResult {
-  authDeleted?: boolean;
-  authDeletionError?: string;
-}
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -40,59 +35,59 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 export const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<(User | { email: string }) | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [events, setEvents] = useState<ServiceEvent[]>([]);
-  const [volunteers, setVolunteers] = useState<VolunteerRecord[]>([]);
-  const [reminderRules, setReminderRules] = useState<ReminderRule[]>([]);
+  const [services, setServices] = useState<EventService[]>([]);
+  const [assignments, setAssignments] = useState<ServiceAssignment[]>([]);
+  const [volunteers, setVolunteers] = useState<VolunteerProfile[]>([]);
   const [eventSearch, setEventSearch] = useState('');
   const [volunteerSearch, setVolunteerSearch] = useState('');
-  
-  // Event form state
+
   const [newEvent, setNewEvent] = useState({
     topic: '',
     description: '',
     eventDateTime: '',
     location: '',
   });
-
-  // Reminder form state
-  const [reminderConfig, setReminderConfig] = useState({
+  const [newVolunteer, setNewVolunteer] = useState({
+    firstName: '',
+    lastName: '',
+    phoneNumber: '',
+    email: '',
+  });
+  const [newService, setNewService] = useState({
     eventId: '',
-    hoursBeforeEvent: 24,
-    message: 'Reminder: You have a volunteer event coming up!',
+    name: '',
+    description: '',
+    startTime: '',
+    endTime: '',
+    intervalMinutes: '30',
+    capacity: '',
   });
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
-      const session = getDemoSession() || setDemoSession('admin123', 'Admin', true);
-      if (!session) {
-        navigate('/login');
-      } else if (!session.isAdmin) {
-        navigate('/dashboard');
-      } else {
-        setUser({ email: session.email });
-        setIsAdmin(true);
-        loadData();
-        setLoading(false);
-      }
+      navigate('/login');
       return;
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        const admin = await isUserAdmin(currentUser);
-        if (!admin) {
-          navigate('/dashboard');
-        } else {
-          setIsAdmin(true);
-          await loadData();
-        }
-      } else {
+      if (!currentUser) {
         navigate('/login');
+        setLoading(false);
+        return;
       }
+
+      if (!(await isUserAdmin(currentUser))) {
+        navigate('/dashboard');
+        setLoading(false);
+        return;
+      }
+
+      setUser(currentUser);
+      await loadData();
       setLoading(false);
     });
 
@@ -101,324 +96,355 @@ export const AdminDashboard: React.FC = () => {
 
   const loadData = async () => {
     try {
-      if (!isFirebaseConfigured) {
-        const demoEvents = getDemoEvents();
-        const demoVolunteers = getDemoVolunteers().map((volunteer) => ({
-          ...volunteer,
-          assignedEvents: demoEvents
-            .filter((event) => (event.assignedVolunteers || []).includes(volunteer.id))
-            .map((event) => event.id),
-        }));
-        saveDemoVolunteers(demoVolunteers);
-        setEvents(demoEvents);
-        setVolunteers(demoVolunteers);
-        setReminderRules([]);
-        return;
-      }
+      setLoadError('');
 
-      // Load events
-      const eventsSnapshot = await getDocs(collection(db, 'serviceEvents'));
-      const eventsData = eventsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        eventDateTime: doc.data().eventDateTime?.toDate?.() || new Date(),
-      } as ServiceEvent));
-      setEvents(eventsData);
+      const [eventsSnapshot, servicesSnapshot, assignmentsSnapshot, volunteersSnapshot] = await Promise.all([
+        getDocs(collection(db, 'serviceEvents')),
+        getDocs(collection(db, 'services')),
+        getDocs(collection(db, 'serviceAssignments')),
+        getDocs(collection(db, 'volunteers')),
+      ]);
 
-      // Load volunteers
-      const volunteersSnapshot = await getDocs(collection(db, 'volunteers'));
-      const volunteersData = volunteersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      } as VolunteerRecord));
-      setVolunteers(
-        volunteersData.map((volunteer) => ({
-          ...volunteer,
-          assignedEvents: eventsData
-            .filter((event) => (event.assignedVolunteers || []).includes(volunteer.id))
-            .map((event) => event.id),
-        }))
-      );
+      setEvents(eventsSnapshot.docs.map((eventDoc) => ({
+        id: eventDoc.id,
+        ...eventDoc.data(),
+        eventDateTime: eventDoc.data().eventDateTime?.toDate?.() || new Date(),
+      } as ServiceEvent)));
 
-      const reminderRulesSnapshot = await getDocs(collection(db, 'reminderRules'));
-      const reminderRulesData = reminderRulesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.() || new Date(),
-      } as ReminderRule));
-      setReminderRules(reminderRulesData);
+      setServices(servicesSnapshot.docs.map((serviceDoc) => ({
+        id: serviceDoc.id,
+        ...serviceDoc.data(),
+        createdAt: serviceDoc.data().createdAt?.toDate?.() || new Date(),
+        updatedAt: serviceDoc.data().updatedAt?.toDate?.() || new Date(),
+      } as EventService)));
+
+      setAssignments(assignmentsSnapshot.docs.map((assignmentDoc) => ({
+        id: assignmentDoc.id,
+        ...assignmentDoc.data(),
+        createdAt: assignmentDoc.data().createdAt?.toDate?.() || new Date(),
+      } as ServiceAssignment)));
+
+      setVolunteers(volunteersSnapshot.docs.map((volunteerDoc) => {
+        const data = volunteerDoc.data();
+        return {
+          uid: volunteerDoc.id,
+          ...data,
+          joinedDate: data.joinedDate?.toDate?.() || new Date(),
+        } as VolunteerProfile;
+      }));
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error loading admin data:', error);
+      setLoadError(getErrorMessage(error, 'Unable to load admin data.'));
     }
   };
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
 
     try {
-      if (!isFirebaseConfigured) {
-        const createdEvent: ServiceEvent = {
-          id: `event-${Date.now()}`,
-          topic: newEvent.topic,
-          description: newEvent.description,
-          eventDateTime: new Date(newEvent.eventDateTime),
-          location: newEvent.location,
-          assignedVolunteers: [],
-          status: 'scheduled',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-        saveDemoEvents([...getDemoEvents(), createdEvent]);
-        setNewEvent({ topic: '', description: '', eventDateTime: '', location: '' });
-        await loadData();
-        alert('Event created successfully!');
-        return;
+      const topic = newEvent.topic.trim();
+      if (!topic || !newEvent.eventDateTime) {
+        throw new Error('Event name and date are required.');
       }
 
       await addDoc(collection(db, 'serviceEvents'), {
-        topic: newEvent.topic,
-        description: newEvent.description,
+        topic,
+        description: newEvent.description.trim(),
         eventDateTime: Timestamp.fromDate(new Date(newEvent.eventDateTime)),
-        location: newEvent.location,
+        location: newEvent.location.trim(),
         assignedVolunteers: [],
         status: 'scheduled',
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
 
-      setNewEvent({
-        topic: '',
-        description: '',
-        eventDateTime: '',
-        location: '',
-      });
-
+      setNewEvent({ topic: '', description: '', eventDateTime: '', location: '' });
       await loadData();
-      alert('Event created successfully!');
+      alert(`Event "${topic}" has been saved.`);
     } catch (error) {
-      console.error('Error creating event:', error);
-      alert('Failed to create event');
+      alert(getErrorMessage(error, 'Failed to create event.'));
     }
   };
 
-  const handleAssignVolunteer = async (eventId: string, volunteerId: string) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+
     try {
-      if (!isFirebaseConfigured) {
-        const events = getDemoEvents();
-        const updatedEvents = events.map((event) =>
-          event.id === eventId && !(event.assignedVolunteers || []).includes(volunteerId)
-            ? { ...event, assignedVolunteers: [...(event.assignedVolunteers || []), volunteerId], updatedAt: new Date() }
-            : event
-        );
-        const updatedVolunteers = getDemoVolunteers().map((volunteer) =>
-          volunteer.id === volunteerId && !(volunteer.assignedEvents || []).includes(eventId)
-            ? { ...volunteer, assignedEvents: [...(volunteer.assignedEvents || []), eventId] }
-            : volunteer
-        );
-        saveDemoEvents(updatedEvents);
-        saveDemoVolunteers(updatedVolunteers);
-        await loadData();
-        alert('Volunteer assigned!');
-        return;
+      const firstName = newVolunteer.firstName.trim();
+      const lastName = newVolunteer.lastName.trim();
+      const phoneNumber = newVolunteer.phoneNumber.trim();
+      const email = newVolunteer.email.trim().toLowerCase();
+
+      if (!firstName || !lastName || !phoneNumber || !email) {
+        throw new Error('First name, last name, phone, and email are required.');
       }
 
-      const eventRef = doc(db, 'serviceEvents', eventId);
-      const eventDoc = await getDoc(eventRef);
-      const assignedVolunteers = eventDoc.data()?.assignedVolunteers || [];
-
-      if (!assignedVolunteers.includes(volunteerId)) {
-        await updateDoc(eventRef, {
-          assignedVolunteers: arrayUnion(volunteerId),
-        });
-        await updateDoc(doc(db, 'volunteers', volunteerId), {
-          assignedEvents: arrayUnion(eventId),
-        });
-        alert('Volunteer assigned!');
-        await loadData();
-      } else {
-        alert('Volunteer already assigned to this event');
-      }
-    } catch (error) {
-      console.error('Error assigning volunteer:', error);
-      alert('Failed to assign volunteer');
-    }
-  };
-
-  const handleUpdateEventStatus = async (eventId: string, status: ServiceEvent['status']) => {
-    try {
-      if (!isFirebaseConfigured) {
-        saveDemoEvents(
-          getDemoEvents().map((event) =>
-            event.id === eventId ? { ...event, status, updatedAt: new Date() } : event
-          )
-        );
-        await loadData();
-        return;
-      }
-
-      await updateDoc(doc(db, 'serviceEvents', eventId), {
-        status,
+      await addDoc(collection(db, 'volunteers'), {
+        firstName,
+        lastName,
+        name: `${firstName} ${lastName}`,
+        phoneNumber,
+        email,
+        address: '',
+        assignedEvents: [],
+        assignedServices: [],
+        joinedDate: Timestamp.now(),
+        createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
+
+      setNewVolunteer({ firstName: '', lastName: '', phoneNumber: '', email: '' });
       await loadData();
     } catch (error) {
-      console.error('Error updating event status:', error);
-      alert('Failed to update event status');
+      alert(getErrorMessage(error, 'Failed to add user.'));
+    }
+  };
+
+  const handleCreateService = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      const eventId = newService.eventId;
+      const name = newService.name.trim();
+      if (!eventId || !name || !newService.startTime || !newService.endTime) {
+        throw new Error('Choose an event, enter a service name, and set start/end times.');
+      }
+
+      if (newService.endTime <= newService.startTime) {
+        throw new Error('End time must be after start time.');
+      }
+
+      const capacity = Number(newService.capacity);
+      const intervalMinutes = Number(newService.intervalMinutes);
+      if (!Number.isFinite(intervalMinutes) || intervalMinutes <= 0) {
+        throw new Error('Choose a valid service interval.');
+      }
+
+      await addDoc(collection(db, 'services'), {
+        eventId,
+        name,
+        description: newService.description.trim(),
+        startTime: newService.startTime,
+        endTime: newService.endTime,
+        intervalMinutes,
+        capacity: Number.isFinite(capacity) && capacity > 0 ? capacity : null,
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+
+      setNewService({ eventId: '', name: '', description: '', startTime: '', endTime: '', intervalMinutes: '30', capacity: '' });
+      await loadData();
+      alert(`Service "${name}" has been saved.`);
+    } catch (error) {
+      alert(getErrorMessage(error, 'Failed to create service.'));
     }
   };
 
   const handleDeleteEvent = async (eventId: string, topic: string) => {
-    const confirmed = window.confirm(
-      `Delete "${topic}"? This also removes reminder records for this event.`
-    );
-    if (!confirmed) return;
+    if (!window.confirm(`Remove event "${topic}" and its services?`)) return;
 
     try {
-      if (!isFirebaseConfigured) {
-        saveDemoEvents(getDemoEvents().filter((event) => event.id !== eventId));
-        await loadData();
-        alert('Event deleted.');
-        return;
-      }
+      const [eventServicesSnapshot, eventAssignmentsSnapshot, affectedVolunteersSnapshot] = await Promise.all([
+        getDocs(query(collection(db, 'services'), where('eventId', '==', eventId))),
+        getDocs(query(collection(db, 'serviceAssignments'), where('eventId', '==', eventId))),
+        getDocs(query(collection(db, 'volunteers'), where('assignedEvents', 'array-contains', eventId))),
+      ]);
+      const serviceIds = eventServicesSnapshot.docs.map((serviceDoc) => serviceDoc.id);
 
-      const deleteEventFunction = httpsCallable(functions, 'deleteServiceEvent');
-      await deleteEventFunction({ eventId });
+      await Promise.all([
+        deleteDoc(doc(db, 'serviceEvents', eventId)),
+        ...eventServicesSnapshot.docs.map((serviceDoc) => deleteDoc(serviceDoc.ref)),
+        ...eventAssignmentsSnapshot.docs.map((assignmentDoc) => deleteDoc(assignmentDoc.ref)),
+        ...affectedVolunteersSnapshot.docs.map((volunteerDoc) =>
+          updateDoc(volunteerDoc.ref, {
+            assignedEvents: arrayRemove(eventId),
+            ...(serviceIds.length > 0 ? { assignedServices: arrayRemove(...serviceIds) } : {}),
+            updatedAt: Timestamp.now(),
+          })
+        ),
+      ]);
+
       await loadData();
-      alert('Event deleted.');
     } catch (error) {
-      console.error('Error deleting event:', error);
-      alert(`Failed to delete event: ${getErrorMessage(error, 'Unknown error')}`);
+      alert(getErrorMessage(error, 'Failed to remove event.'));
     }
   };
 
-  const handleDeleteVolunteer = async (volunteerId: string, name: string) => {
-    const confirmed = window.confirm(
-      `Remove ${name}? This deletes their volunteer profile, removes them from events, and deletes their Auth account.`
-    );
-    if (!confirmed) return;
+  const handleDeleteUser = async (volunteerId: string, name: string) => {
+    if (!window.confirm(`Remove user "${name}"?`)) return;
 
     try {
-      if (!isFirebaseConfigured) {
-        saveDemoVolunteers(getDemoVolunteers().filter((volunteer) => volunteer.id !== volunteerId));
-        saveDemoEvents(
-          getDemoEvents().map((event) => ({
-            ...event,
-            assignedVolunteers: event.assignedVolunteers.filter((id) => id !== volunteerId),
-          }))
-        );
-        await loadData();
-        alert('Volunteer removed.');
-        return;
-      }
+      const [userAssignmentsSnapshot, affectedEventsSnapshot] = await Promise.all([
+        getDocs(query(collection(db, 'serviceAssignments'), where('volunteerId', '==', volunteerId))),
+        getDocs(query(collection(db, 'serviceEvents'), where('assignedVolunteers', 'array-contains', volunteerId))),
+      ]);
 
-      const deleteVolunteerFunction = httpsCallable(functions, 'deleteVolunteer');
-      const result = await deleteVolunteerFunction({ volunteerId });
+      await Promise.all([
+        deleteDoc(doc(db, 'volunteers', volunteerId)),
+        ...userAssignmentsSnapshot.docs.map((assignmentDoc) => deleteDoc(assignmentDoc.ref)),
+        ...affectedEventsSnapshot.docs.map((eventDoc) =>
+          updateDoc(eventDoc.ref, {
+            assignedVolunteers: arrayRemove(volunteerId),
+            updatedAt: Timestamp.now(),
+          })
+        ),
+      ]);
+
       await loadData();
-
-      const data = result.data as DeleteVolunteerResult;
-      if (data.authDeleted === false) {
-        alert(`Volunteer removed, but Auth deletion failed: ${data.authDeletionError}`);
-      } else {
-        alert('Volunteer removed.');
-      }
     } catch (error) {
-      console.error('Error deleting volunteer:', error);
-      alert(`Failed to remove volunteer: ${getErrorMessage(error, 'Unknown error')}`);
+      alert(getErrorMessage(error, 'Failed to remove user.'));
     }
   };
 
-  const handleCreateReminders = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
+  const handleDeleteService = async (serviceId: string, serviceName: string, eventId: string) => {
+    if (!window.confirm(`Remove service "${serviceName}" and its assignments?`)) return;
 
     try {
-      if (!isFirebaseConfigured) {
-        setReminderRules((rules) => [
-          ...rules.filter((rule) => rule.eventId !== reminderConfig.eventId),
-          {
-            id: `rule-${reminderConfig.eventId}`,
-            eventId: reminderConfig.eventId,
-            hoursBeforeEvent: reminderConfig.hoursBeforeEvent,
-            message: reminderConfig.message,
-            createdAt: new Date(),
-          },
-        ]);
-        alert('Demo reminders created. SMS sending requires a real Firebase and Twilio setup.');
-        setReminderConfig({
-          eventId: '',
-          hoursBeforeEvent: 24,
-          message: 'Reminder: You have a volunteer event coming up!',
-        });
-        return;
-      }
+      const [serviceAssignmentsSnapshot, eventAssignmentsSnapshot, affectedVolunteersSnapshot] = await Promise.all([
+        getDocs(query(collection(db, 'serviceAssignments'), where('serviceId', '==', serviceId))),
+        getDocs(query(collection(db, 'serviceAssignments'), where('eventId', '==', eventId))),
+        getDocs(query(collection(db, 'volunteers'), where('assignedServices', 'array-contains', serviceId))),
+      ]);
+      const assignmentVolunteerIds = new Set(
+        serviceAssignmentsSnapshot.docs.map((assignmentDoc) => assignmentDoc.data().volunteerId).filter(Boolean)
+      );
+      const volunteersToRemoveFromEvent = new Set(
+        Array.from(assignmentVolunteerIds).filter((volunteerId) =>
+          !eventAssignmentsSnapshot.docs.some((assignmentDoc) => {
+            const assignment = assignmentDoc.data();
+            return assignment.serviceId !== serviceId && assignment.volunteerId === volunteerId;
+          })
+        )
+      );
 
-      const createRemindersFunction = httpsCallable(functions, 'createRemindersForEvent');
-      const result = await createRemindersFunction({
-        eventId: reminderConfig.eventId,
-        hoursBeforeEvent: reminderConfig.hoursBeforeEvent,
-        message: reminderConfig.message,
-      });
+      await Promise.all([
+        deleteDoc(doc(db, 'services', serviceId)),
+        ...serviceAssignmentsSnapshot.docs.map((assignmentDoc) => deleteDoc(assignmentDoc.ref)),
+        ...affectedVolunteersSnapshot.docs.map((volunteerDoc) =>
+          updateDoc(volunteerDoc.ref, {
+            assignedServices: arrayRemove(serviceId),
+            updatedAt: Timestamp.now(),
+          })
+        ),
+        ...(volunteersToRemoveFromEvent.size > 0
+          ? [
+              updateDoc(doc(db, 'serviceEvents', eventId), {
+                assignedVolunteers: arrayRemove(...Array.from(volunteersToRemoveFromEvent)),
+                updatedAt: Timestamp.now(),
+              }),
+            ]
+          : []),
+      ]);
 
-      console.log('Reminders created:', result);
-      const data = result.data as CreateRemindersResult;
-      alert(`Reminders created! (${data.remindersCreated} reminders)`);
       await loadData();
-      
-      setReminderConfig({
-        eventId: '',
-        hoursBeforeEvent: 24,
-        message: 'Reminder: You have a volunteer event coming up!',
-      });
     } catch (error) {
-      console.error('Error creating reminders:', error);
-      alert(`Failed to create reminders: ${getErrorMessage(error, 'Unknown error')}`);
+      alert(getErrorMessage(error, 'Failed to remove service.'));
+    }
+  };
+
+  const handleAssignVolunteerToService = async (
+    eventId: string,
+    serviceId: string,
+    slot: ServiceTimeSlot,
+    volunteerId: string
+  ) => {
+    const volunteer = volunteers.find((item) => item.uid === volunteerId);
+    if (!volunteer) return;
+
+    try {
+      const assignmentId = `${eventId}_${serviceId}_${slot.key}_${volunteerId}`;
+      await setDoc(doc(db, 'serviceAssignments', assignmentId), {
+        eventId,
+        serviceId,
+        slotKey: slot.key,
+        slotStartTime: slot.startTime,
+        slotEndTime: slot.endTime,
+        volunteerId,
+        volunteerName: volunteer.name,
+        volunteerEmail: volunteer.email,
+        createdAt: Timestamp.now(),
+      });
+      await updateDoc(doc(db, 'volunteers', volunteerId), {
+        assignedEvents: arrayUnion(eventId),
+        assignedServices: arrayUnion(serviceId),
+        updatedAt: Timestamp.now(),
+      });
+      await updateDoc(doc(db, 'serviceEvents', eventId), {
+        assignedVolunteers: arrayUnion(volunteerId),
+        updatedAt: Timestamp.now(),
+      });
+      await loadData();
+    } catch (error) {
+      alert(getErrorMessage(error, 'Failed to assign volunteer.'));
+    }
+  };
+
+  const handleRemoveVolunteerFromService = async (assignment: ServiceAssignment) => {
+    if (!window.confirm(`Remove ${assignment.volunteerName} from this service time?`)) return;
+
+    try {
+      const volunteerAssignmentsSnapshot = await getDocs(
+        query(collection(db, 'serviceAssignments'), where('volunteerId', '==', assignment.volunteerId))
+      );
+      const hasOtherServiceAssignment = volunteerAssignmentsSnapshot.docs.some((assignmentDoc) => {
+        const item = assignmentDoc.data();
+        return assignmentDoc.id !== assignment.id && item.serviceId === assignment.serviceId;
+      });
+      const hasOtherEventAssignment = volunteerAssignmentsSnapshot.docs.some((assignmentDoc) => {
+        const item = assignmentDoc.data();
+        return assignmentDoc.id !== assignment.id && item.eventId === assignment.eventId;
+      });
+
+      await Promise.all([
+        deleteDoc(doc(db, 'serviceAssignments', assignment.id)),
+        updateDoc(doc(db, 'volunteers', assignment.volunteerId), {
+          ...(hasOtherServiceAssignment ? {} : { assignedServices: arrayRemove(assignment.serviceId) }),
+          ...(hasOtherEventAssignment ? {} : { assignedEvents: arrayRemove(assignment.eventId) }),
+          updatedAt: Timestamp.now(),
+        }),
+        ...(hasOtherEventAssignment
+          ? []
+          : [
+              updateDoc(doc(db, 'serviceEvents', assignment.eventId), {
+                assignedVolunteers: arrayRemove(assignment.volunteerId),
+                updatedAt: Timestamp.now(),
+              }),
+            ]),
+      ]);
+
+      await loadData();
+    } catch (error) {
+      alert(getErrorMessage(error, 'Failed to remove volunteer from service.'));
     }
   };
 
   const handleLogout = async () => {
-    try {
-      if (!isFirebaseConfigured) {
-        clearDemoSession();
-        navigate('/login');
-        return;
-      }
-
-      await signOut(auth);
-      navigate('/login');
-    } catch (error) {
-      console.error('Error logging out:', error);
-    }
+    await signOut(auth);
+    navigate('/login');
   };
+
+  const filteredEvents = [...events]
+    .sort((a, b) => new Date(a.eventDateTime).getTime() - new Date(b.eventDateTime).getTime())
+    .filter((event) => {
+      const query = eventSearch.trim().toLowerCase();
+      return !query || event.topic.toLowerCase().includes(query);
+    });
+
+  const filteredVolunteers = volunteers.filter((volunteer) => {
+    const query = volunteerSearch.trim().toLowerCase();
+    return !query || volunteer.name.toLowerCase().includes(query) || volunteer.email.toLowerCase().includes(query);
+  });
 
   if (loading) {
     return <div className="loading">Loading...</div>;
   }
 
-  if (!isAdmin) {
-    return <div className="error">Unauthorized access</div>;
-  }
-
-  const sortedEvents = [...events].sort(
-    (a, b) => new Date(a.eventDateTime).getTime() - new Date(b.eventDateTime).getTime()
-  );
-  const filteredEvents = sortedEvents.filter((event) => {
-    const query = eventSearch.trim().toLowerCase();
-    if (!query) return true;
-    return event.topic.toLowerCase().includes(query);
-  });
-  const filteredVolunteers = volunteers.filter((volunteer) => {
-    const query = volunteerSearch.trim().toLowerCase();
-    if (!query) return true;
-    return volunteer.name.toLowerCase().includes(query);
-  });
-
   return (
     <div className="admin-dashboard">
       <header className="dashboard-header">
         <div>
-          <h1>Temple Volunteers</h1>
-          <p>Service events, assignments, profiles, and SMS reminders</p>
+          <h1>ISKCON TOWACO VOLUNTEER MANAGEMENT</h1>
+          <p>Admin</p>
         </div>
         <div className="header-actions">
           <span className="user-info">{user?.email}</span>
@@ -427,75 +453,141 @@ export const AdminDashboard: React.FC = () => {
       </header>
 
       <div className="dashboard-content">
+        {loadError && <div className="error-message">{loadError}</div>}
+
         <section className="admin-columns">
           <div className="form-section">
             <h2>Create Event</h2>
             <form onSubmit={handleCreateEvent}>
               <input
                 type="text"
-                placeholder="Event topic"
+                placeholder="Event name"
                 value={newEvent.topic}
-                onChange={(e) => setNewEvent({...newEvent, topic: e.target.value})}
+                onChange={(e) => setNewEvent({ ...newEvent, topic: e.target.value })}
                 required
               />
               <input
                 type="text"
                 placeholder="Description"
                 value={newEvent.description}
-                onChange={(e) => setNewEvent({...newEvent, description: e.target.value})}
+                onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
               />
               <input
                 type="datetime-local"
                 value={newEvent.eventDateTime}
-                onChange={(e) => setNewEvent({...newEvent, eventDateTime: e.target.value})}
+                onChange={(e) => setNewEvent({ ...newEvent, eventDateTime: e.target.value })}
                 required
               />
               <input
                 type="text"
                 placeholder="Location"
                 value={newEvent.location}
-                onChange={(e) => setNewEvent({...newEvent, location: e.target.value})}
+                onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
               />
               <button type="submit">Create Event</button>
             </form>
           </div>
 
           <div className="form-section">
-            <h2>Reminder Rule</h2>
-            <form onSubmit={handleCreateReminders}>
+            <h2>Create Service</h2>
+            <form onSubmit={handleCreateService}>
               <select
-                value={reminderConfig.eventId}
-                onChange={(e) => setReminderConfig({...reminderConfig, eventId: e.target.value})}
+                value={newService.eventId}
+                onChange={(e) => setNewService({ ...newService, eventId: e.target.value })}
                 required
               >
-                <option value="">Select event</option>
+                <option value="">Choose event</option>
                 {events.map((event) => (
-                  <option key={event.id} value={event.id}>
-                    {event.topic}
-                  </option>
+                  <option key={event.id} value={event.id}>{event.topic}</option>
                 ))}
               </select>
+              <input
+                type="text"
+                placeholder="Service name"
+                value={newService.name}
+                onChange={(e) => setNewService({ ...newService, name: e.target.value })}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Description"
+                value={newService.description}
+                onChange={(e) => setNewService({ ...newService, description: e.target.value })}
+              />
               <label>
-                Hours before event
+                Start time
                 <input
-                  type="number"
-                  value={reminderConfig.hoursBeforeEvent}
-                  onChange={(e) => setReminderConfig({...reminderConfig, hoursBeforeEvent: parseInt(e.target.value, 10)})}
-                  min="1"
-                  max="168"
+                  type="time"
+                  value={newService.startTime}
+                  onChange={(e) => setNewService({ ...newService, startTime: e.target.value })}
                   required
                 />
               </label>
               <label>
-                Message
-                <textarea
-                  value={reminderConfig.message}
-                  onChange={(e) => setReminderConfig({...reminderConfig, message: e.target.value})}
-                  rows={4}
+                End time
+                <input
+                  type="time"
+                  value={newService.endTime}
+                  onChange={(e) => setNewService({ ...newService, endTime: e.target.value })}
                   required
                 />
               </label>
-              <button type="submit">Create Reminders</button>
+              <label>
+                Interval
+                <select
+                  value={newService.intervalMinutes}
+                  onChange={(e) => setNewService({ ...newService, intervalMinutes: e.target.value })}
+                  required
+                >
+                  <option value="15">15 minutes</option>
+                  <option value="30">30 minutes</option>
+                  <option value="45">45 minutes</option>
+                  <option value="60">60 minutes</option>
+                </select>
+              </label>
+              <input
+                type="number"
+                min="1"
+                placeholder="Capacity"
+                value={newService.capacity}
+                onChange={(e) => setNewService({ ...newService, capacity: e.target.value })}
+              />
+              <button type="submit">Create Service</button>
+            </form>
+          </div>
+
+          <div className="form-section">
+            <h2>Add User</h2>
+            <form onSubmit={handleCreateUser}>
+              <input
+                type="text"
+                placeholder="First name"
+                value={newVolunteer.firstName}
+                onChange={(e) => setNewVolunteer({ ...newVolunteer, firstName: e.target.value })}
+                required
+              />
+              <input
+                type="text"
+                placeholder="Last name"
+                value={newVolunteer.lastName}
+                onChange={(e) => setNewVolunteer({ ...newVolunteer, lastName: e.target.value })}
+                required
+              />
+              <input
+                type="tel"
+                placeholder="Phone number"
+                value={newVolunteer.phoneNumber}
+                onChange={(e) => setNewVolunteer({ ...newVolunteer, phoneNumber: e.target.value })}
+                required
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={newVolunteer.email}
+                onChange={(e) => setNewVolunteer({ ...newVolunteer, email: e.target.value })}
+                required
+              />
+              <button type="submit">Add User</button>
             </form>
           </div>
         </section>
@@ -509,13 +601,10 @@ export const AdminDashboard: React.FC = () => {
               value={eventSearch}
               onChange={(e) => setEventSearch(e.target.value)}
             />
-            <span>Sorted by closest date</span>
           </div>
           <div className="events-list">
             {filteredEvents.map((event) => {
-              const assignedNames = (event.assignedVolunteers || [])
-                .map((id) => volunteers.find((volunteer) => volunteer.id === id)?.name)
-                .filter(Boolean);
+              const eventServices = services.filter((service) => service.eventId === event.id);
 
               return (
                 <div key={event.id} className="event-card">
@@ -526,48 +615,98 @@ export const AdminDashboard: React.FC = () => {
                       className="danger-btn"
                       onClick={() => handleDeleteEvent(event.id, event.topic)}
                     >
-                      Delete
+                      Remove Event
                     </button>
                   </div>
-                  <p>{event.description || 'No description yet.'}</p>
+                  <p>{event.description || 'No description.'}</p>
                   <p><strong>Date:</strong> {formatDate(event.eventDateTime)}</p>
                   <p><strong>Location:</strong> {event.location || 'N/A'}</p>
-                  <p><strong>Assigned volunteers:</strong> {assignedNames.length ? assignedNames.join(', ') : 'None yet'}</p>
-                  <label>
-                    Assign existing volunteer
-                    <select
-                      defaultValue=""
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          handleAssignVolunteer(event.id, e.target.value);
-                          e.target.value = '';
-                        }
-                      }}
-                    >
-                      <option value="">Choose volunteer...</option>
-                      {volunteers
-                        .filter((volunteer) => !(event.assignedVolunteers || []).includes(volunteer.id))
-                        .map((volunteer) => (
-                          <option key={volunteer.id} value={volunteer.id}>
-                            {volunteer.name}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                  <label>
-                    Status
-                    <select
-                      value={event.status}
-                      onChange={(e) =>
-                        handleUpdateEventStatus(event.id, e.target.value as ServiceEvent['status'])
-                      }
-                    >
-                      <option value="scheduled">scheduled</option>
-                      <option value="ongoing">ongoing</option>
-                      <option value="completed">completed</option>
-                      <option value="cancelled">cancelled</option>
-                    </select>
-                  </label>
+                  <div className="service-list">
+                    <strong>Services</strong>
+                    {eventServices.length === 0 ? (
+                      <p>No services yet.</p>
+                    ) : (
+                      eventServices.map((service) => {
+                        const slots = buildServiceSlots(service);
+
+                        return (
+                          <div key={service.id} className="service-row">
+                            <div className="service-title-row">
+                              <div>
+                                <span className="service-name">{service.name}</span>
+                                <small className="service-time">
+                                  {formatTime(service.startTime)} - {formatTime(service.endTime)}
+                                </small>
+                              </div>
+                              <button
+                                type="button"
+                                className="danger-btn service-remove-btn"
+                                onClick={() => handleDeleteService(service.id, service.name, event.id)}
+                              >
+                                Remove Service
+                              </button>
+                            </div>
+                            <div className="slot-list">
+                              {slots.map((slot) => {
+                                const slotAssignments = assignments.filter(
+                                  (assignment) =>
+                                    assignment.serviceId === service.id &&
+                                    (assignment.slotKey || '') === slot.key
+                                );
+                                const assignedVolunteerIds = new Set(
+                                  slotAssignments.map((assignment) => assignment.volunteerId)
+                                );
+
+                                return (
+                                  <div key={slot.key} className="slot-row">
+                                    <div>
+                                      <span className="slot-label">{slot.label}</span>
+                                      <small>{slotAssignments.length}{service.capacity ? `/${service.capacity}` : ''} assigned</small>
+                                      {slotAssignments.length > 0 && (
+                                        <div className="assigned-volunteers">
+                                          {slotAssignments.map((assignment) => (
+                                            <div key={assignment.id} className="assigned-volunteer-row">
+                                              <span>{assignment.volunteerName}</span>
+                                              <button
+                                                type="button"
+                                                className="danger-btn remove-assignment-btn"
+                                                onClick={() => handleRemoveVolunteerFromService(assignment)}
+                                              >
+                                                Remove
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <select
+                                      defaultValue=""
+                                      onChange={(e) => {
+                                        if (e.target.value) {
+                                          handleAssignVolunteerToService(event.id, service.id, slot, e.target.value);
+                                          e.target.value = '';
+                                        }
+                                      }}
+                                      disabled={Boolean(service.capacity && slotAssignments.length >= service.capacity)}
+                                    >
+                                      <option value="">Assign user</option>
+                                      {volunteers
+                                        .filter((volunteer) => !assignedVolunteerIds.has(volunteer.uid))
+                                        .map((volunteer) => (
+                                          <option key={volunteer.uid} value={volunteer.uid}>
+                                            {volunteer.name}
+                                          </option>
+                                        ))}
+                                    </select>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -575,81 +714,46 @@ export const AdminDashboard: React.FC = () => {
         </section>
 
         <section className="records-section">
-          <h2>Volunteers</h2>
+          <h2>Users</h2>
           <div className="list-toolbar">
             <input
               type="search"
-              placeholder="Search volunteers..."
+              placeholder="Search users..."
               value={volunteerSearch}
               onChange={(e) => setVolunteerSearch(e.target.value)}
             />
           </div>
           <div className="volunteers-list">
             {filteredVolunteers.map((volunteer) => {
-              const assignedEventIds = volunteer.assignedEvents || [];
-              const assignedEventNames = assignedEventIds
-                .map((id) => events.find((event) => event.id === id)?.topic)
+              const assignedNames = assignments
+                .filter((assignment) => assignment.volunteerId === volunteer.uid)
+                .map((assignment) => {
+                  const service = services.find((item) => item.id === assignment.serviceId);
+                  const slotLabel = assignment.slotStartTime && assignment.slotEndTime
+                    ? ` (${formatTime(assignment.slotStartTime)} - ${formatTime(assignment.slotEndTime)})`
+                    : '';
+                  return service ? `${service.name}${slotLabel}` : '';
+                })
                 .filter(Boolean);
-              const availableEvents = events.filter(
-                (event) =>
-                  !assignedEventIds.includes(event.id) &&
-                  !(event.assignedVolunteers || []).includes(volunteer.id)
-              );
 
               return (
-                <div key={volunteer.id} className="volunteer-card">
+                <div key={volunteer.uid} className="volunteer-card">
                   <div className="card-title-row">
                     <h3>{volunteer.name}</h3>
                     <button
                       type="button"
                       className="danger-btn"
-                      onClick={() => handleDeleteVolunteer(volunteer.id, volunteer.name)}
+                      onClick={() => handleDeleteUser(volunteer.uid, volunteer.name)}
                     >
                       Remove
                     </button>
                   </div>
                   <p><strong>Email:</strong> {volunteer.email}</p>
-                  <p><strong>Phone:</strong> {volunteer.phoneNumber}</p>
-                  <p><strong>Assigned events:</strong> {assignedEventNames.length ? assignedEventNames.join(', ') : 'None yet'}</p>
-                  <label>
-                    Assign event to volunteer
-                    <select
-                      defaultValue=""
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          handleAssignVolunteer(e.target.value, volunteer.id);
-                          e.target.value = '';
-                        }
-                      }}
-                    >
-                      <option value="">Choose event...</option>
-                      {availableEvents.map((event) => (
-                        <option key={event.id} value={event.id}>
-                          {event.topic}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <p><strong>Phone:</strong> {volunteer.phoneNumber || 'N/A'}</p>
+                  <p><strong>Services:</strong> {assignedNames.length ? assignedNames.join(', ') : 'None'}</p>
                 </div>
               );
             })}
-          </div>
-        </section>
-
-        <section className="records-section">
-          <h2>Reminder Rules</h2>
-          <div className="reminder-rules-list">
-            {reminderRules.length === 0 ? (
-              <p className="empty">No reminder rules yet.</p>
-            ) : (
-              reminderRules.map((rule) => (
-                <div key={rule.id} className="reminder-card">
-                  <h3>{events.find((event) => event.id === rule.eventId)?.topic || 'Deleted event'}</h3>
-                  <p><strong>Hours before event:</strong> {rule.hoursBeforeEvent}</p>
-                  <p>{rule.message}</p>
-                </div>
-              ))
-            )}
           </div>
         </section>
       </div>

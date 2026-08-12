@@ -5,6 +5,7 @@ class App {
     window.storageManager = this.storage;
     this.ui = new UIManager(this);
     this.session = null;
+    this.publicAddOpen = false;
   }
 
   init() {
@@ -20,6 +21,11 @@ class App {
 
   async route() {
     this.ui.renderHeader(this.session);
+    if (this.publicAddOpen && !this.session) {
+      this.ui.showPage("publicVolunteerPage");
+      return;
+    }
+
     if (!this.session) {
       this.ui.showPage("authPage");
       return;
@@ -46,22 +52,6 @@ class App {
       }
     });
 
-    document.getElementById("signupForm").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      try {
-        const form = new FormData(event.target);
-        this.session = await this.auth.signup({
-          name: form.get("name"),
-          email: form.get("email"),
-          password: form.get("password"),
-          phoneNumber: form.get("phoneNumber"),
-        });
-        this.route();
-      } catch (error) {
-        this.ui.message(error.message || "Unable to sign up", "error");
-      }
-    });
-
     document.querySelectorAll("[data-auth-tab]").forEach((button) => {
       button.addEventListener("click", () => {
         document.querySelectorAll("[data-auth-tab]").forEach((tab) => tab.classList.remove("active"));
@@ -70,6 +60,30 @@ class App {
         document.getElementById(button.dataset.authTab).classList.add("active");
       });
     });
+
+    document.querySelectorAll("[data-open-public-add]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.publicAddOpen = true;
+        this.route();
+      });
+    });
+
+    document.querySelectorAll("[data-open-login]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.publicAddOpen = false;
+        this.route();
+      });
+    });
+  }
+
+  volunteerFromForm(form) {
+    return {
+      firstName: form.get("firstName"),
+      lastName: form.get("lastName"),
+      email: form.get("email"),
+      phoneNumber: form.get("phoneNumber"),
+      address: form.get("address"),
+    };
   }
 
   bindAdminForms() {
@@ -83,7 +97,7 @@ class App {
         location: form.get("location"),
         assignedVolunteers: [],
         status: "scheduled",
-      });
+      }, this.session);
       event.target.reset();
       await this.loadAdmin();
       this.ui.message("Event created.", "success");
@@ -92,13 +106,7 @@ class App {
     document.getElementById("volunteerForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = new FormData(event.target);
-      await this.storage.createVolunteer({
-        name: form.get("name"),
-        email: form.get("email"),
-        phoneNumber: form.get("phoneNumber"),
-        address: form.get("address"),
-        password: form.get("password"),
-      });
+      await this.storage.createVolunteer(this.volunteerFromForm(form), this.session);
       event.target.reset();
       await this.loadAdmin();
       this.ui.message("Volunteer created.", "success");
@@ -108,28 +116,28 @@ class App {
       const deleteEventId = event.target.dataset.deleteEvent;
       const deleteVolunteerId = event.target.dataset.deleteVolunteer;
       if (deleteEventId && confirm("Delete this event?")) {
-        await this.storage.deleteEvent(deleteEventId);
+        await this.storage.deleteEvent(deleteEventId, this.session);
         await this.loadAdmin();
       }
       if (deleteVolunteerId && confirm("Remove this volunteer?")) {
-        await this.storage.deleteVolunteer(deleteVolunteerId);
+        await this.storage.deleteVolunteer(deleteVolunteerId, this.session);
         await this.loadAdmin();
       }
     });
 
     document.getElementById("adminPage").addEventListener("change", async (event) => {
       if (event.target.dataset.statusEvent) {
-        await this.storage.updateEventStatus(event.target.dataset.statusEvent, event.target.value);
+        await this.storage.updateEventStatus(event.target.dataset.statusEvent, event.target.value, this.session);
         await this.loadAdmin();
       }
       if (event.target.dataset.assignEvent && event.target.value) {
-        await this.storage.assignVolunteer(event.target.dataset.assignEvent, event.target.value);
+        await this.storage.assignVolunteer(event.target.dataset.assignEvent, event.target.value, this.session);
         event.target.value = "";
         await this.loadAdmin();
         this.ui.message("Volunteer assigned to event.", "success");
       }
       if (event.target.dataset.assignVolunteer && event.target.value) {
-        await this.storage.assignVolunteer(event.target.value, event.target.dataset.assignVolunteer);
+        await this.storage.assignVolunteer(event.target.value, event.target.dataset.assignVolunteer, this.session);
         event.target.value = "";
         await this.loadAdmin();
         this.ui.message("Volunteer assigned to event.", "success");
@@ -145,7 +153,7 @@ class App {
           hoursBeforeEvent: Number(form.get("hoursBeforeEvent")),
           sendTime: form.get("sendTime"),
           message: form.get("message"),
-        });
+        }, this.session);
         await this.loadAdmin();
         this.ui.message("Demo reminder rule created. SMS requires Firebase and Twilio.", "info");
         event.target.reset();
@@ -157,7 +165,7 @@ class App {
         hoursBeforeEvent: Number(form.get("hoursBeforeEvent")),
         sendTime: form.get("sendTime"),
         message: form.get("message"),
-      });
+      }, this.session);
       event.target.reset();
       await this.loadAdmin();
       this.ui.message("Reminders created.", "success");
@@ -180,15 +188,24 @@ class App {
     document.getElementById("userVolunteerForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = new FormData(event.target);
-      await this.storage.createVolunteerProfile({
-        name: form.get("name"),
-        email: form.get("email"),
-        phoneNumber: form.get("phoneNumber"),
-        address: form.get("address"),
-      });
+      await this.storage.createVolunteerProfile(this.volunteerFromForm(form), this.session);
       event.target.reset();
       await this.loadVolunteer();
       this.ui.message("Volunteer added.", "success");
+    });
+
+    document.getElementById("publicVolunteerForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const form = new FormData(event.target);
+        await this.storage.createVolunteerProfile(this.volunteerFromForm(form), this.session);
+        event.target.reset();
+        this.publicAddOpen = false;
+        this.ui.message("Volunteer added. An admin can assign events next.", "success");
+        this.route();
+      } catch (error) {
+        this.ui.message(error.message || "Unable to add volunteer", "error");
+      }
     });
   }
 
@@ -217,8 +234,8 @@ class App {
   async loadAdmin() {
     const [events, volunteers, reminderRules] = await Promise.all([
       this.storage.getEvents(this.session),
-      this.storage.getVolunteers(),
-      this.storage.getReminderRules(),
+      this.storage.getVolunteers(this.session),
+      this.storage.getReminderRules(this.session),
     ]);
     this.ui.renderAdmin(events, volunteers, reminderRules);
   }
@@ -226,7 +243,7 @@ class App {
   async loadVolunteer() {
     const [events, volunteers] = await Promise.all([
       this.storage.getEvents(this.session),
-      this.storage.getVolunteers(),
+      this.storage.getVolunteers(this.session),
     ]);
     const profile = volunteers.find((volunteer) => volunteer.uid === this.session.uid);
     this.ui.renderVolunteer(profile, events, this.session);

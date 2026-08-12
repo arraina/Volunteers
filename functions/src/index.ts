@@ -50,6 +50,25 @@ async function adminsCollectionIsEmpty() {
   return snapshot.empty;
 }
 
+function normalizeVolunteerProfile(data: Record<string, unknown>) {
+  const firstName = String(data.firstName || '').trim();
+  const lastName = String(data.lastName || '').trim();
+  const email = String(data.email || '').trim().toLowerCase();
+
+  if (!firstName || !lastName || !email) {
+    throw new HttpsError('invalid-argument', 'firstName, lastName, and email are required.');
+  }
+
+  return {
+    firstName,
+    lastName,
+    name: `${firstName} ${lastName}`,
+    email,
+    phoneNumber: String(data.phoneNumber || '').trim(),
+    address: String(data.address || '').trim(),
+  };
+}
+
 export const claimInitialAdmin = onCall({ region: REGION }, async (request) => {
   if (!request.auth?.uid) {
     throw new HttpsError('unauthenticated', 'User must be authenticated.');
@@ -242,49 +261,30 @@ export const createRemindersForEvent = onCall({ region: REGION }, async (request
 export const createVolunteer = onCall({ region: REGION }, async (request) => {
   await assertAdmin(request.auth?.uid);
 
-  const { email, password, name, phoneNumber, address } = request.data || {};
-  if (!email || !password || !name || !phoneNumber) {
-    throw new HttpsError('invalid-argument', 'email, password, name, and phoneNumber are required.');
-  }
+  const profile = normalizeVolunteerProfile(request.data || {});
+  const profileRef = db.collection('volunteers').doc();
 
-  const userRecord = await admin.auth().createUser({
-    email,
-    password,
-    displayName: name,
-  });
-
-  await db.collection('volunteers').doc(userRecord.uid).set({
-    name,
-    email,
-    phoneNumber,
-    address: address || '',
+  await profileRef.set({
+    ...profile,
     assignedEvents: [],
+    addedBy: request.auth?.uid,
     joinedDate: admin.firestore.FieldValue.serverTimestamp(),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  return { success: true, uid: userRecord.uid };
+  return { success: true, id: profileRef.id };
 });
 
 export const createVolunteerProfile = onCall({ region: REGION }, async (request) => {
-  if (!request.auth?.uid) {
-    throw new HttpsError('unauthenticated', 'User must be authenticated.');
-  }
-
-  const { email, name, phoneNumber, address } = request.data || {};
-  if (!email || !name || !phoneNumber) {
-    throw new HttpsError('invalid-argument', 'email, name, and phoneNumber are required.');
-  }
-
+  const profile = normalizeVolunteerProfile(request.data || {});
   const profileRef = db.collection('volunteers').doc();
+
   await profileRef.set({
-    name,
-    email,
-    phoneNumber,
-    address: address || '',
+    ...profile,
     assignedEvents: [],
-    addedBy: request.auth.uid,
+    addedBy: request.auth?.uid || null,
+    publicSelfAdded: !request.auth?.uid,
     joinedDate: admin.firestore.FieldValue.serverTimestamp(),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
