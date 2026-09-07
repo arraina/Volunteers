@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -229,9 +229,9 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
         </form>
 
           <p className="toggle-link">
-            <a href={isLogin ? '/signup' : '/login'}>
+            <Link to={isLogin ? '/signup' : '/login'}>
               {isLogin ? 'New volunteer? Create an account' : 'Already have an account? Log in'}
-            </a>
+            </Link>
           </p>
         </div>
       </div>

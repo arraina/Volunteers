@@ -1,3 +1,46 @@
 .App {
   min-height: 100vh;
 }
+
+.setup-required {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: #f6fbf4;
+  color: #19351f;
+}
+
+.setup-panel {
+  width: min(680px, 100%);
+  padding: 32px;
+  border: 1px solid #cfe3cc;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 48px rgba(25, 53, 31, 0.12);
+}
+
+.setup-eyebrow {
+  margin: 0 0 12px;
+  color: #2f7d32;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.setup-panel h1 {
+  margin: 0 0 16px;
+  font-size: 1.8rem;
+  line-height: 1.2;
+}
+
+.setup-panel p {
+  margin: 0 0 14px;
+  line-height: 1.6;
+}
+
+.setup-note {
+  padding-top: 8px;
+  color: #4d6652;
+}

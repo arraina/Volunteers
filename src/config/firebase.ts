@@ -1,6 +1,6 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
+import { getAuth, type Auth } from 'firebase/auth';
+import { getFirestore, type Firestore } from 'firebase/firestore';
 
 // All Firebase web config comes from environment variables (see .env.example).
 // The Firebase web API key is not a secret, but keeping config in env keeps the
@@ -19,15 +19,23 @@ export const isFirebaseConfigured = Boolean(
   firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId
 );
 
-if (!isFirebaseConfigured && typeof window !== 'undefined') {
+let appInstance: FirebaseApp | undefined;
+let authInstance: Auth | undefined;
+let dbInstance: Firestore | undefined;
+
+if (isFirebaseConfigured) {
+  appInstance = initializeApp(firebaseConfig);
+  authInstance = getAuth(appInstance);
+  dbInstance = getFirestore(appInstance);
+} else if (typeof window !== 'undefined') {
   // eslint-disable-next-line no-console
   console.warn(
-    'Firebase is not configured. Copy .env.example to .env and fill in your Firebase web config.'
+    'Firebase is not configured. Add the REACT_APP_FIREBASE_* repository variables before using auth and data features.'
   );
 }
 
-export const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const app = appInstance as FirebaseApp;
+export const auth = authInstance as Auth;
+export const db = dbInstance as Firestore;
 
 export default app;
