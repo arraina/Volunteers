@@ -1,487 +1,378 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signOut, onAuthStateChanged, User } from 'firebase/auth';
-import { arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, Timestamp, updateDoc, where } from 'firebase/firestore';
-import { auth, db, isFirebaseConfigured } from '../config/firebase';
+import { signOut } from 'firebase/auth';
+import { auth } from '../config/firebase';
+import { useAuth } from '../helpers/useAuth';
 import {
-  EventService,
-  ServiceAssignment,
-  ServiceEvent,
-  ServiceTimeSlot,
+  NotificationChannel,
+  SKILL_OPTIONS,
   VolunteerProfile,
-  buildServiceSlots,
+  VolunteerTask,
+  WEEKDAYS,
   formatDate,
-  formatTime,
-  isUserAdmin,
+  isTaskFull,
+  openSlots,
 } from '../helpers/types';
 import {
-  clearDemoSession,
-  ensureDemoVolunteer,
-  getDemoEvents,
-  getDemoSession,
-  getDemoVolunteers,
-  saveDemoVolunteers,
-} from '../helpers/demoStore';
+  assignVolunteerToTask,
+  checkIn,
+  checkOut,
+  getVolunteer,
+  removeVolunteerFromTask,
+  subscribeTasks,
+  updateVolunteer,
+} from '../helpers/store';
+import { enableWebPush } from '../helpers/notifications';
+import '../pages/AdminDashboard.css';
 import './VolunteerDashboard.css';
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
+type Tab = 'open' | 'mine' | 'profile';
 
-export const VolunteerDashboard: React.FC = () => {
+const VolunteerDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<(User | { uid: string; email: string; displayName: string }) | null>(null);
+  const { user } = useAuth();
+  const [tab, setTab] = useState<Tab>('open');
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
-  const [events, setEvents] = useState<ServiceEvent[]>([]);
-  const [services, setServices] = useState<EventService[]>([]);
-  const [assignments, setAssignments] = useState<ServiceAssignment[]>([]);
-  const [eventSearch, setEventSearch] = useState('');
-  const [serviceSearch, setServiceSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  const [profileForm, setProfileForm] = useState({
-    firstName: '',
-    lastName: '',
-    phoneNumber: '',
-  });
+  const [tasks, setTasks] = useState<VolunteerTask[]>([]);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  // Active check-in sessions: taskId -> { logId, checkInAt }
+  const [activeCheckins, setActiveCheckins] = useState<
+    Record<string, { logId: string; at: Date }>
+  >({});
 
   useEffect(() => {
-    if (!isFirebaseConfigured) {
-      const session = getDemoSession();
-      if (!session) {
-        navigate('/login');
-      } else if (session.isAdmin) {
-        navigate('/admin');
-      } else {
-        setUser(session);
-        ensureDemoVolunteer(session);
-        loadVolunteerData(session.uid, session.email);
-        setLoading(false);
-      }
-      return;
-    }
+    if (!user) return;
+    getVolunteer(user.uid).then(setProfile);
+    const unsub = subscribeTasks(setTasks);
+    return unsub;
+  }, [user]);
 
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) {
-        navigate('/login');
-        setLoading(false);
-        return;
-      }
-
-      if (await isUserAdmin(currentUser)) {
-        navigate('/admin');
-        return;
-      }
-
-      setUser(currentUser);
-      await loadVolunteerData(currentUser.uid, currentUser.email || '');
-      setLoading(false);
-    });
-
-    return unsubscribe;
-  }, [navigate]);
-
-  const loadVolunteerData = async (uid: string, emailAddress = '') => {
-    try {
-      setLoadError('');
-      if (!isFirebaseConfigured) {
-        const demoProfile = getDemoVolunteers().find((volunteer) => volunteer.uid === uid) || null;
-        setProfile(demoProfile);
-        setEvents(getDemoEvents());
-        setServices([]);
-        setAssignments([]);
-        return;
-      }
-
-      const profileDoc = await getDoc(doc(db, 'volunteers', uid));
-      const userEmail = emailAddress.trim().toLowerCase();
-      let loadedProfile: VolunteerProfile | null = null;
-
-      if (profileDoc.exists()) {
-        const profileData = profileDoc.data();
-        loadedProfile = {
-          uid: profileDoc.id,
-          ...profileData,
-          joinedDate: profileData.joinedDate?.toDate?.() || new Date(),
-        } as VolunteerProfile;
-      } else if (userEmail) {
-        const matchingProfiles = await getDocs(
-          query(collection(db, 'volunteers'), where('email', '==', userEmail))
-        );
-        const matchingProfileDoc = matchingProfiles.docs[0];
-        if (matchingProfileDoc) {
-          const profileData = matchingProfileDoc.data();
-          loadedProfile = {
-            uid: matchingProfileDoc.id,
-            ...profileData,
-            joinedDate: profileData.joinedDate?.toDate?.() || new Date(),
-          } as VolunteerProfile;
-        }
-      }
-
-      setProfile(loadedProfile);
-      setProfileForm({
-        firstName: loadedProfile?.firstName || loadedProfile?.name?.split(' ')[0] || '',
-        lastName: loadedProfile?.lastName || loadedProfile?.name?.split(' ').slice(1).join(' ') || '',
-        phoneNumber: loadedProfile?.phoneNumber === 'Not provided' ? '' : loadedProfile?.phoneNumber || '',
-      });
-
-      const eventsSnapshot = await getDocs(collection(db, 'serviceEvents'));
-      setEvents(eventsSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        eventDateTime: doc.data().eventDateTime?.toDate?.() || new Date(),
-      } as ServiceEvent)));
-
-      const servicesSnapshot = await getDocs(collection(db, 'services'));
-      setServices(servicesSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.() || new Date(),
-        updatedAt: doc.data().updatedAt?.toDate?.() || new Date(),
-      } as EventService)));
-
-      const assignmentsSnapshot = await getDocs(
-        query(collection(db, 'serviceAssignments'), where('volunteerId', '==', loadedProfile?.uid || uid))
-      );
-      setAssignments(assignmentsSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.() || new Date(),
-      } as ServiceAssignment)));
-
-    } catch (error) {
-      console.error('Error loading volunteer data:', error);
-      setLoadError(getErrorMessage(error, 'Unable to load volunteer dashboard data.'));
-    }
-  };
-
-  const handleUpdateProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !profile) return;
-
-    try {
-      const firstName = profileForm.firstName.trim();
-      const lastName = profileForm.lastName.trim();
-      const phoneNumber = profileForm.phoneNumber.trim();
-
-      if (!firstName || !lastName || !phoneNumber) {
-        throw new Error('First name, last name, and phone are required.');
-      }
-
-      if (!isFirebaseConfigured) {
-        saveDemoVolunteers(
-          getDemoVolunteers().map((volunteer) =>
-            volunteer.uid === profile.uid
-              ? { ...volunteer, firstName, lastName, name: `${firstName} ${lastName}`, phoneNumber }
-              : volunteer
-          )
-        );
-        await loadVolunteerData(user.uid, user.email || '');
-        alert('Profile updated.');
-        return;
-      }
-
-      await updateDoc(doc(db, 'volunteers', profile.uid), {
-        firstName,
-        lastName,
-        name: `${firstName} ${lastName}`,
-        phoneNumber,
-        updatedAt: Timestamp.now(),
-      });
-      await loadVolunteerData(user.uid, user.email || '');
-      alert('Profile updated.');
-    } catch (error) {
-      alert(getErrorMessage(error, 'Unable to update profile'));
-    }
-  };
-
-  const handleAssignService = async (eventId: string, serviceId: string, slot: ServiceTimeSlot) => {
-    if (!user || !profile) return;
-
-    const service = services.find((item) => item.id === serviceId);
-    const event = events.find((item) => item.id === eventId);
-    const serviceLabel = service?.name || 'this service';
-    const eventLabel = event?.topic ? ` for ${event.topic}` : '';
-    if (!window.confirm(`Sign up for ${serviceLabel}${eventLabel} at ${slot.label}?`)) return;
-
-    try {
-      if (!isFirebaseConfigured) {
-        saveDemoVolunteers(
-          getDemoVolunteers().map((volunteer) =>
-            volunteer.uid === user.uid
-              ? {
-                  ...volunteer,
-                  assignedEvents: Array.from(new Set([...(volunteer.assignedEvents || []), eventId])),
-                  assignedServices: Array.from(new Set([...(volunteer.assignedServices || []), serviceId])),
-                }
-              : volunteer
-          )
-        );
-        await loadVolunteerData(user.uid, user.email || '');
-        alert(`You are signed up for ${serviceLabel} at ${slot.label}.`);
-        return;
-      }
-
-      const assignmentId = `${eventId}_${serviceId}_${slot.key}_${profile.uid}`;
-      await setDoc(doc(db, 'serviceAssignments', assignmentId), {
-        eventId,
-        serviceId,
-        slotKey: slot.key,
-        slotStartTime: slot.startTime,
-        slotEndTime: slot.endTime,
-        volunteerId: profile.uid,
-        volunteerName: profile.name,
-        volunteerEmail: profile.email,
-        createdAt: Timestamp.now(),
-      });
-      await updateDoc(doc(db, 'volunteers', profile.uid), {
-        assignedEvents: arrayUnion(eventId),
-        assignedServices: arrayUnion(serviceId),
-        updatedAt: Timestamp.now(),
-      });
-      await loadVolunteerData(user.uid, user.email || '');
-      alert(`You are signed up for ${serviceLabel} at ${slot.label}.`);
-    } catch (error) {
-      alert(getErrorMessage(error, 'Unable to select service'));
-    }
-  };
-
-  const handleRemoveService = async (assignment: ServiceAssignment) => {
-    if (!user || !profile) return;
-
-    try {
-      if (!isFirebaseConfigured) {
-        saveDemoVolunteers(
-          getDemoVolunteers().map((volunteer) =>
-            volunteer.uid === user.uid
-              ? {
-                  ...volunteer,
-                  assignedServices: (volunteer.assignedServices || []).filter((serviceId) => serviceId !== assignment.serviceId),
-                  assignedEvents: (volunteer.assignedEvents || []).filter((eventId) => eventId !== assignment.eventId),
-                }
-              : volunteer
-          )
-        );
-        await loadVolunteerData(user.uid, user.email || '');
-        alert('Service removed.');
-        return;
-      }
-
-      const remainingAssignments = assignments.filter((item) => item.id !== assignment.id);
-      const hasOtherServiceAssignment = remainingAssignments.some((item) => item.serviceId === assignment.serviceId);
-      const hasOtherEventAssignment = remainingAssignments.some((item) => item.eventId === assignment.eventId);
-
-      await Promise.all([
-        deleteDoc(doc(db, 'serviceAssignments', assignment.id)),
-        updateDoc(doc(db, 'volunteers', profile.uid), {
-          ...(hasOtherServiceAssignment ? {} : { assignedServices: arrayRemove(assignment.serviceId) }),
-          ...(hasOtherEventAssignment ? {} : { assignedEvents: arrayRemove(assignment.eventId) }),
-          updatedAt: Timestamp.now(),
-        }),
-      ]);
-      await loadVolunteerData(user.uid, user.email || '');
-      alert('Service removed.');
-    } catch (error) {
-      alert(getErrorMessage(error, 'Unable to remove service'));
-    }
+  const reload = async () => {
+    if (user) setProfile(await getVolunteer(user.uid));
   };
 
   const handleLogout = async () => {
-    try {
-      if (!isFirebaseConfigured) {
-        clearDemoSession();
-        navigate('/login');
-        return;
-      }
+    await signOut(auth);
+    navigate('/login');
+  };
 
-      await signOut(auth);
-      navigate('/login');
-    } catch (error) {
-      console.error('Error logging out:', error);
+  const myTasks = useMemo(
+    () => (profile ? tasks.filter((t) => t.assignedVolunteers.includes(profile.uid)) : []),
+    [tasks, profile]
+  );
+
+  const openTasks = useMemo(
+    () =>
+      profile
+        ? tasks.filter(
+            (t) =>
+              t.openForSignup &&
+              !t.assignedVolunteers.includes(profile.uid) &&
+              t.status !== 'cancelled' &&
+              t.status !== 'completed' &&
+              t.startDateTime > new Date()
+          )
+        : [],
+    [tasks, profile]
+  );
+
+  const signUp = async (task: VolunteerTask) => {
+    if (!profile) return;
+    setError('');
+    try {
+      await assignVolunteerToTask(task, profile);
+      setMessage(`You signed up for "${task.title}".`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not sign up.');
     }
   };
 
-  const assignedSlotIds = useMemo(
-    () => new Set(assignments.map((assignment) => `${assignment.serviceId}_${assignment.slotKey || ''}`)),
-    [assignments]
-  );
-  const sortedEvents = [...events].sort(
-    (a, b) => new Date(a.eventDateTime).getTime() - new Date(b.eventDateTime).getTime()
-  );
-  const filteredEvents = sortedEvents.filter((event) => {
-    const query = eventSearch.trim().toLowerCase();
-    if (!query) return true;
-    return event.topic.toLowerCase().includes(query);
-  });
-  const filteredServices = services.filter((service) => {
-    const query = serviceSearch.trim().toLowerCase();
-    if (!query) return true;
-    const event = events.find((item) => item.id === service.eventId);
-    return service.name.toLowerCase().includes(query) || event?.topic.toLowerCase().includes(query);
-  });
-  if (loading) {
-    return <div className="loading">Loading...</div>;
+  const withdraw = async (task: VolunteerTask) => {
+    if (!profile) return;
+    if (!window.confirm(`Withdraw from "${task.title}"?`)) return;
+    await removeVolunteerFromTask(task, profile.uid);
+    setMessage(`You withdrew from "${task.title}".`);
+  };
+
+  const doCheckIn = async (task: VolunteerTask) => {
+    if (!profile) return;
+    const logId = await checkIn(task, profile);
+    setActiveCheckins((prev) => ({ ...prev, [task.id]: { logId, at: new Date() } }));
+    setMessage(`Checked in to "${task.title}".`);
+  };
+
+  const doCheckOut = async (task: VolunteerTask) => {
+    const active = activeCheckins[task.id];
+    if (!active) return;
+    const hours = await checkOut(active.logId, active.at);
+    setActiveCheckins((prev) => {
+      const next = { ...prev };
+      delete next[task.id];
+      return next;
+    });
+    await reload();
+    setMessage(`Checked out. Logged ${hours}h for "${task.title}".`);
+  };
+
+  if (!profile) {
+    return <div className="loading">Loading…</div>;
   }
 
   return (
-    <div className="volunteer-dashboard">
+    <div className="admin-dashboard">
       <header className="dashboard-header">
-        <h1>Volunteer Dashboard</h1>
+        <div>
+          <h1>Temple Volunteers</h1>
+          <p>Welcome, {profile.firstName || profile.name}</p>
+        </div>
         <div className="header-actions">
-          <span className="user-info">{user?.email}</span>
-          <button onClick={handleLogout} className="logout-btn">Logout</button>
+          <span className="user-info">{profile.totalHours}h served</span>
+          <button onClick={handleLogout} className="logout-btn">
+            Logout
+          </button>
         </div>
       </header>
 
+      <nav className="tab-bar">
+        <button className={tab === 'open' ? 'active' : ''} onClick={() => setTab('open')}>
+          Open Tasks
+        </button>
+        <button className={tab === 'mine' ? 'active' : ''} onClick={() => setTab('mine')}>
+          My Tasks ({myTasks.length})
+        </button>
+        <button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>
+          My Profile
+        </button>
+      </nav>
+
       <div className="dashboard-content">
-        {loadError && <div className="error-message">{loadError}</div>}
+        {error && <div className="error-message">{error}</div>}
+        {message && <div className="success-message">{message}</div>}
 
-        <section className="profile-section">
-          <h2>Your Information</h2>
-          <form className="profile-form" onSubmit={handleUpdateProfile}>
-            <input
-              type="text"
-              placeholder="First name"
-              value={profileForm.firstName}
-              onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
-              required
-            />
-            <input
-              type="text"
-              placeholder="Last name"
-              value={profileForm.lastName}
-              onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
-              required
-            />
-            <input
-              type="tel"
-              placeholder="Phone Number"
-              value={profileForm.phoneNumber}
-              onChange={(e) => setProfileForm({ ...profileForm, phoneNumber: e.target.value })}
-              required
-            />
-            <button type="submit">Update</button>
-          </form>
-          {profile?.email && <p className="profile-email"><strong>Email:</strong> {profile.email}</p>}
-        </section>
-
-        <section className="events-section">
-          <h2>Events</h2>
-          <div className="list-toolbar">
-            <input
-              type="search"
-              placeholder="Search events..."
-              value={eventSearch}
-              onChange={(e) => setEventSearch(e.target.value)}
-            />
-            <span>Sorted by closest date</span>
-          </div>
-
-          {filteredEvents.length === 0 ? (
-            <div className="empty-state">
-              <p>No events are available yet.</p>
-            </div>
-          ) : (
-            <div className="events-list">
-              {filteredEvents.map((event) => {
-                const eventServices = services.filter((service) => service.eventId === event.id);
-
+        {tab === 'open' && (
+          <section className="panel">
+            <h2>Tasks you can sign up for</h2>
+            {openTasks.length === 0 && <p className="muted">No open tasks right now.</p>}
+            <div className="task-list">
+              {openTasks.map((task) => {
+                const full = isTaskFull(task);
+                const matches = task.skillsNeeded.some((s) => profile.skills.includes(s));
                 return (
-                  <div key={event.id} className="event-card">
-                    <div className="event-header">
-                      <h3>{event.topic}</h3>
-                      <span className={`status ${event.status}`}>{event.status}</span>
-                    </div>
-
-                    {event.description && <p className="event-description">{event.description}</p>}
-
-                    <div className="event-details">
-                      <div className="detail-item">
-                        <strong>Date & Time:</strong>
-                        <span>{formatDate(event.eventDateTime)}</span>
+                  <div key={task.id} className="task-card">
+                    <div className="task-card-head">
+                      <div>
+                        <h3>
+                          {task.title}
+                          {matches && <span className="match-tag">matches your skills</span>}
+                        </h3>
+                        <p className="muted">
+                          {formatDate(task.startDateTime)}
+                          {task.location ? ` · ${task.location}` : ''}
+                        </p>
                       </div>
-                      {event.location && (
-                        <div className="detail-item">
-                          <strong>Location:</strong>
-                          <span>{event.location}</span>
-                        </div>
+                    </div>
+                    {task.description && <p>{task.description}</p>}
+                    {task.skillsNeeded.length > 0 && (
+                      <p className="muted small">Skills: {task.skillsNeeded.join(', ')}</p>
+                    )}
+                    <p className="small">{openSlots(task)} of {task.volunteersNeeded} slots open</p>
+                    <button
+                      className="primary-btn"
+                      disabled={full}
+                      onClick={() => signUp(task)}
+                    >
+                      {full ? 'Full' : 'Sign up'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {tab === 'mine' && (
+          <section className="panel">
+            <h2>Your tasks</h2>
+            {myTasks.length === 0 && <p className="muted">You have no assigned tasks yet.</p>}
+            <div className="task-list">
+              {myTasks.map((task) => {
+                const checkedIn = Boolean(activeCheckins[task.id]);
+                const isToday =
+                  Math.abs(task.startDateTime.getTime() - Date.now()) < 24 * 3600 * 1000;
+                return (
+                  <div key={task.id} className="task-card">
+                    <div className="task-card-head">
+                      <div>
+                        <h3>{task.title}</h3>
+                        <p className="muted">
+                          {formatDate(task.startDateTime)}
+                          {task.location ? ` · ${task.location}` : ''}
+                        </p>
+                      </div>
+                      <span className={`status-badge status-${task.status}`}>{task.status}</span>
+                    </div>
+                    {task.description && <p>{task.description}</p>}
+                    <div className="task-actions">
+                      {isToday && !checkedIn && (
+                        <button className="secondary-btn" onClick={() => doCheckIn(task)}>
+                          Check in
+                        </button>
+                      )}
+                      {checkedIn && (
+                        <button className="primary-btn" onClick={() => doCheckOut(task)}>
+                          Check out
+                        </button>
+                      )}
+                      {task.openForSignup && task.status !== 'completed' && (
+                        <button className="link-btn danger" onClick={() => withdraw(task)}>
+                          Withdraw
+                        </button>
                       )}
                     </div>
-                    <p><strong>Services:</strong> {eventServices.length}</p>
                   </div>
                 );
               })}
             </div>
-          )}
-        </section>
+          </section>
+        )}
 
-        <section className="services-section">
-          <h2>Services</h2>
-          <div className="list-toolbar">
-            <input
-              type="search"
-              placeholder="Search services..."
-              value={serviceSearch}
-              onChange={(e) => setServiceSearch(e.target.value)}
-            />
-            <span>Select a service to volunteer.</span>
-          </div>
-
-          {filteredServices.length === 0 ? (
-            <div className="empty-state">
-              <p>No services are available yet.</p>
-            </div>
-          ) : (
-            <div className="services-list">
-              {filteredServices.map((service) => {
-                const event = events.find((item) => item.id === service.eventId);
-                const slots = buildServiceSlots(service);
-                return (
-                  <div key={service.id} className="service-card">
-                    <h3 className="service-name">{service.name}</h3>
-                    <p><strong>Event:</strong> {event?.topic || 'Unlinked event'}</p>
-                    {event && <p><strong>Date:</strong> {formatDate(event.eventDateTime)}</p>}
-                    <p className="service-time">
-                      {formatTime(service.startTime)} - {formatTime(service.endTime)}
-                    </p>
-                    {service.description && <p>{service.description}</p>}
-                    <div className="slot-list">
-                      {slots.map((slot) => {
-                        const assignment = assignments.find(
-                          (item) => item.serviceId === service.id && (item.slotKey || '') === slot.key
-                        );
-                        const assigned = Boolean(assignment) || assignedSlotIds.has(`${service.id}_${slot.key}`);
-
-                        return (
-                          <div key={slot.key} className="slot-row">
-                            <span className="slot-label">{slot.label}</span>
-                            <button
-                              type="button"
-                              className={assigned ? 'remove-slot-btn' : undefined}
-                              onClick={() => {
-                                if (assignment) {
-                                  handleRemoveService(assignment);
-                                  return;
-                                }
-                                handleAssignService(service.eventId, service.id, slot);
-                              }}
-                            >
-                              {assigned ? 'Remove' : 'Select'}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
+        {tab === 'profile' && (
+          <ProfileTab profile={profile} onSaved={reload} setError={setError} setMessage={setMessage} />
+        )}
       </div>
     </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Profile tab
+// ---------------------------------------------------------------------------
+
+const ProfileTab: React.FC<{
+  profile: VolunteerProfile;
+  onSaved: () => void;
+  setError: (s: string) => void;
+  setMessage: (s: string) => void;
+}> = ({ profile, onSaved, setError, setMessage }) => {
+  const [firstName, setFirstName] = useState(profile.firstName);
+  const [lastName, setLastName] = useState(profile.lastName);
+  const [phoneNumber, setPhoneNumber] = useState(profile.phoneNumber);
+  const [skills, setSkills] = useState<string[]>(profile.skills);
+  const [availability, setAvailability] = useState<string[]>(profile.availability);
+  const [prefs, setPrefs] = useState(profile.notificationPrefs);
+  const [pushBusy, setPushBusy] = useState(false);
+
+  const toggle = (list: string[], value: string, setter: (v: string[]) => void) =>
+    setter(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    try {
+      if (!firstName.trim() || !lastName.trim()) throw new Error('Name is required.');
+      await updateVolunteer(profile.uid, {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        phoneNumber: phoneNumber.trim(),
+        skills,
+        availability,
+        notificationPrefs: prefs,
+      });
+      setMessage('Profile updated.');
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save profile.');
+    }
+  };
+
+  const setupPush = async () => {
+    setPushBusy(true);
+    setError('');
+    try {
+      await enableWebPush(profile.uid);
+      setPrefs((p) => ({ ...p, push: true }));
+      setMessage('Web push notifications enabled on this device.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not enable push notifications.');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  return (
+    <section className="panel">
+      <h2>My Profile</h2>
+      <form onSubmit={save} className="stacked-form">
+        <div className="row">
+          <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First name" />
+          <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name" />
+        </div>
+        <input value={profile.email} disabled />
+        <input
+          type="tel"
+          value={phoneNumber}
+          onChange={(e) => setPhoneNumber(e.target.value)}
+          placeholder="Phone (for reminders)"
+        />
+
+        <label className="field-label">Your skills / interests</label>
+        <div className="chip-group">
+          {SKILL_OPTIONS.map((s) => (
+            <button
+              type="button"
+              key={s}
+              className={`chip ${skills.includes(s) ? 'chip-on' : ''}`}
+              onClick={() => toggle(skills, s, setSkills)}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+
+        <label className="field-label">Days you're usually available</label>
+        <div className="chip-group">
+          {WEEKDAYS.map((d) => (
+            <button
+              type="button"
+              key={d}
+              className={`chip ${availability.includes(d) ? 'chip-on' : ''}`}
+              onClick={() => toggle(availability, d, setAvailability)}
+            >
+              {d.slice(0, 3)}
+            </button>
+          ))}
+        </div>
+
+        <label className="field-label">Reminder preferences</label>
+        <div className="pref-rows">
+          {(['whatsapp', 'email', 'push'] as NotificationChannel[]).map((c) => (
+            <label key={c} className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={prefs[c]}
+                onChange={(e) => setPrefs({ ...prefs, [c]: e.target.checked })}
+              />
+              {c === 'whatsapp' ? 'WhatsApp' : c === 'email' ? 'Email' : 'Browser push'}
+            </label>
+          ))}
+        </div>
+
+        <button type="submit" className="primary-btn">
+          Save Profile
+        </button>
+      </form>
+
+      <div className="push-setup">
+        <button className="secondary-btn" onClick={setupPush} disabled={pushBusy}>
+          {pushBusy ? 'Enabling…' : 'Enable browser push on this device'}
+        </button>
+        <p className="muted small">
+          Web push works after you allow notifications in your browser. WhatsApp and email
+          reminders don't require this.
+        </p>
+      </div>
+    </section>
   );
 };
 

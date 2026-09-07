@@ -1,0 +1,9 @@
+{
+  "short_name": "Temple Volunteers",
+  "name": "Temple Volunteer Management",
+  "icons": [],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#7c3aed",
+  "background_color": "#ffffff"
+}

@@ -1,762 +1,1096 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { signOut } from 'firebase/auth';
+import { auth } from '../config/firebase';
+import { useAuth } from '../helpers/useAuth';
 import {
-  addDoc,
-  arrayRemove,
-  arrayUnion,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  query,
-  setDoc,
-  Timestamp,
-  updateDoc,
-  where,
-} from 'firebase/firestore';
-import { auth, db, isFirebaseConfigured } from '../config/firebase';
-import {
-  EventService,
-  ServiceAssignment,
-  ServiceEvent,
-  ServiceTimeSlot,
+  NotificationChannel,
+  RecurrenceFrequency,
+  SKILL_OPTIONS,
+  TaskStatus,
+  TempleEvent,
   VolunteerProfile,
-  buildServiceSlots,
+  VolunteerTask,
   formatDate,
-  formatTime,
-  isUserAdmin,
+  openSlots,
 } from '../helpers/types';
+import {
+  assignVolunteerToTask,
+  bulkImportVolunteers,
+  createAnnouncement,
+  createTask,
+  createVolunteer,
+  subscribeEvents,
+  deleteTaskScoped,
+  deleteVolunteer,
+  getHourLogs,
+  getPastTasks,
+  groupTasksBySeries,
+  removeVolunteerFromTask,
+  SeriesScope,
+  subscribeTasks,
+  subscribeVolunteers,
+  updateTaskStatusScoped,
+  updateVolunteer,
+  DEFAULT_HORIZON_WEEKS,
+} from '../helpers/store';
+import { HourLog } from '../helpers/types';
+import AICreateTab from './AICreate';
 import './AdminDashboard.css';
 
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
-}
+type Tab = 'tasks' | 'ai' | 'volunteers' | 'announcements' | 'history' | 'reports';
 
-export const AdminDashboard: React.FC = () => {
+const STATUS_OPTIONS: TaskStatus[] = [
+  'open',
+  'filled',
+  'in_progress',
+  'completed',
+  'cancelled',
+];
+
+const emptyTaskForm = {
+  title: '',
+  description: '',
+  startDateTime: '',
+  endDateTime: '',
+  location: '',
+  skillsNeeded: [] as string[],
+  volunteersNeeded: '1',
+  openForSignup: true,
+  recurrence: 'none' as RecurrenceFrequency,
+  reminderHoursBefore: '24',
+  horizonWeeks: String(DEFAULT_HORIZON_WEEKS),
+  eventId: '',
+};
+
+// Preset horizons for recurring tasks (weeks).
+const HORIZON_PRESETS: { label: string; weeks: number }[] = [
+  { label: '3 months', weeks: 13 },
+  { label: '6 months', weeks: 26 },
+  { label: '1 year', weeks: 52 },
+  { label: '2 years', weeks: 104 },
+  { label: '5 years', weeks: 260 },
+  { label: '10 years', weeks: 520 },
+];
+
+const emptyVolunteerForm = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  phoneNumber: '',
+};
+
+const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  const [events, setEvents] = useState<ServiceEvent[]>([]);
-  const [services, setServices] = useState<EventService[]>([]);
-  const [assignments, setAssignments] = useState<ServiceAssignment[]>([]);
+  const { user } = useAuth();
+  const [tab, setTab] = useState<Tab>('tasks');
+  const [tasks, setTasks] = useState<VolunteerTask[]>([]);
   const [volunteers, setVolunteers] = useState<VolunteerProfile[]>([]);
-  const [eventSearch, setEventSearch] = useState('');
-  const [volunteerSearch, setVolunteerSearch] = useState('');
-
-  const [newEvent, setNewEvent] = useState({
-    topic: '',
-    description: '',
-    eventDateTime: '',
-    location: '',
-  });
-  const [newVolunteer, setNewVolunteer] = useState({
-    firstName: '',
-    lastName: '',
-    phoneNumber: '',
-    email: '',
-  });
-  const [newService, setNewService] = useState({
-    eventId: '',
-    name: '',
-    description: '',
-    startTime: '',
-    endTime: '',
-    intervalMinutes: '30',
-    capacity: '',
-  });
+  const [events, setEvents] = useState<TempleEvent[]>([]);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!isFirebaseConfigured) {
-      navigate('/login');
-      return;
-    }
-
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) {
-        navigate('/login');
-        setLoading(false);
-        return;
-      }
-
-      if (!(await isUserAdmin(currentUser))) {
-        navigate('/dashboard');
-        setLoading(false);
-        return;
-      }
-
-      setUser(currentUser);
-      await loadData();
-      setLoading(false);
-    });
-
-    return unsubscribe;
-  }, [navigate]);
-
-  const loadData = async () => {
-    try {
-      setLoadError('');
-
-      const [eventsSnapshot, servicesSnapshot, assignmentsSnapshot, volunteersSnapshot] = await Promise.all([
-        getDocs(collection(db, 'serviceEvents')),
-        getDocs(collection(db, 'services')),
-        getDocs(collection(db, 'serviceAssignments')),
-        getDocs(collection(db, 'volunteers')),
-      ]);
-
-      setEvents(eventsSnapshot.docs.map((eventDoc) => ({
-        id: eventDoc.id,
-        ...eventDoc.data(),
-        eventDateTime: eventDoc.data().eventDateTime?.toDate?.() || new Date(),
-      } as ServiceEvent)));
-
-      setServices(servicesSnapshot.docs.map((serviceDoc) => ({
-        id: serviceDoc.id,
-        ...serviceDoc.data(),
-        createdAt: serviceDoc.data().createdAt?.toDate?.() || new Date(),
-        updatedAt: serviceDoc.data().updatedAt?.toDate?.() || new Date(),
-      } as EventService)));
-
-      setAssignments(assignmentsSnapshot.docs.map((assignmentDoc) => ({
-        id: assignmentDoc.id,
-        ...assignmentDoc.data(),
-        createdAt: assignmentDoc.data().createdAt?.toDate?.() || new Date(),
-      } as ServiceAssignment)));
-
-      setVolunteers(volunteersSnapshot.docs.map((volunteerDoc) => {
-        const data = volunteerDoc.data();
-        return {
-          uid: volunteerDoc.id,
-          ...data,
-          joinedDate: data.joinedDate?.toDate?.() || new Date(),
-        } as VolunteerProfile;
-      }));
-    } catch (error) {
-      console.error('Error loading admin data:', error);
-      setLoadError(getErrorMessage(error, 'Unable to load admin data.'));
-    }
-  };
-
-  const handleCreateEvent = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      const topic = newEvent.topic.trim();
-      if (!topic || !newEvent.eventDateTime) {
-        throw new Error('Event name and date are required.');
-      }
-
-      await addDoc(collection(db, 'serviceEvents'), {
-        topic,
-        description: newEvent.description.trim(),
-        eventDateTime: Timestamp.fromDate(new Date(newEvent.eventDateTime)),
-        location: newEvent.location.trim(),
-        assignedVolunteers: [],
-        status: 'scheduled',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-
-      setNewEvent({ topic: '', description: '', eventDateTime: '', location: '' });
-      await loadData();
-      alert(`Event "${topic}" has been saved.`);
-    } catch (error) {
-      alert(getErrorMessage(error, 'Failed to create event.'));
-    }
-  };
-
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      const firstName = newVolunteer.firstName.trim();
-      const lastName = newVolunteer.lastName.trim();
-      const phoneNumber = newVolunteer.phoneNumber.trim();
-      const email = newVolunteer.email.trim().toLowerCase();
-
-      if (!firstName || !lastName || !phoneNumber || !email) {
-        throw new Error('First name, last name, phone, and email are required.');
-      }
-
-      await addDoc(collection(db, 'volunteers'), {
-        firstName,
-        lastName,
-        name: `${firstName} ${lastName}`,
-        phoneNumber,
-        email,
-        address: '',
-        assignedEvents: [],
-        assignedServices: [],
-        joinedDate: Timestamp.now(),
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-
-      setNewVolunteer({ firstName: '', lastName: '', phoneNumber: '', email: '' });
-      await loadData();
-    } catch (error) {
-      alert(getErrorMessage(error, 'Failed to add user.'));
-    }
-  };
-
-  const handleCreateService = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      const eventId = newService.eventId;
-      const name = newService.name.trim();
-      if (!eventId || !name || !newService.startTime || !newService.endTime) {
-        throw new Error('Choose an event, enter a service name, and set start/end times.');
-      }
-
-      if (newService.endTime <= newService.startTime) {
-        throw new Error('End time must be after start time.');
-      }
-
-      const capacity = Number(newService.capacity);
-      const intervalMinutes = Number(newService.intervalMinutes);
-      if (!Number.isFinite(intervalMinutes) || intervalMinutes <= 0) {
-        throw new Error('Choose a valid service interval.');
-      }
-
-      await addDoc(collection(db, 'services'), {
-        eventId,
-        name,
-        description: newService.description.trim(),
-        startTime: newService.startTime,
-        endTime: newService.endTime,
-        intervalMinutes,
-        capacity: Number.isFinite(capacity) && capacity > 0 ? capacity : null,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-
-      setNewService({ eventId: '', name: '', description: '', startTime: '', endTime: '', intervalMinutes: '30', capacity: '' });
-      await loadData();
-      alert(`Service "${name}" has been saved.`);
-    } catch (error) {
-      alert(getErrorMessage(error, 'Failed to create service.'));
-    }
-  };
-
-  const handleDeleteEvent = async (eventId: string, topic: string) => {
-    if (!window.confirm(`Remove event "${topic}" and its services?`)) return;
-
-    try {
-      const [eventServicesSnapshot, eventAssignmentsSnapshot, affectedVolunteersSnapshot] = await Promise.all([
-        getDocs(query(collection(db, 'services'), where('eventId', '==', eventId))),
-        getDocs(query(collection(db, 'serviceAssignments'), where('eventId', '==', eventId))),
-        getDocs(query(collection(db, 'volunteers'), where('assignedEvents', 'array-contains', eventId))),
-      ]);
-      const serviceIds = eventServicesSnapshot.docs.map((serviceDoc) => serviceDoc.id);
-
-      await Promise.all([
-        deleteDoc(doc(db, 'serviceEvents', eventId)),
-        ...eventServicesSnapshot.docs.map((serviceDoc) => deleteDoc(serviceDoc.ref)),
-        ...eventAssignmentsSnapshot.docs.map((assignmentDoc) => deleteDoc(assignmentDoc.ref)),
-        ...affectedVolunteersSnapshot.docs.map((volunteerDoc) =>
-          updateDoc(volunteerDoc.ref, {
-            assignedEvents: arrayRemove(eventId),
-            ...(serviceIds.length > 0 ? { assignedServices: arrayRemove(...serviceIds) } : {}),
-            updatedAt: Timestamp.now(),
-          })
-        ),
-      ]);
-
-      await loadData();
-    } catch (error) {
-      alert(getErrorMessage(error, 'Failed to remove event.'));
-    }
-  };
-
-  const handleDeleteUser = async (volunteerId: string, name: string) => {
-    if (!window.confirm(`Remove user "${name}"?`)) return;
-
-    try {
-      const [userAssignmentsSnapshot, affectedEventsSnapshot] = await Promise.all([
-        getDocs(query(collection(db, 'serviceAssignments'), where('volunteerId', '==', volunteerId))),
-        getDocs(query(collection(db, 'serviceEvents'), where('assignedVolunteers', 'array-contains', volunteerId))),
-      ]);
-
-      await Promise.all([
-        deleteDoc(doc(db, 'volunteers', volunteerId)),
-        ...userAssignmentsSnapshot.docs.map((assignmentDoc) => deleteDoc(assignmentDoc.ref)),
-        ...affectedEventsSnapshot.docs.map((eventDoc) =>
-          updateDoc(eventDoc.ref, {
-            assignedVolunteers: arrayRemove(volunteerId),
-            updatedAt: Timestamp.now(),
-          })
-        ),
-      ]);
-
-      await loadData();
-    } catch (error) {
-      alert(getErrorMessage(error, 'Failed to remove user.'));
-    }
-  };
-
-  const handleDeleteService = async (serviceId: string, serviceName: string, eventId: string) => {
-    if (!window.confirm(`Remove service "${serviceName}" and its assignments?`)) return;
-
-    try {
-      const [serviceAssignmentsSnapshot, eventAssignmentsSnapshot, affectedVolunteersSnapshot] = await Promise.all([
-        getDocs(query(collection(db, 'serviceAssignments'), where('serviceId', '==', serviceId))),
-        getDocs(query(collection(db, 'serviceAssignments'), where('eventId', '==', eventId))),
-        getDocs(query(collection(db, 'volunteers'), where('assignedServices', 'array-contains', serviceId))),
-      ]);
-      const assignmentVolunteerIds = new Set(
-        serviceAssignmentsSnapshot.docs.map((assignmentDoc) => assignmentDoc.data().volunteerId).filter(Boolean)
-      );
-      const volunteersToRemoveFromEvent = new Set(
-        Array.from(assignmentVolunteerIds).filter((volunteerId) =>
-          !eventAssignmentsSnapshot.docs.some((assignmentDoc) => {
-            const assignment = assignmentDoc.data();
-            return assignment.serviceId !== serviceId && assignment.volunteerId === volunteerId;
-          })
-        )
-      );
-
-      await Promise.all([
-        deleteDoc(doc(db, 'services', serviceId)),
-        ...serviceAssignmentsSnapshot.docs.map((assignmentDoc) => deleteDoc(assignmentDoc.ref)),
-        ...affectedVolunteersSnapshot.docs.map((volunteerDoc) =>
-          updateDoc(volunteerDoc.ref, {
-            assignedServices: arrayRemove(serviceId),
-            updatedAt: Timestamp.now(),
-          })
-        ),
-        ...(volunteersToRemoveFromEvent.size > 0
-          ? [
-              updateDoc(doc(db, 'serviceEvents', eventId), {
-                assignedVolunteers: arrayRemove(...Array.from(volunteersToRemoveFromEvent)),
-                updatedAt: Timestamp.now(),
-              }),
-            ]
-          : []),
-      ]);
-
-      await loadData();
-    } catch (error) {
-      alert(getErrorMessage(error, 'Failed to remove service.'));
-    }
-  };
-
-  const handleAssignVolunteerToService = async (
-    eventId: string,
-    serviceId: string,
-    slot: ServiceTimeSlot,
-    volunteerId: string
-  ) => {
-    const volunteer = volunteers.find((item) => item.uid === volunteerId);
-    if (!volunteer) return;
-
-    try {
-      const assignmentId = `${eventId}_${serviceId}_${slot.key}_${volunteerId}`;
-      await setDoc(doc(db, 'serviceAssignments', assignmentId), {
-        eventId,
-        serviceId,
-        slotKey: slot.key,
-        slotStartTime: slot.startTime,
-        slotEndTime: slot.endTime,
-        volunteerId,
-        volunteerName: volunteer.name,
-        volunteerEmail: volunteer.email,
-        createdAt: Timestamp.now(),
-      });
-      await updateDoc(doc(db, 'volunteers', volunteerId), {
-        assignedEvents: arrayUnion(eventId),
-        assignedServices: arrayUnion(serviceId),
-        updatedAt: Timestamp.now(),
-      });
-      await updateDoc(doc(db, 'serviceEvents', eventId), {
-        assignedVolunteers: arrayUnion(volunteerId),
-        updatedAt: Timestamp.now(),
-      });
-      await loadData();
-    } catch (error) {
-      alert(getErrorMessage(error, 'Failed to assign volunteer.'));
-    }
-  };
-
-  const handleRemoveVolunteerFromService = async (assignment: ServiceAssignment) => {
-    if (!window.confirm(`Remove ${assignment.volunteerName} from this service time?`)) return;
-
-    try {
-      const volunteerAssignmentsSnapshot = await getDocs(
-        query(collection(db, 'serviceAssignments'), where('volunteerId', '==', assignment.volunteerId))
-      );
-      const hasOtherServiceAssignment = volunteerAssignmentsSnapshot.docs.some((assignmentDoc) => {
-        const item = assignmentDoc.data();
-        return assignmentDoc.id !== assignment.id && item.serviceId === assignment.serviceId;
-      });
-      const hasOtherEventAssignment = volunteerAssignmentsSnapshot.docs.some((assignmentDoc) => {
-        const item = assignmentDoc.data();
-        return assignmentDoc.id !== assignment.id && item.eventId === assignment.eventId;
-      });
-
-      await Promise.all([
-        deleteDoc(doc(db, 'serviceAssignments', assignment.id)),
-        updateDoc(doc(db, 'volunteers', assignment.volunteerId), {
-          ...(hasOtherServiceAssignment ? {} : { assignedServices: arrayRemove(assignment.serviceId) }),
-          ...(hasOtherEventAssignment ? {} : { assignedEvents: arrayRemove(assignment.eventId) }),
-          updatedAt: Timestamp.now(),
-        }),
-        ...(hasOtherEventAssignment
-          ? []
-          : [
-              updateDoc(doc(db, 'serviceEvents', assignment.eventId), {
-                assignedVolunteers: arrayRemove(assignment.volunteerId),
-                updatedAt: Timestamp.now(),
-              }),
-            ]),
-      ]);
-
-      await loadData();
-    } catch (error) {
-      alert(getErrorMessage(error, 'Failed to remove volunteer from service.'));
-    }
-  };
+    const unsubTasks = subscribeTasks(setTasks);
+    const unsubVols = subscribeVolunteers(setVolunteers);
+    const unsubEvents = subscribeEvents(setEvents);
+    return () => {
+      unsubTasks();
+      unsubVols();
+      unsubEvents();
+    };
+  }, []);
 
   const handleLogout = async () => {
     await signOut(auth);
     navigate('/login');
   };
 
-  const filteredEvents = [...events]
-    .sort((a, b) => new Date(a.eventDateTime).getTime() - new Date(b.eventDateTime).getTime())
-    .filter((event) => {
-      const query = eventSearch.trim().toLowerCase();
-      return !query || event.topic.toLowerCase().includes(query);
-    });
-
-  const filteredVolunteers = volunteers.filter((volunteer) => {
-    const query = volunteerSearch.trim().toLowerCase();
-    return !query || volunteer.name.toLowerCase().includes(query) || volunteer.email.toLowerCase().includes(query);
-  });
-
-  if (loading) {
-    return <div className="loading">Loading...</div>;
-  }
-
   return (
     <div className="admin-dashboard">
       <header className="dashboard-header">
         <div>
-          <h1>ISKCON TOWACO VOLUNTEER MANAGEMENT</h1>
+          <h1>Temple Volunteer Management</h1>
           <p>Admin</p>
         </div>
         <div className="header-actions">
           <span className="user-info">{user?.email}</span>
-          <button onClick={handleLogout} className="logout-btn">Logout</button>
+          <button onClick={handleLogout} className="logout-btn">
+            Logout
+          </button>
         </div>
       </header>
 
+      <nav className="tab-bar">
+        <button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}>
+          Tasks
+        </button>
+        <button className={tab === 'ai' ? 'active' : ''} onClick={() => setTab('ai')}>
+          AI Create
+        </button>
+        <button
+          className={tab === 'volunteers' ? 'active' : ''}
+          onClick={() => setTab('volunteers')}
+        >
+          Volunteers
+        </button>
+        <button
+          className={tab === 'announcements' ? 'active' : ''}
+          onClick={() => setTab('announcements')}
+        >
+          Announcements
+        </button>
+        <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
+          History
+        </button>
+        <button className={tab === 'reports' ? 'active' : ''} onClick={() => setTab('reports')}>
+          Reports
+        </button>
+      </nav>
+
       <div className="dashboard-content">
-        {loadError && <div className="error-message">{loadError}</div>}
+        {error && <div className="error-message">{error}</div>}
+        {tab === 'tasks' && (
+          <TasksTab
+            tasks={tasks}
+            volunteers={volunteers}
+            events={events}
+            setError={setError}
+            uid={user?.uid}
+          />
+        )}
+        {tab === 'ai' && <AICreateTab uid={user?.uid} events={events} setError={setError} />}
+        {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} setError={setError} />}
+        {tab === 'announcements' && (
+          <AnnouncementsTab uid={user?.uid} setError={setError} />
+        )}
+        {tab === 'history' && <HistoryTab volunteers={volunteers} setError={setError} />}
+        {tab === 'reports' && <ReportsTab volunteers={volunteers} tasks={tasks} />}
+      </div>
+    </div>
+  );
+};
 
-        <section className="admin-columns">
-          <div className="form-section">
-            <h2>Create Event</h2>
-            <form onSubmit={handleCreateEvent}>
-              <input
-                type="text"
-                placeholder="Event name"
-                value={newEvent.topic}
-                onChange={(e) => setNewEvent({ ...newEvent, topic: e.target.value })}
-                required
-              />
-              <input
-                type="text"
-                placeholder="Description"
-                value={newEvent.description}
-                onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
-              />
-              <input
-                type="datetime-local"
-                value={newEvent.eventDateTime}
-                onChange={(e) => setNewEvent({ ...newEvent, eventDateTime: e.target.value })}
-                required
-              />
-              <input
-                type="text"
-                placeholder="Location"
-                value={newEvent.location}
-                onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
-              />
-              <button type="submit">Create Event</button>
-            </form>
-          </div>
+// ---------------------------------------------------------------------------
+// Tasks tab
+// ---------------------------------------------------------------------------
 
-          <div className="form-section">
-            <h2>Create Service</h2>
-            <form onSubmit={handleCreateService}>
-              <select
-                value={newService.eventId}
-                onChange={(e) => setNewService({ ...newService, eventId: e.target.value })}
-                required
+const TasksTab: React.FC<{
+  tasks: VolunteerTask[];
+  volunteers: VolunteerProfile[];
+  events: TempleEvent[];
+  setError: (s: string) => void;
+  uid?: string;
+}> = ({ tasks, volunteers, events, setError, uid }) => {
+  const [form, setForm] = useState(emptyTaskForm);
+  const [saving, setSaving] = useState(false);
+
+  const volunteerById = useMemo(() => {
+    const map = new Map<string, VolunteerProfile>();
+    volunteers.forEach((v) => map.set(v.uid, v));
+    return map;
+  }, [volunteers]);
+
+  // Group tasks first by event (standalone tasks fall under "Ungrouped"),
+  // then group each event's tasks into recurring series.
+  const eventSections = useMemo(() => {
+    const byEvent = new Map<string, { name: string; tasks: VolunteerTask[] }>();
+    for (const task of tasks) {
+      const key = task.eventId || '__none__';
+      const name = task.eventId ? task.eventName || 'Event' : 'Ungrouped tasks';
+      if (!byEvent.has(key)) byEvent.set(key, { name, tasks: [] });
+      byEvent.get(key)!.tasks.push(task);
+    }
+    const sections = Array.from(byEvent.entries()).map(([key, val]) => ({
+      key,
+      name: val.name,
+      isEvent: key !== '__none__',
+      groups: groupTasksBySeries(val.tasks),
+    }));
+    // Events first (by earliest upcoming task), ungrouped last.
+    sections.sort((a, b) => {
+      if (a.key === '__none__') return 1;
+      if (b.key === '__none__') return -1;
+      const at = a.groups[0]?.occurrences[0]?.startDateTime.getTime() || 0;
+      const bt = b.groups[0]?.occurrences[0]?.startDateTime.getTime() || 0;
+      return at - bt;
+    });
+    return sections;
+  }, [tasks]);
+
+  const toggleSkill = (skill: string) => {
+    setForm((f) => ({
+      ...f,
+      skillsNeeded: f.skillsNeeded.includes(skill)
+        ? f.skillsNeeded.filter((s) => s !== skill)
+        : [...f.skillsNeeded, skill],
+    }));
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSaving(true);
+    try {
+      if (!form.title.trim() || !form.startDateTime) {
+        throw new Error('Task title and start date/time are required.');
+      }
+      const needed = Math.max(1, parseInt(form.volunteersNeeded, 10) || 1);
+      const reminderHours = form.reminderHoursBefore
+        .split(',')
+        .map((s) => parseInt(s.trim(), 10))
+        .filter((n) => Number.isFinite(n) && n > 0);
+
+      await createTask({
+        title: form.title,
+        description: form.description,
+        startDateTime: new Date(form.startDateTime),
+        endDateTime: form.endDateTime ? new Date(form.endDateTime) : null,
+        location: form.location,
+        skillsNeeded: form.skillsNeeded,
+        volunteersNeeded: needed,
+        openForSignup: form.openForSignup,
+        recurrence: form.recurrence,
+        reminderHoursBefore: reminderHours.length ? reminderHours : [24],
+        horizonWeeks:
+          form.recurrence === 'none'
+            ? undefined
+            : Math.max(1, parseInt(form.horizonWeeks, 10) || DEFAULT_HORIZON_WEEKS),
+        eventId: form.eventId || undefined,
+        eventName: form.eventId
+          ? events.find((ev) => ev.id === form.eventId)?.name
+          : undefined,
+        createdBy: uid,
+      });
+      setForm(emptyTaskForm);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create task.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAssign = async (task: VolunteerTask, volunteerId: string) => {
+    const volunteer = volunteerById.get(volunteerId);
+    if (!volunteer) return;
+    try {
+      await assignVolunteerToTask(task, volunteer);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to assign volunteer.');
+    }
+  };
+
+  return (
+    <div className="two-col">
+      <section className="panel">
+        <h2>Create Task</h2>
+        <form onSubmit={handleCreate} className="stacked-form">
+          <input
+            type="text"
+            placeholder="Task title (e.g. Kitchen prep for Sunday feast)"
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            required
+          />
+          <textarea
+            placeholder="Description"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
+          <label className="field-label">Event (optional)</label>
+          <select
+            value={form.eventId}
+            onChange={(e) => setForm({ ...form, eventId: e.target.value })}
+          >
+            <option value="">— none (standalone task) —</option>
+            {events.map((ev) => (
+              <option key={ev.id} value={ev.id}>
+                {ev.name}
+              </option>
+            ))}
+          </select>
+          <label className="field-label">Start</label>
+          <input
+            type="datetime-local"
+            value={form.startDateTime}
+            onChange={(e) => setForm({ ...form, startDateTime: e.target.value })}
+            required
+          />
+          <label className="field-label">End (optional)</label>
+          <input
+            type="datetime-local"
+            value={form.endDateTime}
+            onChange={(e) => setForm({ ...form, endDateTime: e.target.value })}
+          />
+          <input
+            type="text"
+            placeholder="Location"
+            value={form.location}
+            onChange={(e) => setForm({ ...form, location: e.target.value })}
+          />
+          <label className="field-label">Skills needed</label>
+          <div className="chip-group">
+            {SKILL_OPTIONS.map((skill) => (
+              <button
+                type="button"
+                key={skill}
+                className={`chip ${form.skillsNeeded.includes(skill) ? 'chip-on' : ''}`}
+                onClick={() => toggleSkill(skill)}
               >
-                <option value="">Choose event</option>
-                {events.map((event) => (
-                  <option key={event.id} value={event.id}>{event.topic}</option>
-                ))}
-              </select>
-              <input
-                type="text"
-                placeholder="Service name"
-                value={newService.name}
-                onChange={(e) => setNewService({ ...newService, name: e.target.value })}
-                required
-              />
-              <input
-                type="text"
-                placeholder="Description"
-                value={newService.description}
-                onChange={(e) => setNewService({ ...newService, description: e.target.value })}
-              />
-              <label>
-                Start time
-                <input
-                  type="time"
-                  value={newService.startTime}
-                  onChange={(e) => setNewService({ ...newService, startTime: e.target.value })}
-                  required
-                />
-              </label>
-              <label>
-                End time
-                <input
-                  type="time"
-                  value={newService.endTime}
-                  onChange={(e) => setNewService({ ...newService, endTime: e.target.value })}
-                  required
-                />
-              </label>
-              <label>
-                Interval
-                <select
-                  value={newService.intervalMinutes}
-                  onChange={(e) => setNewService({ ...newService, intervalMinutes: e.target.value })}
-                  required
-                >
-                  <option value="15">15 minutes</option>
-                  <option value="30">30 minutes</option>
-                  <option value="45">45 minutes</option>
-                  <option value="60">60 minutes</option>
-                </select>
-              </label>
+                {skill}
+              </button>
+            ))}
+          </div>
+          <div className="row">
+            <div>
+              <label className="field-label">Volunteers needed</label>
               <input
                 type="number"
-                min="1"
-                placeholder="Capacity"
-                value={newService.capacity}
-                onChange={(e) => setNewService({ ...newService, capacity: e.target.value })}
+                min={1}
+                value={form.volunteersNeeded}
+                onChange={(e) => setForm({ ...form, volunteersNeeded: e.target.value })}
               />
-              <button type="submit">Create Service</button>
-            </form>
+            </div>
+            <div>
+              <label className="field-label">Repeats</label>
+              <select
+                value={form.recurrence}
+                onChange={(e) =>
+                  setForm({ ...form, recurrence: e.target.value as RecurrenceFrequency })
+                }
+              >
+                <option value="none">Does not repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
           </div>
-
-          <div className="form-section">
-            <h2>Add User</h2>
-            <form onSubmit={handleCreateUser}>
-              <input
-                type="text"
-                placeholder="First name"
-                value={newVolunteer.firstName}
-                onChange={(e) => setNewVolunteer({ ...newVolunteer, firstName: e.target.value })}
-                required
-              />
-              <input
-                type="text"
-                placeholder="Last name"
-                value={newVolunteer.lastName}
-                onChange={(e) => setNewVolunteer({ ...newVolunteer, lastName: e.target.value })}
-                required
-              />
-              <input
-                type="tel"
-                placeholder="Phone number"
-                value={newVolunteer.phoneNumber}
-                onChange={(e) => setNewVolunteer({ ...newVolunteer, phoneNumber: e.target.value })}
-                required
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                value={newVolunteer.email}
-                onChange={(e) => setNewVolunteer({ ...newVolunteer, email: e.target.value })}
-                required
-              />
-              <button type="submit">Add User</button>
-            </form>
-          </div>
-        </section>
-
-        <section className="records-section">
-          <h2>Events</h2>
-          <div className="list-toolbar">
+          {form.recurrence !== 'none' && (
+            <div>
+              <label className="field-label">Generate occurrences for</label>
+              <select
+                value={form.horizonWeeks}
+                onChange={(e) => setForm({ ...form, horizonWeeks: e.target.value })}
+              >
+                {HORIZON_PRESETS.map((h) => (
+                  <option key={h.weeks} value={h.weeks}>
+                    {h.label}
+                  </option>
+                ))}
+              </select>
+              <small className="field-hint">
+                Dated occurrences are created ahead of time so you can assign different
+                volunteers to each date. Daily tasks are capped per batch and topped up
+                automatically over time.
+              </small>
+            </div>
+          )}
+          <label className="field-label">Reminder hours before (comma separated)</label>
+          <input
+            type="text"
+            placeholder="e.g. 48, 24, 2"
+            value={form.reminderHoursBefore}
+            onChange={(e) => setForm({ ...form, reminderHoursBefore: e.target.value })}
+          />
+          <label className="checkbox-row">
             <input
-              type="search"
-              placeholder="Search events..."
-              value={eventSearch}
-              onChange={(e) => setEventSearch(e.target.value)}
+              type="checkbox"
+              checked={form.openForSignup}
+              onChange={(e) => setForm({ ...form, openForSignup: e.target.checked })}
             />
-          </div>
-          <div className="events-list">
-            {filteredEvents.map((event) => {
-              const eventServices = services.filter((service) => service.eventId === event.id);
+            Let volunteers sign themselves up
+          </label>
+          <button type="submit" disabled={saving} className="primary-btn">
+            {saving ? 'Saving…' : 'Create Task'}
+          </button>
+        </form>
+      </section>
 
-              return (
-                <div key={event.id} className="event-card">
-                  <div className="card-title-row">
-                    <h3>{event.topic}</h3>
-                    <button
-                      type="button"
-                      className="danger-btn"
-                      onClick={() => handleDeleteEvent(event.id, event.topic)}
-                    >
-                      Remove Event
+      <section className="panel">
+        <h2>Tasks</h2>
+        <p className="muted small">
+          Showing the next several months. Recurring tasks are grouped — expand a series to
+          assign different volunteers to each date.
+        </p>
+        {eventSections.length === 0 && <p className="muted">No tasks yet.</p>}
+        {eventSections.map((section) => (
+          <div key={section.key} className="event-section">
+            {section.isEvent && (
+              <h3 className="event-heading">
+                <span className="event-dot" />
+                {section.name}
+              </h3>
+            )}
+            {!section.isEvent && eventSections.some((s) => s.isEvent) && (
+              <h3 className="event-heading muted">{section.name}</h3>
+            )}
+            <div className="task-list">
+              {section.groups.map((group) => (
+                <SeriesCard
+                  key={group.seriesId || group.occurrences[0].id}
+                  group={group}
+                  volunteers={volunteers}
+                  volunteerById={volunteerById}
+                  onAssign={handleAssign}
+                  onRemove={removeVolunteerFromTask}
+                  setError={setError}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
+    </div>
+  );
+};
+
+// A group is either a single task or a recurring series with many occurrences.
+const SeriesCard: React.FC<{
+  group: ReturnType<typeof groupTasksBySeries>[number];
+  volunteers: VolunteerProfile[];
+  volunteerById: Map<string, VolunteerProfile>;
+  onAssign: (task: VolunteerTask, volunteerId: string) => void;
+  onRemove: (task: VolunteerTask, volunteerId: string) => void;
+  setError: (s: string) => void;
+}> = ({ group, volunteers, volunteerById, onAssign, onRemove, setError }) => {
+  const isSeries = group.recurrence !== 'none' && !!group.seriesId;
+  const [expanded, setExpanded] = useState(!isSeries);
+  const upcoming = group.occurrences.filter((o) => o.startDateTime >= new Date());
+  const next = upcoming[0] || group.occurrences[0];
+
+  const askScope = (verb: string): SeriesScope | null => {
+    if (!isSeries) return 'one';
+    const all = window.confirm(
+      `${verb} — apply to ALL future dates in this series?\n\nOK = this and all future dates\nCancel = just this one date`
+    );
+    return all ? 'future' : 'one';
+  };
+
+  return (
+    <div className="task-card">
+      <div className="task-card-head">
+        <div>
+          <h3>
+            {group.title}
+            {isSeries && <span className="series-tag">repeats {group.recurrence}</span>}
+          </h3>
+          <p className="muted small">
+            {isSeries
+              ? `${group.occurrences.length} occurrence(s) loaded · next ${formatDate(
+                  next.startDateTime
+                )}`
+              : formatDate(next.startDateTime)}
+          </p>
+        </div>
+        {isSeries && (
+          <button className="link-btn" onClick={() => setExpanded((e) => !e)}>
+            {expanded ? 'Collapse' : 'Show dates'}
+          </button>
+        )}
+      </div>
+
+      {expanded && (
+        <div className="occurrence-list">
+          {group.occurrences.map((task) => (
+            <OccurrenceRow
+              key={task.id}
+              task={task}
+              volunteers={volunteers}
+              volunteerById={volunteerById}
+              onAssign={onAssign}
+              onRemove={onRemove}
+              askScope={askScope}
+              setError={setError}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const OccurrenceRow: React.FC<{
+  task: VolunteerTask;
+  volunteers: VolunteerProfile[];
+  volunteerById: Map<string, VolunteerProfile>;
+  onAssign: (task: VolunteerTask, volunteerId: string) => void;
+  onRemove: (task: VolunteerTask, volunteerId: string) => void;
+  askScope: (verb: string) => SeriesScope | null;
+  setError: (s: string) => void;
+}> = ({ task, volunteers, volunteerById, onAssign, onRemove, askScope, setError }) => {
+  return (
+    <div className="occurrence-row">
+      <div className="occurrence-head">
+        <span>
+          {formatDate(task.startDateTime)}
+          {task.location ? ` · ${task.location}` : ''}
+        </span>
+        <span className={`status-badge status-${task.status}`}>{task.status}</span>
+      </div>
+      <p className="small muted">
+        {task.assignedVolunteers.length}/{task.volunteersNeeded} filled · {openSlots(task)} open
+      </p>
+      {task.assignedVolunteers.length > 0 && (
+        <ul className="assigned-list">
+          {task.assignedVolunteers.map((vid) => (
+            <li key={vid}>
+              {volunteerById.get(vid)?.name || vid}
+              <button className="link-btn" onClick={() => onRemove(task, vid)}>
+                remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="task-actions">
+        <select
+          defaultValue=""
+          onChange={(e) => {
+            if (e.target.value) onAssign(task, e.target.value);
+            e.target.value = '';
+          }}
+        >
+          <option value="">Assign volunteer…</option>
+          {volunteers
+            .filter((v) => !task.assignedVolunteers.includes(v.uid))
+            .map((v) => (
+              <option key={v.uid} value={v.uid}>
+                {v.name}
+              </option>
+            ))}
+        </select>
+        <select
+          value={task.status}
+          onChange={async (e) => {
+            const scope = askScope('Change status');
+            if (!scope) return;
+            try {
+              await updateTaskStatusScoped(task, e.target.value as TaskStatus, scope);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Failed to update status.');
+            }
+          }}
+        >
+          {STATUS_OPTIONS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        <button
+          className="danger-btn"
+          onClick={async () => {
+            const scope = askScope('Delete');
+            if (!scope) return;
+            if (!window.confirm('Confirm delete?')) return;
+            try {
+              await deleteTaskScoped(task, scope);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Failed to delete.');
+            }
+          }}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Volunteers tab
+// ---------------------------------------------------------------------------
+
+const VolunteersTab: React.FC<{
+  volunteers: VolunteerProfile[];
+  setError: (s: string) => void;
+}> = ({ volunteers, setError }) => {
+  const [form, setForm] = useState(emptyVolunteerForm);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState(emptyVolunteerForm);
+  const [search, setSearch] = useState('');
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    try {
+      if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
+        throw new Error('First name, last name, and email are required.');
+      }
+      await createVolunteer(form);
+      setForm(emptyVolunteerForm);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add volunteer.');
+    }
+  };
+
+  const startEdit = (v: VolunteerProfile) => {
+    setEditing(v.uid);
+    setEditForm({
+      firstName: v.firstName,
+      lastName: v.lastName,
+      email: v.email,
+      phoneNumber: v.phoneNumber,
+    });
+  };
+
+  const saveEdit = async (uid: string) => {
+    try {
+      await updateVolunteer(uid, {
+        firstName: editForm.firstName,
+        lastName: editForm.lastName,
+        phoneNumber: editForm.phoneNumber,
+      });
+      setEditing(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update volunteer.');
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length === 0) return;
+      // Detect + skip a header row if the first cell isn't an email-ish value.
+      const startIdx = /firstname|first name|name/i.test(lines[0]) ? 1 : 0;
+      const rows = lines.slice(startIdx).map((line) => {
+        const [firstName = '', lastName = '', email = '', phoneNumber = ''] = line
+          .split(',')
+          .map((c) => c.trim().replace(/^"|"$/g, ''));
+        return { firstName, lastName, email, phoneNumber };
+      });
+      const { added, skipped } = await bulkImportVolunteers(rows);
+      setError('');
+      window.alert(`Imported ${added} volunteer(s). Skipped ${skipped} (duplicates/invalid).`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to import CSV.');
+    }
+  };
+
+  const exportCsv = () => {
+    const header = 'Name,Email,Phone,Skills,Total Hours,Joined\n';
+    const rows = volunteers
+      .map((v) =>
+        [
+          v.name,
+          v.email,
+          v.phoneNumber,
+          `"${v.skills.join('; ')}"`,
+          v.totalHours,
+          v.joinedDate.toLocaleDateString(),
+        ].join(',')
+      )
+      .join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'volunteers.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const filtered = volunteers.filter((v) => {
+    const q = search.trim().toLowerCase();
+    return !q || v.name.toLowerCase().includes(q) || v.email.toLowerCase().includes(q);
+  });
+
+  return (
+    <div className="two-col">
+      <section className="panel">
+        <h2>Add Volunteer</h2>
+        <form onSubmit={handleAdd} className="stacked-form">
+          <input
+            placeholder="First name"
+            value={form.firstName}
+            onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+            required
+          />
+          <input
+            placeholder="Last name"
+            value={form.lastName}
+            onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+            required
+          />
+          <input
+            type="email"
+            placeholder="Email"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            required
+          />
+          <input
+            type="tel"
+            placeholder="Phone (for reminders)"
+            value={form.phoneNumber}
+            onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
+          />
+          <button type="submit" className="primary-btn">
+            Add Volunteer
+          </button>
+        </form>
+        <p className="muted small">
+          Volunteers can also register themselves from the login page.
+        </p>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Volunteers ({volunteers.length})</h2>
+          <div className="row">
+            <label className="secondary-btn file-label">
+              Import CSV
+              <input type="file" accept=".csv,text/csv" hidden onChange={handleImport} />
+            </label>
+            <button className="secondary-btn" onClick={exportCsv}>
+              Export CSV
+            </button>
+          </div>
+        </div>
+        <p className="muted small">CSV columns: first name, last name, email, phone.</p>
+        <input
+          className="search"
+          placeholder="Search name or email…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="volunteer-list">
+          {filtered.map((v) => (
+            <div key={v.uid} className="volunteer-card">
+              {editing === v.uid ? (
+                <div className="stacked-form">
+                  <input
+                    value={editForm.firstName}
+                    onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                  />
+                  <input
+                    value={editForm.lastName}
+                    onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                  />
+                  <input
+                    value={editForm.phoneNumber}
+                    onChange={(e) => setEditForm({ ...editForm, phoneNumber: e.target.value })}
+                  />
+                  <div className="row">
+                    <button className="primary-btn" onClick={() => saveEdit(v.uid)}>
+                      Save
+                    </button>
+                    <button className="secondary-btn" onClick={() => setEditing(null)}>
+                      Cancel
                     </button>
                   </div>
-                  <p>{event.description || 'No description.'}</p>
-                  <p><strong>Date:</strong> {formatDate(event.eventDateTime)}</p>
-                  <p><strong>Location:</strong> {event.location || 'N/A'}</p>
-                  <div className="service-list">
-                    <strong>Services</strong>
-                    {eventServices.length === 0 ? (
-                      <p>No services yet.</p>
-                    ) : (
-                      eventServices.map((service) => {
-                        const slots = buildServiceSlots(service);
-
-                        return (
-                          <div key={service.id} className="service-row">
-                            <div className="service-title-row">
-                              <div>
-                                <span className="service-name">{service.name}</span>
-                                <small className="service-time">
-                                  {formatTime(service.startTime)} - {formatTime(service.endTime)}
-                                </small>
-                              </div>
-                              <button
-                                type="button"
-                                className="danger-btn service-remove-btn"
-                                onClick={() => handleDeleteService(service.id, service.name, event.id)}
-                              >
-                                Remove Service
-                              </button>
-                            </div>
-                            <div className="slot-list">
-                              {slots.map((slot) => {
-                                const slotAssignments = assignments.filter(
-                                  (assignment) =>
-                                    assignment.serviceId === service.id &&
-                                    (assignment.slotKey || '') === slot.key
-                                );
-                                const assignedVolunteerIds = new Set(
-                                  slotAssignments.map((assignment) => assignment.volunteerId)
-                                );
-
-                                return (
-                                  <div key={slot.key} className="slot-row">
-                                    <div>
-                                      <span className="slot-label">{slot.label}</span>
-                                      <small>{slotAssignments.length}{service.capacity ? `/${service.capacity}` : ''} assigned</small>
-                                      {slotAssignments.length > 0 && (
-                                        <div className="assigned-volunteers">
-                                          {slotAssignments.map((assignment) => (
-                                            <div key={assignment.id} className="assigned-volunteer-row">
-                                              <span>{assignment.volunteerName}</span>
-                                              <button
-                                                type="button"
-                                                className="danger-btn remove-assignment-btn"
-                                                onClick={() => handleRemoveVolunteerFromService(assignment)}
-                                              >
-                                                Remove
-                                              </button>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                    <select
-                                      defaultValue=""
-                                      onChange={(e) => {
-                                        if (e.target.value) {
-                                          handleAssignVolunteerToService(event.id, service.id, slot, e.target.value);
-                                          e.target.value = '';
-                                        }
-                                      }}
-                                      disabled={Boolean(service.capacity && slotAssignments.length >= service.capacity)}
-                                    >
-                                      <option value="">Assign user</option>
-                                      {volunteers
-                                        .filter((volunteer) => !assignedVolunteerIds.has(volunteer.uid))
-                                        .map((volunteer) => (
-                                          <option key={volunteer.uid} value={volunteer.uid}>
-                                            {volunteer.name}
-                                          </option>
-                                        ))}
-                                    </select>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <strong>{v.name}</strong>
+                    {v.isAdmin && <span className="admin-tag">admin</span>}
+                    <p className="muted small">
+                      {v.email} · {v.phoneNumber || 'no phone'} · {v.totalHours}h
+                    </p>
+                    {v.skills.length > 0 && (
+                      <p className="muted small">{v.skills.join(', ')}</p>
                     )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="records-section">
-          <h2>Users</h2>
-          <div className="list-toolbar">
-            <input
-              type="search"
-              placeholder="Search users..."
-              value={volunteerSearch}
-              onChange={(e) => setVolunteerSearch(e.target.value)}
-            />
-          </div>
-          <div className="volunteers-list">
-            {filteredVolunteers.map((volunteer) => {
-              const assignedNames = assignments
-                .filter((assignment) => assignment.volunteerId === volunteer.uid)
-                .map((assignment) => {
-                  const service = services.find((item) => item.id === assignment.serviceId);
-                  const slotLabel = assignment.slotStartTime && assignment.slotEndTime
-                    ? ` (${formatTime(assignment.slotStartTime)} - ${formatTime(assignment.slotEndTime)})`
-                    : '';
-                  return service ? `${service.name}${slotLabel}` : '';
-                })
-                .filter(Boolean);
-
-              return (
-                <div key={volunteer.uid} className="volunteer-card">
-                  <div className="card-title-row">
-                    <h3>{volunteer.name}</h3>
+                  <div className="row">
+                    <button className="link-btn" onClick={() => startEdit(v)}>
+                      Edit
+                    </button>
                     <button
-                      type="button"
-                      className="danger-btn"
-                      onClick={() => handleDeleteUser(volunteer.uid, volunteer.name)}
+                      className="link-btn danger"
+                      onClick={() => {
+                        if (window.confirm(`Remove ${v.name}?`)) deleteVolunteer(v.uid);
+                      }}
                     >
                       Remove
                     </button>
                   </div>
-                  <p><strong>Email:</strong> {volunteer.email}</p>
-                  <p><strong>Phone:</strong> {volunteer.phoneNumber || 'N/A'}</p>
-                  <p><strong>Services:</strong> {assignedNames.length ? assignedNames.join(', ') : 'None'}</p>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Announcements tab
+// ---------------------------------------------------------------------------
+
+const AnnouncementsTab: React.FC<{ uid?: string; setError: (s: string) => void }> = ({
+  uid,
+  setError,
+}) => {
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [channels, setChannels] = useState<NotificationChannel[]>(['whatsapp', 'email']);
+  const [audienceSkills, setAudienceSkills] = useState<string[]>([]);
+  const [sent, setSent] = useState(false);
+
+  const toggleChannel = (c: NotificationChannel) =>
+    setChannels((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSent(false);
+    try {
+      if (!title.trim() || !body.trim()) throw new Error('Title and message are required.');
+      await createAnnouncement({
+        title: title.trim(),
+        body: body.trim(),
+        channels,
+        audienceSkills,
+        createdBy: uid,
+      });
+      setTitle('');
+      setBody('');
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create announcement.');
+    }
+  };
+
+  return (
+    <section className="panel">
+      <h2>New Announcement</h2>
+      <p className="muted small">
+        Announcements are stored and delivered by the scheduled sender on the channels you pick.
+      </p>
+      {sent && <div className="success-message">Announcement queued for delivery.</div>}
+      <form onSubmit={handleSend} className="stacked-form">
+        <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <textarea
+          placeholder="Message to volunteers"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+        />
+        <label className="field-label">Send via</label>
+        <div className="chip-group">
+          {(['whatsapp', 'email', 'push'] as NotificationChannel[]).map((c) => (
+            <button
+              type="button"
+              key={c}
+              className={`chip ${channels.includes(c) ? 'chip-on' : ''}`}
+              onClick={() => toggleChannel(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+        <label className="field-label">Only volunteers with skills (optional)</label>
+        <div className="chip-group">
+          {SKILL_OPTIONS.map((s) => (
+            <button
+              type="button"
+              key={s}
+              className={`chip ${audienceSkills.includes(s) ? 'chip-on' : ''}`}
+              onClick={() =>
+                setAudienceSkills((prev) =>
+                  prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
+                )
+              }
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        <button type="submit" className="primary-btn">
+          Send Announcement
+        </button>
+      </form>
+    </section>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// History tab (past events + tasks)
+// ---------------------------------------------------------------------------
+
+const HistoryTab: React.FC<{
+  volunteers: VolunteerProfile[];
+  setError: (s: string) => void;
+}> = ({ volunteers, setError }) => {
+  const [pastTasks, setPastTasks] = useState<VolunteerTask[] | null>(null);
+
+  const volunteerById = useMemo(() => {
+    const map = new Map<string, VolunteerProfile>();
+    volunteers.forEach((v) => map.set(v.uid, v));
+    return map;
+  }, [volunteers]);
+
+  useEffect(() => {
+    getPastTasks()
+      .then(setPastTasks)
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load history.');
+        setPastTasks([]);
+      });
+  }, [setError]);
+
+  // Group past tasks by event (eventId), standalone tasks under "Other tasks".
+  const eventGroups = useMemo(() => {
+    if (!pastTasks) return [];
+    const groups = new Map<
+      string,
+      { key: string; name: string; date?: Date; tasks: VolunteerTask[] }
+    >();
+    for (const task of pastTasks) {
+      const key = task.eventId || `__standalone__`;
+      const name = task.eventId ? task.eventName || 'Event' : 'Other tasks';
+      if (!groups.has(key)) {
+        groups.set(key, { key, name, date: task.startDateTime, tasks: [] });
+      }
+      const g = groups.get(key)!;
+      g.tasks.push(task);
+      if (task.startDateTime > (g.date || new Date(0))) g.date = task.startDateTime;
+    }
+    const arr = Array.from(groups.values());
+    arr.forEach((g) =>
+      g.tasks.sort((a, b) => b.startDateTime.getTime() - a.startDateTime.getTime())
+    );
+    arr.sort((a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0));
+    return arr;
+  }, [pastTasks]);
+
+  if (pastTasks === null) {
+    return (
+      <section className="panel">
+        <h2>History</h2>
+        <p className="muted">Loading past events…</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel">
+      <h2>Past events &amp; tasks</h2>
+      <p className="muted small">Events and tasks whose date has already passed.</p>
+      {eventGroups.length === 0 && <p className="muted">No past tasks yet.</p>}
+
+      <div className="task-list">
+        {eventGroups.map((group) => (
+          <div key={group.key} className="task-card">
+            <div className="task-card-head">
+              <div>
+                <h3>{group.name}</h3>
+                <p className="muted small">
+                  {group.tasks.length} task(s) · most recent {formatDate(group.date)}
+                </p>
+              </div>
+            </div>
+            <div className="occurrence-list">
+              {group.tasks.map((task) => (
+                <div key={task.id} className="occurrence-row">
+                  <div className="occurrence-head">
+                    <span>
+                      {task.title} · {formatDate(task.startDateTime)}
+                    </span>
+                    <span className={`status-badge status-${task.status}`}>{task.status}</span>
+                  </div>
+                  {task.assignedVolunteers.length > 0 ? (
+                    <p className="small muted">
+                      Volunteers:{' '}
+                      {task.assignedVolunteers
+                        .map((vid) => volunteerById.get(vid)?.name || 'Unknown')
+                        .join(', ')}
+                    </p>
+                  ) : (
+                    <p className="small muted">No volunteers were assigned.</p>
+                  )}
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </section>
+        ))}
       </div>
+    </section>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Reports tab
+// ---------------------------------------------------------------------------
+
+const ReportsTab: React.FC<{ volunteers: VolunteerProfile[]; tasks: VolunteerTask[] }> = ({
+  volunteers,
+  tasks,
+}) => {
+  const [logs, setLogs] = useState<HourLog[]>([]);
+
+  useEffect(() => {
+    getHourLogs().then(setLogs).catch(() => setLogs([]));
+  }, []);
+
+  const totalHours = volunteers.reduce((sum, v) => sum + (v.totalHours || 0), 0);
+  const upcoming = tasks.filter(
+    (t) => t.startDateTime > new Date() && t.status !== 'cancelled'
+  ).length;
+  const understaffed = tasks.filter(
+    (t) => t.status === 'open' && openSlots(t) > 0 && t.startDateTime > new Date()
+  );
+
+  return (
+    <div>
+      <div className="stat-grid">
+        <div className="stat-card">
+          <span className="stat-num">{volunteers.length}</span>
+          <span className="stat-label">Volunteers</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-num">{upcoming}</span>
+          <span className="stat-label">Upcoming tasks</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-num">{totalHours}</span>
+          <span className="stat-label">Total hours served</span>
+        </div>
+        <div className="stat-card">
+          <span className="stat-num">{understaffed.length}</span>
+          <span className="stat-label">Understaffed tasks</span>
+        </div>
+      </div>
+
+      {understaffed.length > 0 && (
+        <section className="panel">
+          <h2>Needs more volunteers</h2>
+          <ul>
+            {understaffed.map((t) => (
+              <li key={t.id}>
+                {t.title} — {openSlots(t)} slot(s) open ({formatDate(t.startDateTime)})
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="panel">
+        <h2>Hours by volunteer</h2>
+        <table className="report-table">
+          <thead>
+            <tr>
+              <th>Volunteer</th>
+              <th>Total Hours</th>
+              <th>Sessions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {volunteers.map((v) => (
+              <tr key={v.uid}>
+                <td>{v.name}</td>
+                <td>{v.totalHours}</td>
+                <td>{logs.filter((l) => l.volunteerId === v.uid).length}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
     </div>
   );
 };
