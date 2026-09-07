@@ -17,7 +17,7 @@ const routerBasename =
 const FirebaseSetupRequired = () => (
   <main className="setup-required">
     <section className="setup-panel">
-      <p className="setup-eyebrow">Temple Volunteers</p>
+      <p className="setup-eyebrow">ISKCON Towaco Volunteer Management System</p>
       <h1>Firebase setup is needed before public testing.</h1>
       <p>
         The app deployed successfully, but GitHub Actions did not receive the

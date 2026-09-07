@@ -24,7 +24,9 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  const title = (payload.notification && payload.notification.title) || 'Temple Volunteers';
+  const title =
+    (payload.notification && payload.notification.title) ||
+    'ISKCON Towaco Volunteer Management System';
   const body = (payload.notification && payload.notification.body) || '';
   self.registration.showNotification(title, { body });
 });

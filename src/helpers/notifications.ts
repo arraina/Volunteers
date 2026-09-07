@@ -57,7 +57,7 @@ export async function listenForForegroundMessages(handler: (title: string, body:
     const instance = await getMessagingInstance();
     onMessage(instance, (payload) => {
       handler(
-        payload.notification?.title || 'Temple Volunteers',
+        payload.notification?.title || 'ISKCON Towaco Volunteer Management System',
         payload.notification?.body || ''
       );
     });

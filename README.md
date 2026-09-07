@@ -1,4 +1,4 @@
-# Temple Volunteer Management
+# ISKCON Towaco Volunteer Management System
 
 A zero-cost volunteer coordination app for a temple/nonprofit. Admins create
 **tasks** and assign volunteers; volunteers can register themselves and sign up
@@ -11,6 +11,8 @@ web push, scheduled entirely by **GitHub Actions** (no server, no credit card).
 - Add / edit / remove volunteers (and bulk import/export via CSV)
 - Create tasks: title, description, date/time, location, skills needed,
   number of volunteers needed, recurrence (daily/weekly/monthly)
+- Use AI Create to turn a plain-language event description into an editable
+  event and task plan
 - Assign volunteers to tasks or open tasks for self sign-up
 - Change task status (open / filled / in progress / completed / cancelled)
 - Send announcements to all volunteers or a skill-filtered group
@@ -29,6 +31,15 @@ web push, scheduled entirely by **GitHub Actions** (no server, no credit card).
   reminder time is due, and messages each assigned volunteer on their chosen
   channels. Recurring tasks automatically spawn their next occurrence.
 
+**AI Create**
+- An admin can describe an event in plain language, including dates, times,
+  tasks, skills, and volunteer counts.
+- Google Gemini converts the request into a structured event and task plan.
+- The app always presents an editable preview before saving anything to
+  Firestore.
+- Gemini is called through a Cloudflare Worker, so the API key remains an
+  encrypted server-side secret and is never included in the public React app.
+
 ## Cost
 
 | Piece | Cost |
@@ -38,6 +49,8 @@ web push, scheduled entirely by **GitHub Actions** (no server, no credit card).
 | Scheduler (GitHub Actions) | Free |
 | Email (Resend free tier) | Free |
 | Web push (Firebase Cloud Messaging) | Free |
+| AI proxy (Cloudflare Workers free tier) | Free within Cloudflare's limits |
+| AI generation (Gemini) | Subject to the selected Gemini plan and quota |
 | WhatsApp (Meta Cloud API) | Meta's per-conversation fee only |
 
 Everything except WhatsApp messages is free. WhatsApp uses your existing Meta
@@ -73,3 +86,18 @@ Admin access is granted only by an `admins/{uid}` document with `isAdmin: true`
 — there are no hardcoded admin logins. After the first volunteer signs up,
 create that document for their UID in the Firestore console (or use the
 first-admin claim helper). See [SETUP.md](./SETUP.md).
+
+## AI Create setup
+
+The deployed app uses a Cloudflare Worker as a secure Gemini proxy. Configure:
+
+- Cloudflare Worker secret `GEMINI_API_KEY`: a Gemini API key created in
+  Google AI Studio
+- Cloudflare Worker variable `ALLOWED_ORIGIN`: the public app origin, currently
+  `https://arraina.github.io`
+- GitHub Actions repository variable `REACT_APP_AI_ENDPOINT`: the deployed
+  Worker URL
+
+The Worker source and deployment settings are in `ai-proxy/worker.js` and
+`ai-proxy/wrangler.jsonc`. See [SETUP.md](./SETUP.md) for complete deployment
+instructions.

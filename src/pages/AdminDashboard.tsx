@@ -109,7 +109,7 @@ const AdminDashboard: React.FC = () => {
     <div className="admin-dashboard">
       <header className="dashboard-header">
         <div>
-          <h1>Temple Volunteer Management</h1>
+          <h1>ISKCON Towaco Volunteer Management System</h1>
           <p>Admin</p>
         </div>
         <div className="header-actions">

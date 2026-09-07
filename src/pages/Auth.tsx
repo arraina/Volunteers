@@ -120,7 +120,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
     <div className="auth-page">
       <aside className="auth-hero">
         <div className="brand">
-          <span className="leaf">🌿</span> Temple Volunteers
+          <span className="leaf">🌿</span> ISKCON Towaco Volunteer Management System
         </div>
         <h1>Simple, friendly volunteer signups for your temple.</h1>
         <p className="lede">
