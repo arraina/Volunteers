@@ -1,101 +1,75 @@
-# Temple Volunteers
+# Temple Volunteer Management
 
-Simple volunteer management app for a nonprofit/temple, using Firebase Auth, Firestore, Hosting, Cloud Functions, and Twilio SMS reminders.
+A zero-cost volunteer coordination app for a temple/nonprofit. Admins create
+**tasks** and assign volunteers; volunteers can register themselves and sign up
+for open tasks. The app sends **automated reminders** over WhatsApp, email, and
+web push, scheduled entirely by **GitHub Actions** (no server, no credit card).
 
-## Folder Structure
+## What it does
 
-```text
-/
-  index.html                 Static app source, vehicle-style architecture
-  app.js                     Main browser app controller
-  auth.js                    Auth/session manager
-  storage.js                 Firestore/local demo data manager
-  ui.js                      DOM rendering
-  firebase-config.js         Firebase web config, no Twilio secrets
-  local-data.js              Demo seed data
-  styles.css
-  volunteers/                Firebase Hosting public folder, mirrored static app
-  src/                       React reference implementation/components
-    config/firebase.ts
-    helpers/
-    pages/
-  functions/
-    src/index.ts             Scheduled SMS sender and admin callables
-    package.json
-    tsconfig.json
-  firestore.rules
-  firestore.indexes.json
-  firebase.json
+**Admins can**
+- Add / edit / remove volunteers (and bulk import/export via CSV)
+- Create tasks: title, description, date/time, location, skills needed,
+  number of volunteers needed, recurrence (daily/weekly/monthly)
+- Assign volunteers to tasks or open tasks for self sign-up
+- Change task status (open / filled / in progress / completed / cancelled)
+- Send announcements to all volunteers or a skill-filtered group
+- View reports: total hours served, upcoming and understaffed tasks
+
+**Volunteers can**
+- Self-register (name, email, phone captured)
+- Browse and sign up for open tasks (capacity-enforced)
+- See their assigned tasks and withdraw
+- Check in / check out to log volunteer hours
+- Edit their profile: skills, weekly availability, and reminder preferences
+- Enable browser push notifications
+
+**Automated reminders**
+- A scheduled GitHub Actions job runs every 15 minutes, finds tasks whose
+  reminder time is due, and messages each assigned volunteer on their chosen
+  channels. Recurring tasks automatically spawn their next occurrence.
+
+## Cost
+
+| Piece | Cost |
+| --- | --- |
+| Hosting (GitHub Pages) | Free |
+| Database + Auth (Firebase free tier) | Free |
+| Scheduler (GitHub Actions) | Free |
+| Email (Resend free tier) | Free |
+| Web push (Firebase Cloud Messaging) | Free |
+| WhatsApp (Meta Cloud API) | Meta's per-conversation fee only |
+
+Everything except WhatsApp messages is free. WhatsApp uses your existing Meta
+WhatsApp Business number; Meta charges per conversation for business-initiated
+template messages.
+
+## Architecture
+
+```
+React app (GitHub Pages)  ──►  Firebase Auth + Firestore (free tier)
+                                     ▲
+                                     │ reads tasks/volunteers/announcements
+GitHub Actions cron ── reminder-sender/ (firebase-admin) ──► WhatsApp / Email / Push
 ```
 
-## Implemented
+- `src/` — the React + TypeScript app (the only frontend)
+- `reminder-sender/` — Node script run by GitHub Actions to send reminders
+- `firestore.rules` — access control (admins vs volunteers)
+- `.github/workflows/pages.yml` — builds & deploys the app to GitHub Pages
+- `.github/workflows/reminders.yml` — the scheduled reminder sender
 
-- Firebase SDK v10 compat scripts in the hosted static app.
-- Firebase Auth login/signup.
-- Admin dashboard:
-  - create service events with topic, date/time, location, and status
-  - update event status
-  - assign volunteers to events
-  - create/remove volunteers
-  - configure reminder rules with message, hours before event, and preferred send time
-  - view existing reminder rules
-- Volunteer dashboard:
-  - edit own profile
-  - view only assigned events
-- Firestore rules:
-  - admins can manage app records
-  - volunteers can read/update only their profile
-  - volunteers can read only assigned events
-  - reminders and sent message writes are blocked from frontend clients
-- Cloud Functions:
-  - `sendSMSReminders` scheduled every minute
-  - sends pending due reminders through Twilio
-  - updates reminders to `sent` or `failed`
-  - logs deliveries in `sentMessages`
-  - `createRemindersForEvent` creates reminder docs server-side
-  - `createVolunteer`, `deleteVolunteer`, `deleteServiceEvent`
-  - `claimInitialAdmin` lets the first signed-in user bootstrap admin access only if no admin exists yet
-- Firebase Hosting serves `volunteers/`.
-- Firestore composite index for `reminders.status + reminders.reminderTime`.
+## Quick start
 
-## First Admin
+1. Create a Firebase project (Auth: Email/Password enabled; Firestore enabled).
+2. Copy `.env.example` to `.env` and fill in the `REACT_APP_FIREBASE_*` values.
+3. `npm install && npm start` to run locally.
+4. Deploy: push to `main` (GitHub Pages workflow builds and publishes).
+5. Configure secrets for reminders — see [SETUP.md](./SETUP.md).
 
-After deploying Functions and enabling Firebase Auth, sign up in the app. If no admin exists yet, the volunteer page shows **Claim Admin Access**. Click it, then log out and back in.
+## First admin
 
-This creates:
-
-```text
-admins/{uid}
-  isAdmin: true
-```
-
-## Twilio Configuration
-
-Preferred Firebase v2 secrets:
-
-```bash
-firebase functions:secrets:set TWILIO_ACCOUNT_SID
-firebase functions:secrets:set TWILIO_AUTH_TOKEN
-firebase functions:secrets:set TWILIO_PHONE_NUMBER
-```
-
-Legacy config style is also supported:
-
-```bash
-firebase functions:config:set twilio.account_sid="AC..." twilio.auth_token="..." twilio.phone_number="+15551234567"
-```
-
-Never store Twilio credentials in frontend files.
-
-## Deploy
-
-```bash
-npx firebase login
-npx firebase deploy --only firestore,functions,hosting
-```
-
-For hosting only:
-
-```bash
-npx firebase deploy --only hosting
-```
+Admin access is granted only by an `admins/{uid}` document with `isAdmin: true`
+— there are no hardcoded admin logins. After the first volunteer signs up,
+create that document for their UID in the Firestore console (or use the
+first-admin claim helper). See [SETUP.md](./SETUP.md).

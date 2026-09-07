@@ -1,140 +1,109 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function signedIn() {
       return request.auth != null;
     }
 
+    // Admin status is granted ONLY by an admins/{uid} doc with isAdmin == true.
+    // No hardcoded admin emails.
     function isAdmin() {
       return signedIn()
-        && (
-          request.auth.token.email == 'admin@example.com'
-          || (
-            exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-            && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true
-          )
-        );
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true;
     }
 
-    function onlyVolunteerEditableFields() {
-      return request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly([
-          'firstName',
-          'lastName',
-          'name',
-          'phoneNumber',
-          'assignedEvents',
-          'assignedServices',
-          'updatedAt'
-        ]);
+    function noAdminsYet() {
+      // Allows the very first signed-in user to claim admin (bootstrap only).
+      return !exists(/databases/$(database)/documents/adminsMeta/count)
+        || get(/databases/$(database)/documents/adminsMeta/count).data.total == 0;
     }
 
-    function validVolunteerCreate(volunteerId) {
-      return signedIn()
-        && request.auth.uid == volunteerId
-        && request.resource.data.keys().hasOnly([
-          'firstName',
-          'lastName',
-          'name',
-          'email',
-          'phoneNumber',
-          'address',
-          'availableHours',
-          'assignedEvents',
-          'assignedServices',
-          'publicSelfAdded',
-          'joinedDate',
-          'createdAt',
-          'updatedAt'
-        ])
-        && request.resource.data.email == request.auth.token.email
-        && request.resource.data.firstName is string
-        && request.resource.data.firstName.size() > 0
-        && request.resource.data.lastName is string
-        && request.resource.data.lastName.size() > 0
-        && request.resource.data.email is string
-        && request.resource.data.email.size() > 0
-        && request.resource.data.phoneNumber is string;
+    // Fields a volunteer may edit on their OWN profile.
+    function volunteerSelfEditableFields() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'firstName', 'lastName', 'name', 'phoneNumber',
+        'skills', 'availability', 'notificationPrefs', 'pushTokens', 'updatedAt'
+      ]);
     }
 
-    function validServiceAssignmentCreate(assignmentId) {
-      return signedIn()
-        && request.resource.data.keys().hasOnly([
-          'eventId',
-          'serviceId',
-          'slotKey',
-          'slotStartTime',
-          'slotEndTime',
-          'volunteerId',
-          'volunteerName',
-          'volunteerEmail',
-          'createdAt'
-        ])
-        && request.resource.data.volunteerEmail == request.auth.token.email
-        && exists(/databases/$(database)/documents/volunteers/$(request.resource.data.volunteerId))
-        && get(/databases/$(database)/documents/volunteers/$(request.resource.data.volunteerId)).data.email == request.auth.token.email
-        && request.resource.data.slotKey is string
-        && request.resource.data.slotKey.size() > 0
-        && request.resource.data.slotStartTime is string
-        && request.resource.data.slotStartTime.size() > 0
-        && request.resource.data.slotEndTime is string
-        && request.resource.data.slotEndTime.size() > 0
-        && assignmentId == request.resource.data.eventId + '_' + request.resource.data.serviceId + '_' + request.resource.data.slotKey + '_' + request.resource.data.volunteerId;
-    }
-
+    // ----- admins -----
     match /admins/{adminId} {
-      allow read, write: if isAdmin();
+      allow read: if signedIn();
+      // First admin can self-claim when none exist; afterwards only admins manage admins.
+      allow create: if isAdmin()
+        || (signedIn() && request.auth.uid == adminId && noAdminsYet());
+      allow update, delete: if isAdmin();
     }
 
+    // adminsMeta/count tracks how many admins exist (for bootstrap check).
+    match /adminsMeta/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin() || (signedIn() && noAdminsYet());
+    }
+
+    // ----- volunteers -----
     match /volunteers/{volunteerId} {
-      allow read, write: if isAdmin();
-      allow create: if validVolunteerCreate(volunteerId);
-      allow read: if signedIn()
-        && (
-          request.auth.uid == volunteerId
-          || resource.data.email == request.auth.token.email
-        );
-      allow update: if signedIn()
-        && (
-          request.auth.uid == volunteerId
-          || resource.data.email == request.auth.token.email
-        )
-        && onlyVolunteerEditableFields();
+      allow read: if signedIn();
+      // Admins manage anyone; a user can create their own profile at signup.
+      allow create: if isAdmin()
+        || (signedIn()
+            && request.auth.uid == volunteerId
+            && request.resource.data.email == request.auth.token.email);
+      allow update: if isAdmin()
+        || (signedIn() && request.auth.uid == volunteerId && volunteerSelfEditableFields());
       allow delete: if isAdmin();
     }
 
-    match /serviceEvents/{eventId} {
-      allow read, write: if isAdmin();
+    // ----- tasks -----
+    match /tasks/{taskId} {
       allow read: if signedIn();
-      allow create, update, delete: if false;
+      allow create, delete: if isAdmin();
+      // Admins can update anything. Volunteers may only self-add/remove
+      // themselves on the assignedVolunteers array of an open task.
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && resource.data.openForSignup == true
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['assignedVolunteers', 'status', 'updatedAt'])
+        );
     }
 
-    match /services/{serviceId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isAdmin();
-    }
-
-    match /serviceAssignments/{assignmentId} {
+    // ----- hour logs (check-in / check-out) -----
+    match /hourLogs/{logId} {
       allow read: if isAdmin()
-        || (
-          signedIn()
-          && (
-            resource.data.volunteerId == request.auth.uid
-            || resource.data.volunteerEmail == request.auth.token.email
-          )
-        );
-      allow create: if isAdmin() || validServiceAssignmentCreate(assignmentId);
-      allow update: if false;
-      allow delete: if isAdmin()
-        || (
-          signedIn()
-          && (
-            resource.data.volunteerId == request.auth.uid
-            || resource.data.volunteerEmail == request.auth.token.email
-          )
-        );
+        || (signedIn() && resource.data.volunteerId == request.auth.uid);
+      allow create: if isAdmin()
+        || (signedIn() && request.resource.data.volunteerId == request.auth.uid);
+      allow update: if isAdmin()
+        || (signedIn() && resource.data.volunteerId == request.auth.uid);
+      allow delete: if isAdmin();
     }
 
+    // ----- events (admins author; everyone reads) -----
+    match /events/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // ----- announcements (admins author; everyone reads) -----
+    match /announcements/{id} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // ----- reminders & sent messages: server-only, never client-accessible -----
+    match /reminders/{id} {
+      allow read, write: if false;
+    }
+    match /sentMessages/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Deny everything else.
     match /{document=**} {
       allow read, write: if false;
     }
