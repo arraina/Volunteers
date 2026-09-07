@@ -10,16 +10,22 @@
 //   5. Copy the Worker URL into the app env as REACT_APP_AI_ENDPOINT.
 
 const GEMINI_MODEL = 'gemini-flash-latest';
+const MAX_BODY_BYTES = 16 * 1024;
 
 export default {
   async fetch(request, env) {
     const allowedOrigin = env.ALLOWED_ORIGIN || '*';
+    const requestOrigin = request.headers.get('Origin');
     const cors = {
       'Access-Control-Allow-Origin': allowedOrigin,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
+      Vary: 'Origin',
     };
 
+    if (allowedOrigin !== '*' && requestOrigin !== allowedOrigin) {
+      return json({ error: 'Origin not allowed.' }, 403, cors);
+    }
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: cors });
     }
@@ -28,6 +34,10 @@ export default {
     }
     if (!env.GEMINI_API_KEY) {
       return json({ error: 'GEMINI_API_KEY not configured on the Worker.' }, 500, cors);
+    }
+    const contentLength = Number(request.headers.get('Content-Length') || 0);
+    if (contentLength > MAX_BODY_BYTES) {
+      return json({ error: 'Request body is too large.' }, 413, cors);
     }
 
     let body;
@@ -38,13 +48,16 @@ export default {
     }
 
     const prompt = String(body.prompt || '').slice(0, 4000);
-    const system = String(body.system || '');
+    const system = String(body.system || '').slice(0, 8000);
     if (!prompt) return json({ error: 'Missing prompt.' }, 400, cors);
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${env.GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
     const geminiRes = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': env.GEMINI_API_KEY,
+      },
       body: JSON.stringify({
         systemInstruction: system ? { parts: [{ text: system }] } : undefined,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
