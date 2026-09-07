@@ -9,7 +9,7 @@
 //   4. Optional: set ALLOWED_ORIGIN to your app's URL to lock down CORS.
 //   5. Copy the Worker URL into the app env as REACT_APP_AI_ENDPOINT.
 
-const GEMINI_MODEL = 'gemini-flash-latest';
+const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest'];
 const MAX_BODY_BYTES = 16 * 1024;
 
 export default {
@@ -51,30 +51,46 @@ export default {
     const system = String(body.system || '').slice(0, 8000);
     if (!prompt) return json({ error: 'Missing prompt.' }, 400, cors);
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-    const geminiRes = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': env.GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        systemInstruction: system ? { parts: [{ text: system }] } : undefined,
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
-      }),
+    const payload = JSON.stringify({
+      systemInstruction: system ? { parts: [{ text: system }] } : undefined,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
     });
+    let lastError = 'Gemini request failed.';
 
-    if (!geminiRes.ok) {
-      const err = await geminiRes.json().catch(() => ({}));
-      return json({ error: err?.error?.message || 'Gemini request failed.' }, 502, cors);
+    for (const model of GEMINI_MODELS) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const geminiRes = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': env.GEMINI_API_KEY,
+          },
+          body: payload,
+        });
+
+        if (geminiRes.ok) {
+          const data = await geminiRes.json();
+          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          return json({ text }, 200, cors);
+        }
+
+        const err = await geminiRes.json().catch(() => ({}));
+        lastError = err?.error?.message || lastError;
+        if ((geminiRes.status === 429 || geminiRes.status === 503) && attempt < 2) {
+          await delay(800 * (attempt + 1));
+          continue;
+        }
+        break;
+      }
     }
 
-    const data = await geminiRes.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return json({ text }, 200, cors);
+    return json({ error: lastError }, 502, cors);
   },
 };
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function json(obj, status, cors) {
   return new Response(JSON.stringify(obj), {
