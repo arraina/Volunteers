@@ -211,3 +211,54 @@
 .toggle-link a:hover {
   text-decoration: underline;
 }
+
+.forgot-password,
+.text-btn {
+  border: 0;
+  background: transparent;
+  color: var(--primary-dark);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+}
+
+.forgot-password {
+  display: block;
+  margin: -0.35rem 0 0.25rem auto;
+  font-size: 0.88rem;
+}
+
+.forgot-password:disabled,
+.text-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.verification-page {
+  display: block;
+}
+
+.verification-page .auth-panel {
+  min-height: 100vh;
+}
+
+.verification-card {
+  text-align: center;
+}
+
+.auth-kicker {
+  color: var(--primary-dark);
+  font-size: 0.8rem;
+  font-weight: 800;
+  margin: 0 0 0.75rem;
+  text-transform: uppercase;
+}
+
+.verification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.25rem;
+}

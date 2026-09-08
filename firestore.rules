@@ -6,10 +6,14 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function verifiedUser() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
     // Admin status is granted ONLY by an admins/{uid} doc with isAdmin == true.
     // No hardcoded admin emails.
     function isAdmin() {
-      return signedIn()
+      return verifiedUser()
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
         && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true;
     }
@@ -21,13 +25,18 @@ service cloud.firestore {
     }
 
     function isOwnDocument(documentId) {
-      return signedIn() && request.auth.uid == documentId;
+      return verifiedUser() && request.auth.uid == documentId;
     }
 
     function onlyAssignmentFieldsChanged() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         'assignedVolunteers', 'status', 'updatedAt'
       ]);
+    }
+
+    function hasValidPhoneNumber() {
+      return request.resource.data.phoneNumber is string
+        && request.resource.data.phoneNumber.matches('^\\+[1-9][0-9]{7,14}$');
     }
 
     function isSelfSignup() {
@@ -71,14 +80,14 @@ service cloud.firestore {
       allow read: if isAdmin() || isOwnDocument(adminId);
       // First admin can self-claim when none exist; afterwards only admins manage admins.
       allow create: if isAdmin()
-        || (signedIn() && request.auth.uid == adminId && noAdminsYet());
+        || (verifiedUser() && request.auth.uid == adminId && noAdminsYet());
       allow update, delete: if isAdmin();
     }
 
     // adminsMeta/count tracks how many admins exist (for bootstrap check).
     match /adminsMeta/{docId} {
-      allow read: if signedIn();
-      allow write: if isAdmin() || (signedIn() && noAdminsYet());
+      allow read: if verifiedUser();
+      allow write: if isAdmin() || (verifiedUser() && noAdminsYet());
     }
 
     // ----- volunteers -----
@@ -89,42 +98,46 @@ service cloud.firestore {
       allow create: if isAdmin()
         || (signedIn()
             && request.auth.uid == volunteerId
-            && request.resource.data.email == request.auth.token.email);
+            && request.resource.data.email == request.auth.token.email
+            && hasValidPhoneNumber());
       allow update: if isAdmin()
-        || (signedIn() && request.auth.uid == volunteerId && volunteerSelfEditableFields());
+        || (verifiedUser()
+            && request.auth.uid == volunteerId
+            && volunteerSelfEditableFields()
+            && hasValidPhoneNumber());
       allow delete: if isAdmin();
     }
 
     // ----- tasks -----
     match /tasks/{taskId} {
-      allow read: if signedIn();
+      allow read: if verifiedUser();
       allow create, delete: if isAdmin();
       // Admins can update anything. Volunteers may only self-add/remove
       // themselves on the assignedVolunteers array of an open task.
       allow update: if isAdmin()
-        || (signedIn() && (isSelfSignup() || isSelfWithdrawal()));
+        || (verifiedUser() && (isSelfSignup() || isSelfWithdrawal()));
     }
 
     // ----- hour logs (check-in / check-out) -----
     match /hourLogs/{logId} {
       allow read: if isAdmin()
-        || (signedIn() && resource.data.volunteerId == request.auth.uid);
+        || (verifiedUser() && resource.data.volunteerId == request.auth.uid);
       allow create: if isAdmin()
-        || (signedIn() && request.resource.data.volunteerId == request.auth.uid);
+        || (verifiedUser() && request.resource.data.volunteerId == request.auth.uid);
       allow update: if isAdmin()
-        || (signedIn() && resource.data.volunteerId == request.auth.uid);
+        || (verifiedUser() && resource.data.volunteerId == request.auth.uid);
       allow delete: if isAdmin();
     }
 
     // ----- events (admins author; everyone reads) -----
     match /events/{id} {
-      allow read: if signedIn();
+      allow read: if verifiedUser();
       allow write: if isAdmin();
     }
 
     // ----- announcements (admins author; everyone reads) -----
     match /announcements/{id} {
-      allow read: if signedIn();
+      allow read: if verifiedUser();
       allow write: if isAdmin();
     }
 

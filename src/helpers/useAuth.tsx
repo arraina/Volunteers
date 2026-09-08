@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onIdTokenChanged, User } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { isUserAdmin } from './types';
 
@@ -15,12 +15,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [state, setState] = useState<AuthState>({ user: null, isAdmin: false, loading: true });
 
   useEffect(() => {
-    return onAuthStateChanged(auth, async (user) => {
+    return onIdTokenChanged(auth, async (user) => {
       if (!user) {
         setState({ user: null, isAdmin: false, loading: false });
         return;
       }
-      const admin = await isUserAdmin(user);
+      const admin = user.emailVerified ? await isUserAdmin(user) : false;
       setState({ user, isAdmin: admin, loading: false });
     });
   }, []);

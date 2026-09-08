@@ -21,6 +21,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { normalizePhoneNumber } from './phone';
 import {
   Announcement,
   HourLog,
@@ -127,7 +128,7 @@ function buildVolunteerDoc(input: VolunteerInput) {
     lastName,
     name: `${firstName} ${lastName}`.trim(),
     email: input.email.trim().toLowerCase(),
-    phoneNumber: input.phoneNumber.trim(),
+    phoneNumber: normalizePhoneNumber(input.phoneNumber),
     skills: input.skills || [],
     availability: input.availability || [],
     notificationPrefs: { whatsapp: true, email: true, push: false },
@@ -143,7 +144,9 @@ export async function updateVolunteer(
   const payload: Record<string, unknown> = { updatedAt: serverTimestamp() };
   if (data.firstName !== undefined) payload.firstName = data.firstName;
   if (data.lastName !== undefined) payload.lastName = data.lastName;
-  if (data.phoneNumber !== undefined) payload.phoneNumber = data.phoneNumber;
+  if (data.phoneNumber !== undefined) {
+    payload.phoneNumber = normalizePhoneNumber(data.phoneNumber);
+  }
   if (data.skills !== undefined) payload.skills = data.skills;
   if (data.availability !== undefined) payload.availability = data.availability;
   if (data.notificationPrefs !== undefined) payload.notificationPrefs = data.notificationPrefs;
@@ -171,9 +174,13 @@ export async function bulkImportVolunteers(
       skipped += 1;
       continue;
     }
-    await createVolunteer(row);
-    existingEmails.add(email);
-    added += 1;
+    try {
+      await createVolunteer(row);
+      existingEmails.add(email);
+      added += 1;
+    } catch {
+      skipped += 1;
+    }
   }
   return { added, skipped };
 }

@@ -23,6 +23,7 @@ import {
   updateVolunteer,
 } from '../helpers/store';
 import { enableWebPush } from '../helpers/notifications';
+import { normalizePhoneNumber } from '../helpers/phone';
 import '../pages/AdminDashboard.css';
 import './VolunteerDashboard.css';
 
@@ -271,10 +272,11 @@ const ProfileTab: React.FC<{
     setError('');
     try {
       if (!firstName.trim() || !lastName.trim()) throw new Error('Name is required.');
+      const normalizedPhone = normalizePhoneNumber(phoneNumber, true);
       await updateVolunteer(profile.uid, {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
-        phoneNumber: phoneNumber.trim(),
+        phoneNumber: normalizedPhone,
         skills,
         availability,
         notificationPrefs: prefs,
@@ -314,6 +316,7 @@ const ProfileTab: React.FC<{
           value={phoneNumber}
           onChange={(e) => setPhoneNumber(e.target.value)}
           placeholder="Phone (for reminders)"
+          required
         />
 
         <label className="field-label">Your skills / interests</label>

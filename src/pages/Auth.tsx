@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   createUserWithEmailAndPassword,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   updateProfile,
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { isUserAdmin } from '../helpers/types';
 import { createVolunteerProfile, getVolunteer } from '../helpers/store';
+import { normalizePhoneNumber } from '../helpers/phone';
 import './Auth.css';
 
 interface AuthProps {
@@ -46,6 +49,9 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const actionCodeSettings = {
+    url: `${window.location.origin}${window.location.pathname.startsWith('/Volunteers') ? '/Volunteers' : ''}/login`,
+  };
 
   async function routeByRole(uid: string) {
     const user = auth.currentUser;
@@ -64,11 +70,10 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
       const normalizedEmail = email.trim().toLowerCase();
       const fn = firstName.trim();
       const ln = lastName.trim();
-      const phone = phoneNumber.trim();
+      const phone = normalizePhoneNumber(phoneNumber, true);
 
       if (!fn || !ln) throw new Error('First and last name are required.');
       if (!normalizedEmail) throw new Error('Email is required.');
-      if (!phone) throw new Error('Phone number is required (used for reminders).');
       if (password.length < 6) throw new Error('Password must be at least 6 characters.');
 
       const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
@@ -79,7 +84,8 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
         email: normalizedEmail,
         phoneNumber: phone,
       });
-      navigate('/dashboard');
+      await sendEmailVerification(credential.user, actionCodeSettings);
+      navigate('/verify-email', { state: { email: normalizedEmail } });
     } catch (err) {
       setError(getErrorMessage(err, 'Unable to create your account.'));
     } finally {
@@ -97,6 +103,10 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
       if (!password) throw new Error('Password is required.');
 
       const credential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+      if (!credential.user.emailVerified) {
+        navigate('/verify-email', { state: { email: normalizedEmail } });
+        return;
+      }
       // Ensure a volunteer profile exists (e.g. accounts created before profile).
       const profile = await getVolunteer(credential.user.uid);
       if (!profile) {
@@ -111,6 +121,29 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
       await routeByRole(credential.user.uid);
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to log in.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setError('');
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError('Enter your email address first.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, normalizedEmail, actionCodeSettings);
+      window.alert('If an account exists for that email, a password reset link has been sent.');
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err
+        ? (err as { code?: string }).code
+        : '';
+      if (code === 'auth/invalid-email') setError('Please enter a valid email address.');
+      else if (code === 'auth/too-many-requests') setError('Too many attempts. Please try again later.');
+      else window.alert('If an account exists for that email, a password reset link has been sent.');
     } finally {
       setLoading(false);
     }
@@ -208,7 +241,9 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
                 onChange={(e) => setPhoneNumber(e.target.value)}
                 required
               />
-              <small className="field-hint">Used for WhatsApp/SMS reminders.</small>
+              <small className="field-hint">
+                US numbers may use 10 digits. Other numbers must include a country code.
+              </small>
             </div>
           )}
 
@@ -222,6 +257,17 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
               required
             />
           </div>
+
+          {isLogin && (
+            <button
+              type="button"
+              className="forgot-password"
+              onClick={handleForgotPassword}
+              disabled={loading}
+            >
+              Forgot password?
+            </button>
+          )}
 
           <button type="submit" disabled={loading} className="submit-btn">
             {loading ? 'Please wait…' : isLogin ? 'Login' : 'Create Account'}

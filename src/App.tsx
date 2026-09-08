@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import AuthPage from './pages/Auth';
 import AdminDashboard from './pages/AdminDashboard';
 import VolunteerDashboard from './pages/VolunteerDashboard';
+import VerifyEmail from './pages/VerifyEmail';
 import { AuthProvider, useAuth } from './helpers/useAuth';
 import { isFirebaseConfigured } from './config/firebase';
 import './App.css';
@@ -39,6 +40,7 @@ const Protected: React.FC<{ admin?: boolean; children: React.ReactElement }> = (
   const { user, isAdmin, loading } = useAuth();
   if (loading) return <Loading />;
   if (!user) return <Navigate to="/login" replace />;
+  if (!user.emailVerified) return <Navigate to="/verify-email" replace />;
   if (admin && !isAdmin) return <Navigate to="/dashboard" replace />;
   return children;
 };
@@ -47,7 +49,9 @@ const Protected: React.FC<{ admin?: boolean; children: React.ReactElement }> = (
 const PublicOnly: React.FC<{ children: React.ReactElement }> = ({ children }) => {
   const { user, isAdmin, loading } = useAuth();
   if (loading) return <Loading />;
-  if (user) return <Navigate to={isAdmin ? '/admin' : '/dashboard'} replace />;
+  if (user) {
+    return <Navigate to={user.emailVerified ? (isAdmin ? '/admin' : '/dashboard') : '/verify-email'} replace />;
+  }
   return children;
 };
 
@@ -76,6 +80,7 @@ function App() {
               </PublicOnly>
             }
           />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route
             path="/admin"
             element={
