@@ -10,6 +10,7 @@ import {
 import { auth } from '../config/firebase';
 import { isUserAdmin } from '../helpers/types';
 import { createVolunteerProfile, getVolunteer } from '../helpers/store';
+import { normalizePhoneNumber } from '../helpers/phone';
 import './Auth.css';
 
 interface AuthProps {
@@ -45,6 +46,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const actionCodeSettings = {
@@ -68,6 +70,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
       const normalizedEmail = email.trim().toLowerCase();
       const fn = firstName.trim();
       const ln = lastName.trim();
+      const phone = normalizePhoneNumber(phoneNumber, true);
 
       if (!fn || !ln) throw new Error('First and last name are required.');
       if (!normalizedEmail) throw new Error('Email is required.');
@@ -81,6 +84,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
         email: normalizedEmail,
         phoneNumber: '',
       });
+      sessionStorage.setItem(`pendingPhone:${credential.user.uid}`, phone);
       await sendEmailVerification(credential.user, actionCodeSettings);
       navigate('/verify-email', { state: { email: normalizedEmail } });
     } catch (err) {
@@ -226,6 +230,24 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
               required
             />
           </div>
+
+          {!isLogin && (
+            <div className="form-group">
+              <label htmlFor="phone">Phone Number</label>
+              <input
+                id="phone"
+                type="tel"
+                placeholder="+1 555 123 4567"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                autoComplete="tel"
+                required
+              />
+              <small className="field-hint">
+                You will verify this number by SMS after confirming your email.
+              </small>
+            </div>
+          )}
 
           <div className="form-group">
             <label htmlFor="password">{isLogin ? 'Password' : 'Create Password'}</label>

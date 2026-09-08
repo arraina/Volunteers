@@ -264,7 +264,10 @@ const ProfileTab: React.FC<{
 }> = ({ profile, onSaved, setError, setMessage }) => {
   const [firstName, setFirstName] = useState(profile.firstName);
   const [lastName, setLastName] = useState(profile.lastName);
-  const [phoneNumber, setPhoneNumber] = useState(profile.phoneNumber);
+  const pendingPhoneKey = `pendingPhone:${profile.uid}`;
+  const [phoneNumber, setPhoneNumber] = useState(
+    profile.phoneNumber || sessionStorage.getItem(pendingPhoneKey) || ''
+  );
   const [skills, setSkills] = useState<string[]>(profile.skills);
   const [availability, setAvailability] = useState<string[]>(profile.availability);
   const [prefs, setPrefs] = useState(profile.notificationPrefs);
@@ -338,6 +341,7 @@ const ProfileTab: React.FC<{
       else await linkWithCredential(user, credential);
       await user.getIdToken(true);
       await updateVolunteer(profile.uid, { phoneNumber: user.phoneNumber || phoneNumber });
+      sessionStorage.removeItem(pendingPhoneKey);
       setVerificationId('');
       setVerificationCode('');
       setMessage('Phone number verified and saved.');
