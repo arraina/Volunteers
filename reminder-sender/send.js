@@ -70,7 +70,7 @@ async function main() {
           email: true,
           push: false,
         };
-        const results = [];
+        const deliveries = [];
 
         const params = [
           volunteer.firstName || volunteer.name || 'Volunteer',
@@ -83,31 +83,32 @@ async function main() {
         }.`;
 
         if (prefs.whatsapp && volunteer.phoneNumber) {
-          results.push({
-            channel: 'whatsapp',
-            ...(await sendWhatsApp({ to: volunteer.phoneNumber, templateParams: params })),
-          });
+          deliveries.push(
+            sendWhatsApp({ to: volunteer.phoneNumber, templateParams: params })
+              .then((result) => ({ channel: 'whatsapp', ...result }))
+          );
         }
         if (prefs.email && volunteer.email) {
-          results.push({
-            channel: 'email',
-            ...(await sendEmail({
+          deliveries.push(
+            sendEmail({
               to: volunteer.email,
               subject: `Reminder: ${task.title}`,
               text: plain,
-            })),
-          });
+            }).then((result) => ({ channel: 'email', ...result }))
+          );
         }
         if (prefs.push && Array.isArray(volunteer.pushTokens) && volunteer.pushTokens.length) {
-          results.push({
-            channel: 'push',
-            ...(await sendPush(messaging, {
+          deliveries.push(
+            sendPush(messaging, {
               tokens: volunteer.pushTokens,
               title: 'Task reminder',
               body: plain,
-            })),
-          });
+            }).then((result) => ({ channel: 'push', ...result }))
+          );
         }
+
+        // Start every enabled channel together; each provider reports its own result.
+        const results = await Promise.all(deliveries);
 
         // Record sent messages for the admin audit log.
         for (const r of results) {
