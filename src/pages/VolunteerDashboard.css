@@ -20,3 +20,41 @@
   padding-top: 1rem;
   border-top: 1px solid #e2e8f0;
 }
+
+.phone-verification {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.phone-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.phone-input-row button {
+  min-width: 8.5rem;
+  white-space: nowrap;
+}
+
+.phone-status {
+  margin: 0;
+  color: #9a3412;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.phone-status.verified {
+  color: var(--green-700);
+}
+
+@media (max-width: 560px) {
+  .phone-input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .phone-input-row button {
+    width: 100%;
+  }
+}

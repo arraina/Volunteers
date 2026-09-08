@@ -39,6 +39,16 @@ service cloud.firestore {
         && request.resource.data.phoneNumber.matches('^\\+[1-9][0-9]{7,14}$');
     }
 
+    function hasNoPhoneNumber() {
+      return request.resource.data.phoneNumber == '';
+    }
+
+    function phoneChangeIsVerified() {
+      return request.resource.data.phoneNumber == resource.data.phoneNumber
+        || (request.auth.token.phone_number is string
+            && request.resource.data.phoneNumber == request.auth.token.phone_number);
+    }
+
     function isSelfSignup() {
       return resource.data.openForSignup == true
         && resource.data.status == 'open'
@@ -99,12 +109,16 @@ service cloud.firestore {
         || (signedIn()
             && request.auth.uid == volunteerId
             && request.resource.data.email == request.auth.token.email
-            && hasValidPhoneNumber());
+            && (hasNoPhoneNumber()
+                || (hasValidPhoneNumber()
+                    && request.auth.token.phone_number is string
+                    && request.resource.data.phoneNumber == request.auth.token.phone_number)));
       allow update: if isAdmin()
         || (verifiedUser()
             && request.auth.uid == volunteerId
             && volunteerSelfEditableFields()
-            && hasValidPhoneNumber());
+            && (hasNoPhoneNumber() || hasValidPhoneNumber())
+            && phoneChangeIsVerified());
       allow delete: if isAdmin();
     }
 
