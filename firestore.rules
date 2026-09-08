@@ -20,6 +20,44 @@ service cloud.firestore {
         || get(/databases/$(database)/documents/adminsMeta/count).data.total == 0;
     }
 
+    function isOwnDocument(documentId) {
+      return signedIn() && request.auth.uid == documentId;
+    }
+
+    function onlyAssignmentFieldsChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'assignedVolunteers', 'status', 'updatedAt'
+      ]);
+    }
+
+    function isSelfSignup() {
+      return resource.data.openForSignup == true
+        && resource.data.status == 'open'
+        && onlyAssignmentFieldsChanged()
+        && !(request.auth.uid in resource.data.assignedVolunteers)
+        && request.auth.uid in request.resource.data.assignedVolunteers
+        && request.resource.data.assignedVolunteers.size()
+          == resource.data.assignedVolunteers.size() + 1
+        && request.resource.data.assignedVolunteers.hasAll(resource.data.assignedVolunteers)
+        && request.resource.data.assignedVolunteers.size() <= resource.data.volunteersNeeded
+        && request.resource.data.status
+          == (request.resource.data.assignedVolunteers.size() == resource.data.volunteersNeeded
+            ? 'filled'
+            : resource.data.status);
+    }
+
+    function isSelfWithdrawal() {
+      return resource.data.openForSignup == true
+        && onlyAssignmentFieldsChanged()
+        && request.auth.uid in resource.data.assignedVolunteers
+        && !(request.auth.uid in request.resource.data.assignedVolunteers)
+        && request.resource.data.assignedVolunteers.size()
+          == resource.data.assignedVolunteers.size() - 1
+        && resource.data.assignedVolunteers.hasAll(request.resource.data.assignedVolunteers)
+        && request.resource.data.status
+          == (resource.data.status == 'filled' ? 'open' : resource.data.status);
+    }
+
     // Fields a volunteer may edit on their OWN profile.
     function volunteerSelfEditableFields() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -30,7 +68,7 @@ service cloud.firestore {
 
     // ----- admins -----
     match /admins/{adminId} {
-      allow read: if signedIn();
+      allow read: if isAdmin() || isOwnDocument(adminId);
       // First admin can self-claim when none exist; afterwards only admins manage admins.
       allow create: if isAdmin()
         || (signedIn() && request.auth.uid == adminId && noAdminsYet());
@@ -45,7 +83,8 @@ service cloud.firestore {
 
     // ----- volunteers -----
     match /volunteers/{volunteerId} {
-      allow read: if signedIn();
+      allow get: if isAdmin() || isOwnDocument(volunteerId);
+      allow list: if isAdmin();
       // Admins manage anyone; a user can create their own profile at signup.
       allow create: if isAdmin()
         || (signedIn()
@@ -63,12 +102,7 @@ service cloud.firestore {
       // Admins can update anything. Volunteers may only self-add/remove
       // themselves on the assignedVolunteers array of an open task.
       allow update: if isAdmin()
-        || (
-          signedIn()
-          && resource.data.openForSignup == true
-          && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['assignedVolunteers', 'status', 'updatedAt'])
-        );
+        || (signedIn() && (isSelfSignup() || isSelfWithdrawal()));
     }
 
     // ----- hour logs (check-in / check-out) -----
