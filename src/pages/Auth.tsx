@@ -250,14 +250,23 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
           )}
 
           <div className="form-group">
-            <label htmlFor="password">{isLogin ? 'Password' : 'Create Password'}</label>
+            <label htmlFor="password">
+              {isLogin ? 'Volunteer App Password' : 'Create Volunteer App Password'}
+            </label>
             <input
               id="password"
               type="password"
+              placeholder={isLogin ? 'Enter your app password' : 'Create a new app password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete={isLogin ? 'current-password' : 'new-password'}
               required
             />
+            {!isLogin && (
+              <small className="field-hint">
+                Create a new password for this volunteer app. Do not enter your email account password.
+              </small>
+            )}
           </div>
 
           {isLogin && (
