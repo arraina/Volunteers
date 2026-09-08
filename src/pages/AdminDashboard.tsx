@@ -703,6 +703,10 @@ const VolunteersTab: React.FC<{
     <div className="two-col">
       <section className="panel">
         <h2>Add Volunteer</h2>
+        <p className="quota-notice">
+          This project currently has a limit of 10 verification SMS messages per day. Volunteers
+          added here by an admin do not require verification and do not use the SMS quota.
+        </p>
         <form onSubmit={handleAdd} className="stacked-form">
           <input
             placeholder="First name"

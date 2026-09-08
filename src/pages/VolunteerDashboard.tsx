@@ -373,6 +373,10 @@ const ProfileTab: React.FC<{
         </div>
         <input value={profile.email} disabled />
         <div className="phone-verification">
+          <p className="quota-notice">
+            Firebase currently allows this project 10 verification SMS messages per day.
+            Request a code only when you are ready to verify your number.
+          </p>
           <div className="phone-input-row">
             <input
               type="tel"

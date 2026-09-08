@@ -26,6 +26,16 @@
   gap: 0.55rem;
 }
 
+.quota-notice {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border-left: 3px solid #d97706;
+  background: #fffbeb;
+  color: #78350f;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 .phone-input-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
