@@ -23,7 +23,6 @@ import {
 } from '../helpers/types';
 import {
   assignVolunteerToTask,
-  bulkImportVolunteers,
   createAnnouncement,
   createInvitedVolunteerProfile,
   createTask,
@@ -96,6 +95,29 @@ const invitationSettings = () => ({
 function temporaryPassword(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
   return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+async function createVolunteerInvitation(input: typeof emptyVolunteerForm): Promise<void> {
+  const inviteApp = initializeApp(firebaseConfig, `volunteer-invite-${Date.now()}-${crypto.randomUUID()}`);
+  const inviteAuth = getAuth(inviteApp);
+  let invitedUser: Awaited<ReturnType<typeof createUserWithEmailAndPassword>>['user'] | null = null;
+  let profileCreated = false;
+  try {
+    const email = input.email.trim().toLowerCase();
+    const credential = await createUserWithEmailAndPassword(inviteAuth, email, temporaryPassword());
+    invitedUser = credential.user;
+    await createInvitedVolunteerProfile(invitedUser.uid, input, true);
+    profileCreated = true;
+    await sendPasswordResetEmail(auth, email, invitationSettings());
+    await recordInvitationSent(invitedUser.uid).catch(() => undefined);
+  } catch (error) {
+    if (profileCreated && invitedUser) await deleteVolunteer(invitedUser.uid).catch(() => undefined);
+    if (invitedUser) await deleteUser(invitedUser).catch(() => undefined);
+    throw error;
+  } finally {
+    await signOut(inviteAuth).catch(() => undefined);
+    await deleteApp(inviteApp);
+  }
 }
 
 const AdminDashboard: React.FC = () => {
@@ -721,29 +743,8 @@ const VolunteersTab: React.FC<{
       ) {
         throw new Error('First name, last name, email, and phone are required.');
       }
-      const inviteApp = initializeApp(firebaseConfig, `volunteer-invite-${Date.now()}`);
-      const inviteAuth = getAuth(inviteApp);
-      let invitedUser: Awaited<ReturnType<typeof createUserWithEmailAndPassword>>['user'] | null = null;
-      let profileCreated = false;
-      try {
-        const credential = await createUserWithEmailAndPassword(
-          inviteAuth,
-          form.email.trim().toLowerCase(),
-          temporaryPassword()
-        );
-        invitedUser = credential.user;
-        await createInvitedVolunteerProfile(invitedUser.uid, form, form.whatsappOptIn);
-        profileCreated = true;
-        await sendPasswordResetEmail(auth, form.email.trim().toLowerCase(), invitationSettings());
-        await recordInvitationSent(invitedUser.uid).catch(() => undefined);
-      } catch (inviteError) {
-        if (profileCreated && invitedUser) await deleteVolunteer(invitedUser.uid).catch(() => undefined);
-        if (invitedUser) await deleteUser(invitedUser).catch(() => undefined);
-        throw inviteError;
-      } finally {
-        await signOut(inviteAuth).catch(() => undefined);
-        await deleteApp(inviteApp);
-      }
+      if (!form.whatsappOptIn) throw new Error('Confirm WhatsApp consent before adding the volunteer.');
+      await createVolunteerInvitation(form);
       setForm(emptyVolunteerForm);
       window.alert('Volunteer added. A login invitation was sent by email.');
     } catch (err) {
@@ -800,12 +801,37 @@ const VolunteersTab: React.FC<{
       // Detect + skip a header row if the first cell isn't an email-ish value.
       const startIdx = /firstname|first name|name/i.test(lines[0]) ? 1 : 0;
       const rows = lines.slice(startIdx).map((line) => {
-        const [firstName = '', lastName = '', email = '', phoneNumber = ''] = line
+        const [firstName = '', lastName = '', email = '', phoneNumber = '', consent = ''] = line
           .split(',')
           .map((c) => c.trim().replace(/^"|"$/g, ''));
-        return { firstName, lastName, email, phoneNumber };
+        return {
+          firstName,
+          lastName,
+          email,
+          phoneNumber,
+          whatsappOptIn: /^(true|yes|y|1)$/i.test(consent),
+        };
       });
-      const { added, skipped } = await bulkImportVolunteers(rows);
+      let added = 0;
+      let skipped = 0;
+      for (const row of rows) {
+        if (
+          !row.firstName ||
+          !row.lastName ||
+          !row.email ||
+          !row.phoneNumber ||
+          !row.whatsappOptIn
+        ) {
+          skipped += 1;
+          continue;
+        }
+        try {
+          await createVolunteerInvitation(row);
+          added += 1;
+        } catch {
+          skipped += 1;
+        }
+      }
       setError('');
       window.alert(`Imported ${added} volunteer(s). Skipped ${skipped} (duplicates/invalid).`);
     } catch (err) {
@@ -887,6 +913,7 @@ const VolunteersTab: React.FC<{
               type="checkbox"
               checked={form.whatsappOptIn}
               onChange={(e) => setForm({ ...form, whatsappOptIn: e.target.checked })}
+              required
             />
             Volunteer has agreed to receive WhatsApp reminders
           </label>
@@ -912,7 +939,10 @@ const VolunteersTab: React.FC<{
             </button>
           </div>
         </div>
-        <p className="muted small">CSV columns: first name, last name, email, phone.</p>
+        <p className="muted small">
+          CSV columns: first name, last name, email, phone, WhatsApp consent (yes/true).
+          Each valid row receives a login invitation.
+        </p>
         <p className="results-count">{filtered.length} of {volunteers.length} volunteers shown</p>
         <input
           className="search"

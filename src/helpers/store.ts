@@ -95,6 +95,7 @@ export interface VolunteerInput {
   lastName: string;
   email: string;
   phoneNumber: string;
+  whatsappOptIn?: boolean;
   skills?: string[];
   availability?: string[];
 }
@@ -115,6 +116,10 @@ export async function createVolunteer(input: VolunteerInput): Promise<string> {
 export async function createVolunteerProfile(uid: string, input: VolunteerInput): Promise<void> {
   await setDoc(doc(db, 'volunteers', uid), {
     ...buildVolunteerDoc(input),
+    whatsappOptIn: input.whatsappOptIn === true,
+    whatsappOptInAt: input.whatsappOptIn ? serverTimestamp() : null,
+    whatsappOptInSource: input.whatsappOptIn ? 'self' : null,
+    participationStatus: input.whatsappOptIn ? 'active' : 'inactive',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     joinedDate: serverTimestamp(),
@@ -135,6 +140,7 @@ export async function createInvitedVolunteerProfile(
     whatsappOptInAt: whatsappOptIn ? serverTimestamp() : null,
     whatsappOptInSource: whatsappOptIn ? 'admin-confirmed' : null,
     invitationStatus: 'invited',
+    participationStatus: 'active',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     joinedDate: serverTimestamp(),
@@ -164,7 +170,7 @@ function buildVolunteerDoc(input: VolunteerInput) {
     phoneNumber: normalizePhoneNumber(input.phoneNumber),
     skills: input.skills || [],
     availability: input.availability || [],
-    notificationPrefs: { whatsapp: true, email: true, push: false },
+    notificationPrefs: { whatsapp: input.whatsappOptIn === true, email: true, push: false },
     pushTokens: [],
     totalHours: 0,
   };
@@ -187,6 +193,7 @@ export async function updateVolunteer(
     payload.whatsappOptIn = data.notificationPrefs.whatsapp;
     payload.whatsappOptInAt = data.notificationPrefs.whatsapp ? serverTimestamp() : null;
     payload.whatsappOptInSource = data.notificationPrefs.whatsapp ? 'self' : null;
+    payload.participationStatus = data.notificationPrefs.whatsapp ? 'active' : 'inactive';
   }
   if (data.invitationStatus !== undefined) payload.invitationStatus = data.invitationStatus;
   if (data.firstName !== undefined || data.lastName !== undefined) {
@@ -555,6 +562,13 @@ export async function assignVolunteerToTask(
   task: VolunteerTask,
   volunteer: VolunteerProfile
 ): Promise<void> {
+  if (
+    volunteer.whatsappOptIn !== true ||
+    volunteer.participationStatus === 'inactive' ||
+    !volunteer.phoneNumber
+  ) {
+    throw new Error('This volunteer is inactive until WhatsApp reminders and a phone number are enabled.');
+  }
   const taskRef = doc(db, 'tasks', task.id);
 
   await runTransaction(db, async (tx) => {

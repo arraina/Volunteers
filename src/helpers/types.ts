@@ -65,6 +65,7 @@ export interface VolunteerProfile {
   invitationStatus?: 'invited' | 'active';
   invitationLastSentAt?: Date;
   invitationSendCount?: number;
+  participationStatus?: 'active' | 'inactive';
   /** FCM web-push tokens for this volunteer's devices. */
   pushTokens?: string[];
   /** Total volunteered hours (rolled up from hour logs). */
@@ -237,6 +238,8 @@ export function normalizeVolunteer(uid: string, data: Record<string, any>): Volu
     invitationLastSentAt: data.invitationLastSentAt?.toDate?.(),
     invitationSendCount:
       typeof data.invitationSendCount === 'number' ? data.invitationSendCount : 0,
+    participationStatus:
+      data.participationStatus === 'inactive' || data.whatsappOptIn !== true ? 'inactive' : 'active',
     pushTokens: Array.isArray(data.pushTokens) ? data.pushTokens : [],
     totalHours: typeof data.totalHours === 'number' ? data.totalHours : 0,
     isAdmin: data.isAdmin === true,

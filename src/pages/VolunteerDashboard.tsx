@@ -504,10 +504,14 @@ const ProfileTab: React.FC<{
                 checked={prefs[c]}
                 onChange={(e) => setPrefs({ ...prefs, [c]: e.target.checked })}
               />
-              {c === 'whatsapp' ? 'WhatsApp' : c === 'email' ? 'Email' : 'Browser push'}
+              {c === 'whatsapp' ? 'WhatsApp (required while active)' : c === 'email' ? 'Email' : 'Browser push'}
             </label>
           ))}
         </div>
+        <p className="muted small">
+          Turning off WhatsApp makes your profile inactive and prevents new task assignments.
+          Your service history is preserved.
+        </p>
 
         <button type="submit" className="primary-btn">
           Save Profile

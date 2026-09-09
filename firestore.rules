@@ -82,7 +82,8 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         'firstName', 'lastName', 'name', 'phoneNumber',
         'skills', 'availability', 'notificationPrefs', 'pushTokens', 'updatedAt',
-        'whatsappOptIn', 'whatsappOptInAt', 'whatsappOptInSource', 'invitationStatus'
+        'whatsappOptIn', 'whatsappOptInAt', 'whatsappOptInSource', 'invitationStatus',
+        'participationStatus'
       ]);
     }
 
