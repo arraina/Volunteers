@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signOut } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import {
+  createUserWithEmailAndPassword,
+  deleteUser,
+  getAuth,
+  sendPasswordResetEmail,
+  signOut,
+} from 'firebase/auth';
+import { deleteApp, initializeApp } from 'firebase/app';
+import { auth, firebaseConfig } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
 import {
   NotificationChannel,
@@ -18,8 +25,8 @@ import {
   assignVolunteerToTask,
   bulkImportVolunteers,
   createAnnouncement,
+  createInvitedVolunteerProfile,
   createTask,
-  createVolunteer,
   subscribeEvents,
   deleteTaskScoped,
   deleteVolunteer,
@@ -78,7 +85,17 @@ const emptyVolunteerForm = {
   lastName: '',
   email: '',
   phoneNumber: '',
+  whatsappOptIn: false,
 };
+
+const invitationSettings = () => ({
+  url: `${window.location.origin}${window.location.pathname.startsWith('/Volunteers') ? '/Volunteers' : ''}/login`,
+});
+
+function temporaryPassword(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+}
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -694,11 +711,38 @@ const VolunteersTab: React.FC<{
     e.preventDefault();
     setError('');
     try {
-      if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
-        throw new Error('First name, last name, and email are required.');
+      if (
+        !form.firstName.trim() ||
+        !form.lastName.trim() ||
+        !form.email.trim() ||
+        !form.phoneNumber.trim()
+      ) {
+        throw new Error('First name, last name, email, and phone are required.');
       }
-      await createVolunteer(form);
+      const inviteApp = initializeApp(firebaseConfig, `volunteer-invite-${Date.now()}`);
+      const inviteAuth = getAuth(inviteApp);
+      let invitedUser: Awaited<ReturnType<typeof createUserWithEmailAndPassword>>['user'] | null = null;
+      let profileCreated = false;
+      try {
+        const credential = await createUserWithEmailAndPassword(
+          inviteAuth,
+          form.email.trim().toLowerCase(),
+          temporaryPassword()
+        );
+        invitedUser = credential.user;
+        await createInvitedVolunteerProfile(invitedUser.uid, form, form.whatsappOptIn);
+        profileCreated = true;
+        await sendPasswordResetEmail(auth, form.email.trim().toLowerCase(), invitationSettings());
+      } catch (inviteError) {
+        if (profileCreated && invitedUser) await deleteVolunteer(invitedUser.uid).catch(() => undefined);
+        if (invitedUser) await deleteUser(invitedUser).catch(() => undefined);
+        throw inviteError;
+      } finally {
+        await signOut(inviteAuth).catch(() => undefined);
+        await deleteApp(inviteApp);
+      }
       setForm(emptyVolunteerForm);
+      window.alert('Volunteer added. A login invitation was sent by email.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add volunteer.');
     }
@@ -711,6 +755,7 @@ const VolunteersTab: React.FC<{
       lastName: v.lastName,
       email: v.email,
       phoneNumber: v.phoneNumber,
+      whatsappOptIn: v.whatsappOptIn === true,
     });
   };
 
@@ -818,9 +863,18 @@ const VolunteersTab: React.FC<{
             placeholder="Phone (for reminders)"
             value={form.phoneNumber}
             onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
+            required
           />
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={form.whatsappOptIn}
+              onChange={(e) => setForm({ ...form, whatsappOptIn: e.target.checked })}
+            />
+            Volunteer has agreed to receive WhatsApp reminders
+          </label>
           <button type="submit" className="primary-btn">
-            Add Volunteer
+            Add Volunteer &amp; Send Invitation
           </button>
         </form>
         <p className="muted small">

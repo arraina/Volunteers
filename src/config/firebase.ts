@@ -5,7 +5,7 @@ import { getFirestore, type Firestore } from 'firebase/firestore';
 // All Firebase web config comes from environment variables (see .env.example).
 // The Firebase web API key is not a secret, but keeping config in env keeps the
 // repo portable across temple deployments and avoids committing project values.
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY || '',
   authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || '',
   projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || '',

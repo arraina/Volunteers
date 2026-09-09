@@ -81,7 +81,8 @@ service cloud.firestore {
     function volunteerSelfEditableFields() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         'firstName', 'lastName', 'name', 'phoneNumber',
-        'skills', 'availability', 'notificationPrefs', 'pushTokens', 'updatedAt'
+        'skills', 'availability', 'notificationPrefs', 'pushTokens', 'updatedAt',
+        'whatsappOptIn', 'whatsappOptInAt', 'whatsappOptInSource', 'invitationStatus'
       ]);
     }
 

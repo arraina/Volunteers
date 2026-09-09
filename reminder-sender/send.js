@@ -82,7 +82,7 @@ async function main() {
           task.location ? ` at ${task.location}` : ''
         }.`;
 
-        if (prefs.whatsapp && volunteer.phoneNumber) {
+        if (prefs.whatsapp && volunteer.whatsappOptIn === true && volunteer.phoneNumber) {
           deliveries.push(
             sendWhatsApp({ to: volunteer.phoneNumber, templateParams: params })
               .then((result) => ({ channel: 'whatsapp', ...result }))
@@ -247,7 +247,12 @@ async function sendPendingAnnouncements(db, messaging, volunteers) {
 
     for (const v of recipients) {
       const prefs = v.notificationPrefs || { whatsapp: true, email: true, push: false };
-      if (channels.includes('whatsapp') && prefs.whatsapp && v.phoneNumber) {
+      if (
+        channels.includes('whatsapp') &&
+        prefs.whatsapp &&
+        v.whatsappOptIn === true &&
+        v.phoneNumber
+      ) {
         await sendWhatsApp({
           to: v.phoneNumber,
           templateParams: [v.firstName || v.name || 'Volunteer', ann.title, ann.body, 'the temple'],

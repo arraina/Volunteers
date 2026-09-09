@@ -101,8 +101,9 @@ export interface VolunteerInput {
 
 /** Admin-created volunteer (no auth account; id is auto-generated). */
 export async function createVolunteer(input: VolunteerInput): Promise<string> {
+  const phoneNumber = normalizePhoneNumber(input.phoneNumber, true);
   const ref = await addDoc(collection(db, 'volunteers'), {
-    ...buildVolunteerDoc(input),
+    ...buildVolunteerDoc({ ...input, phoneNumber }),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     joinedDate: serverTimestamp(),
@@ -114,6 +115,26 @@ export async function createVolunteer(input: VolunteerInput): Promise<string> {
 export async function createVolunteerProfile(uid: string, input: VolunteerInput): Promise<void> {
   await setDoc(doc(db, 'volunteers', uid), {
     ...buildVolunteerDoc(input),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    joinedDate: serverTimestamp(),
+  });
+}
+
+/** Admin-created profile linked to a Firebase Authentication invitation. */
+export async function createInvitedVolunteerProfile(
+  uid: string,
+  input: VolunteerInput,
+  whatsappOptIn: boolean
+): Promise<void> {
+  const phoneNumber = normalizePhoneNumber(input.phoneNumber, true);
+  await setDoc(doc(db, 'volunteers', uid), {
+    ...buildVolunteerDoc({ ...input, phoneNumber }),
+    notificationPrefs: { whatsapp: whatsappOptIn, email: true, push: false },
+    whatsappOptIn,
+    whatsappOptInAt: whatsappOptIn ? serverTimestamp() : null,
+    whatsappOptInSource: whatsappOptIn ? 'admin-confirmed' : null,
+    invitationStatus: 'invited',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     joinedDate: serverTimestamp(),
@@ -149,7 +170,13 @@ export async function updateVolunteer(
   }
   if (data.skills !== undefined) payload.skills = data.skills;
   if (data.availability !== undefined) payload.availability = data.availability;
-  if (data.notificationPrefs !== undefined) payload.notificationPrefs = data.notificationPrefs;
+  if (data.notificationPrefs !== undefined) {
+    payload.notificationPrefs = data.notificationPrefs;
+    payload.whatsappOptIn = data.notificationPrefs.whatsapp;
+    payload.whatsappOptInAt = data.notificationPrefs.whatsapp ? serverTimestamp() : null;
+    payload.whatsappOptInSource = data.notificationPrefs.whatsapp ? 'self' : null;
+  }
+  if (data.invitationStatus !== undefined) payload.invitationStatus = data.invitationStatus;
   if (data.firstName !== undefined || data.lastName !== undefined) {
     payload.name = `${data.firstName ?? ''} ${data.lastName ?? ''}`.trim();
   }
@@ -170,7 +197,13 @@ export async function bulkImportVolunteers(
   let skipped = 0;
   for (const row of rows) {
     const email = (row.email || '').trim().toLowerCase();
-    if (!row.firstName?.trim() || !row.lastName?.trim() || !email || existingEmails.has(email)) {
+    if (
+      !row.firstName?.trim() ||
+      !row.lastName?.trim() ||
+      !email ||
+      !row.phoneNumber?.trim() ||
+      existingEmails.has(email)
+    ) {
       skipped += 1;
       continue;
     }

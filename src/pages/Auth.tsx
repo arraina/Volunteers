@@ -9,7 +9,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { isUserAdmin } from '../helpers/types';
-import { createVolunteerProfile, getVolunteer } from '../helpers/store';
+import { createVolunteerProfile, getVolunteer, updateVolunteer } from '../helpers/store';
 import { normalizePhoneNumber } from '../helpers/phone';
 import './Auth.css';
 
@@ -118,6 +118,8 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
           email: normalizedEmail,
           phoneNumber: '',
         });
+      } else if (profile.invitationStatus === 'invited') {
+        await updateVolunteer(profile.uid, { invitationStatus: 'active' });
       }
       await routeByRole(credential.user.uid);
     } catch (err) {

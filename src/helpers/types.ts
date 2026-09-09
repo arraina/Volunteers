@@ -57,6 +57,12 @@ export interface VolunteerProfile {
   /** General weekly availability, e.g. ['Sunday', 'Saturday']. */
   availability: string[];
   notificationPrefs: NotificationPreferences;
+  /** Whether this person explicitly agreed to receive WhatsApp messages. */
+  whatsappOptIn?: boolean;
+  whatsappOptInAt?: Date;
+  whatsappOptInSource?: 'self' | 'admin-confirmed';
+  /** Invitations do not restrict assignment or reminder delivery. */
+  invitationStatus?: 'invited' | 'active';
   /** FCM web-push tokens for this volunteer's devices. */
   pushTokens?: string[];
   /** Total volunteered hours (rolled up from hour logs). */
@@ -222,6 +228,10 @@ export function normalizeVolunteer(uid: string, data: Record<string, any>): Volu
     skills: Array.isArray(data.skills) ? data.skills : [],
     availability: Array.isArray(data.availability) ? data.availability : [],
     notificationPrefs: { ...defaultNotificationPrefs(), ...(data.notificationPrefs || {}) },
+    whatsappOptIn: data.whatsappOptIn === true,
+    whatsappOptInAt: data.whatsappOptInAt?.toDate?.(),
+    whatsappOptInSource: data.whatsappOptInSource,
+    invitationStatus: data.invitationStatus,
     pushTokens: Array.isArray(data.pushTokens) ? data.pushTokens : [],
     totalHours: typeof data.totalHours === 'number' ? data.totalHours : 0,
     isAdmin: data.isAdmin === true,
