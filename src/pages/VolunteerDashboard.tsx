@@ -31,8 +31,9 @@ import { enableWebPush } from '../helpers/notifications';
 import { normalizePhoneNumber } from '../helpers/phone';
 import '../pages/AdminDashboard.css';
 import './VolunteerDashboard.css';
+import EventFeedback from './EventFeedback';
 
-type Tab = 'open' | 'mine' | 'profile';
+type Tab = 'open' | 'mine' | 'feedback' | 'profile';
 
 const VolunteerDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -171,6 +172,9 @@ const VolunteerDashboard: React.FC = () => {
         <button className={tab === 'mine' ? 'active' : ''} onClick={() => setTab('mine')}>
           My Tasks ({myTasks.length})
         </button>
+        <button className={tab === 'feedback' ? 'active' : ''} onClick={() => setTab('feedback')}>
+          Event Feedback
+        </button>
         <button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>
           My Profile
         </button>
@@ -272,6 +276,9 @@ const VolunteerDashboard: React.FC = () => {
 
         {tab === 'profile' && (
           <ProfileTab profile={profile} onSaved={reload} setError={setError} setMessage={setMessage} />
+        )}
+        {tab === 'feedback' && (
+          <EventFeedback profile={profile} tasks={tasks} setError={setError} setMessage={setMessage} />
         )}
       </div>
     </div>

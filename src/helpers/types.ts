@@ -82,6 +82,7 @@ export interface TempleEvent {
   /** Optional overall event date (individual tasks carry their own times). */
   date?: Date;
   description?: string;
+  lessonsLearned?: string;
   createdBy?: string;
   createdAt: Date;
 }
@@ -255,6 +256,7 @@ export function normalizeEvent(id: string, data: Record<string, any>): TempleEve
     name: data.name || '',
     date: data.date ? firestoreTimestampToDate(data.date) : undefined,
     description: data.description || '',
+    lessonsLearned: data.lessonsLearned || '',
     createdBy: data.createdBy || undefined,
     createdAt: firestoreTimestampToDate(data.createdAt),
   };

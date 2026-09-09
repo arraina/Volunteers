@@ -42,9 +42,10 @@ import {
 } from '../helpers/store';
 import { HourLog } from '../helpers/types';
 import AICreateTab from './AICreate';
+import EventWorkspace from './EventWorkspace';
 import './AdminDashboard.css';
 
-type Tab = 'tasks' | 'ai' | 'volunteers' | 'announcements' | 'history' | 'reports';
+type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports';
 
 const STATUS_OPTIONS: TaskStatus[] = [
   'open',
@@ -165,6 +166,9 @@ const AdminDashboard: React.FC = () => {
         <button className={tab === 'ai' ? 'active' : ''} onClick={() => setTab('ai')}>
           AI Create
         </button>
+        <button className={tab === 'events' ? 'active' : ''} onClick={() => setTab('events')}>
+          Event Workspace
+        </button>
         <button
           className={tab === 'volunteers' ? 'active' : ''}
           onClick={() => setTab('volunteers')}
@@ -197,6 +201,7 @@ const AdminDashboard: React.FC = () => {
           />
         )}
         {tab === 'ai' && <AICreateTab uid={user?.uid} events={events} setError={setError} />}
+        {tab === 'events' && <EventWorkspace uid={user?.uid} events={events} tasks={tasks} setError={setError} />}
         {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} setError={setError} />}
         {tab === 'announcements' && (
           <AnnouncementsTab uid={user?.uid} setError={setError} />

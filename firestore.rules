@@ -157,6 +157,26 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Event planning workspaces and reusable templates are admin-managed.
+    match /eventMeetings/{id} {
+      allow read, write: if isAdmin();
+    }
+    match /eventTemplates/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // Volunteers submit one feedback document per event under their own uid.
+    match /eventFeedback/{id} {
+      allow read: if isAdmin();
+      allow create, update: if verifiedUser()
+        && request.resource.data.volunteerId == request.auth.uid
+        && id == request.resource.data.eventId + '_' + request.auth.uid
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5;
+      allow delete: if isAdmin();
+    }
+
     // ----- reminders & sent messages: server-only, never client-accessible -----
     match /reminders/{id} {
       allow read, write: if false;
