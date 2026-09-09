@@ -17,10 +17,7 @@ const EventFeedback: React.FC<{
     return Array.from(map, ([id, name]) => ({ id, name }));
   }, [tasks, profile.uid]);
   const [eventId, setEventId] = useState('');
-  const [rating, setRating] = useState(5);
-  const [wentWell, setWentWell] = useState('');
-  const [improve, setImprove] = useState('');
-  const [comments, setComments] = useState('');
+  const [feedbackText, setFeedbackText] = useState('');
   const [anonymous, setAnonymous] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
@@ -30,15 +27,12 @@ const EventFeedback: React.FC<{
       await setDoc(doc(db, 'eventFeedback', `${eventId}_${profile.uid}`), {
         eventId,
         volunteerId: profile.uid,
-        rating,
-        wentWell: wentWell.trim(),
-        improve: improve.trim(),
-        comments: comments.trim(),
+        feedbackText: feedbackText.trim(),
         anonymous,
         updatedAt: serverTimestamp(),
       }, { merge: true });
       setMessage('Thank you. Your event feedback was saved.');
-      setWentWell(''); setImprove(''); setComments('');
+      setFeedbackText('');
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not save feedback.');
     }
@@ -53,13 +47,13 @@ const EventFeedback: React.FC<{
           <option value="">Select an event</option>
           {events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
         </select>
-        <label className="field-label">Overall rating</label>
-        <select value={rating} onChange={(e) => setRating(Number(e.target.value))}>
-          {[5, 4, 3, 2, 1].map((value) => <option key={value} value={value}>{value} / 5</option>)}
-        </select>
-        <textarea placeholder="What went well?" value={wentWell} onChange={(e) => setWentWell(e.target.value)} />
-        <textarea placeholder="What could be improved?" value={improve} onChange={(e) => setImprove(e.target.value)} />
-        <textarea placeholder="Additional comments" value={comments} onChange={(e) => setComments(e.target.value)} />
+        <label className="field-label">Your feedback</label>
+        <textarea
+          placeholder="Share anything that went well, anything that could improve, and ideas for the next event."
+          value={feedbackText}
+          onChange={(e) => setFeedbackText(e.target.value)}
+          required
+        />
         <label className="checkbox-row"><input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} /> Show this response as anonymous to event coordinators</label>
         <button className="primary-btn" type="submit">Submit feedback</button>
       </form>}

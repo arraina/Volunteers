@@ -33,10 +33,10 @@ interface Meeting {
 
 interface Feedback {
   id: string;
-  rating: number;
-  wentWell: string;
-  improve: string;
-  comments: string;
+  feedbackText?: string;
+  wentWell?: string;
+  improve?: string;
+  comments?: string;
   anonymous: boolean;
 }
 
@@ -181,10 +181,6 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
     URL.revokeObjectURL(link.href);
   };
 
-  const average = feedback.length
-    ? (feedback.reduce((sum, item) => sum + item.rating, 0) / feedback.length).toFixed(1)
-    : '—';
-
   return <div className="stacked-form">
     <section className="panel">
       <h2>Event Workspace</h2>
@@ -220,26 +216,30 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
       </section>
 
       <section className="panel">
-        <h2>Feedback</h2><p><strong>{average}</strong> average rating · {feedback.length} response(s)</p>
+        <h2>Feedback</h2><p>{feedback.length} response(s)</p>
         {feedback.map((item) => <div className="task-card" key={item.id}>
-          <strong>{item.rating}/5 {item.anonymous ? '· Anonymous' : ''}</strong>
-          {item.wentWell && <p><strong>Went well:</strong> {item.wentWell}</p>}
-          {item.improve && <p><strong>Improve:</strong> {item.improve}</p>}
-          {item.comments && <p>{item.comments}</p>}
+          {item.anonymous && <strong>Anonymous</strong>}
+          <p>{item.feedbackText || [item.wentWell, item.improve, item.comments].filter(Boolean).join('\n\n')}</p>
         </div>)}
-        <label className="field-label">Lessons for next time</label>
-        <textarea value={lessons} onChange={(e) => setLessons(e.target.value)} placeholder="Summarize improvements to carry into the next event" />
-        <button className="primary-btn" onClick={saveLessons}>Save lessons</button>
+        <div className="stacked-form">
+          <label className="field-label">Lessons for next time</label>
+          <textarea value={lessons} onChange={(e) => setLessons(e.target.value)} placeholder="Summarize improvements to carry into the next event" />
+          <button className="primary-btn" onClick={saveLessons}>Save lessons</button>
+        </div>
       </section>
     </>}
 
     <section className="panel">
       <h2>Event templates</h2>
-      <input type="datetime-local" value={templateDate} onChange={(e) => setTemplateDate(e.target.value)} />
-      {templates.map((template) => <div className="task-card" key={template.id}>
-        <strong>{template.name}</strong><p className="muted small">{template.tasks.length} task(s)</p>
-        <button className="secondary-btn" onClick={() => createFromTemplate(template)}>Create from template</button>
-      </div>)}
+      <p className="muted">Templates copy an event's task names, staffing, locations, and timing pattern. Choose when the new event should begin; each copied task is scheduled relative to that date and time.</p>
+      {templates.length === 0 ? <div className="empty-state"><strong>No templates saved</strong><span>Select an event above and choose “Save as template.”</span></div> : <div className="stacked-form">
+        <label className="field-label">New event start date and time</label>
+        <input type="datetime-local" value={templateDate} onChange={(e) => setTemplateDate(e.target.value)} />
+        {templates.map((template) => <div className="task-card" key={template.id}>
+          <strong>{template.name}</strong><p className="muted small">{template.tasks.length} task(s)</p>
+          <button className="secondary-btn" onClick={() => createFromTemplate(template)}>Create event from this template</button>
+        </div>)}
+      </div>}
     </section>
   </div>;
 };
