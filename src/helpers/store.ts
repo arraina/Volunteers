@@ -141,6 +141,18 @@ export async function createInvitedVolunteerProfile(
   });
 }
 
+export async function recordInvitationSent(uid: string): Promise<void> {
+  await setDoc(
+    doc(db, 'volunteers', uid),
+    {
+      invitationLastSentAt: serverTimestamp(),
+      invitationSendCount: increment(1),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
 function buildVolunteerDoc(input: VolunteerInput) {
   const firstName = input.firstName.trim();
   const lastName = input.lastName.trim();

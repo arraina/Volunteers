@@ -34,6 +34,7 @@ import {
   getPastTasks,
   groupTasksBySeries,
   removeVolunteerFromTask,
+  recordInvitationSent,
   SeriesScope,
   subscribeTasks,
   subscribeVolunteers,
@@ -706,6 +707,7 @@ const VolunteersTab: React.FC<{
   const [search, setSearch] = useState('');
   const [skillFilter, setSkillFilter] = useState('all');
   const [volunteerSort, setVolunteerSort] = useState<'name' | 'hours' | 'newest'>('name');
+  const [resendingInvitation, setResendingInvitation] = useState<string | null>(null);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -733,6 +735,7 @@ const VolunteersTab: React.FC<{
         await createInvitedVolunteerProfile(invitedUser.uid, form, form.whatsappOptIn);
         profileCreated = true;
         await sendPasswordResetEmail(auth, form.email.trim().toLowerCase(), invitationSettings());
+        await recordInvitationSent(invitedUser.uid).catch(() => undefined);
       } catch (inviteError) {
         if (profileCreated && invitedUser) await deleteVolunteer(invitedUser.uid).catch(() => undefined);
         if (invitedUser) await deleteUser(invitedUser).catch(() => undefined);
@@ -745,6 +748,20 @@ const VolunteersTab: React.FC<{
       window.alert('Volunteer added. A login invitation was sent by email.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add volunteer.');
+    }
+  };
+
+  const resendInvitation = async (volunteer: VolunteerProfile) => {
+    setError('');
+    setResendingInvitation(volunteer.uid);
+    try {
+      await sendPasswordResetEmail(auth, volunteer.email, invitationSettings());
+      await recordInvitationSent(volunteer.uid).catch(() => undefined);
+      window.alert(`Invitation resent to ${volunteer.email}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not resend the invitation.');
+    } finally {
+      setResendingInvitation(null);
     }
   };
 
@@ -960,6 +977,15 @@ const VolunteersTab: React.FC<{
                     )}
                   </div>
                   <div className="row">
+                    {v.invitationStatus === 'invited' && (
+                      <button
+                        className="link-btn"
+                        onClick={() => resendInvitation(v)}
+                        disabled={resendingInvitation === v.uid}
+                      >
+                        {resendingInvitation === v.uid ? 'Sending...' : 'Resend invitation'}
+                      </button>
+                    )}
                     <button className="link-btn" onClick={() => startEdit(v)}>
                       Edit
                     </button>
