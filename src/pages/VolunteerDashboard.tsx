@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   linkWithCredential,
@@ -43,6 +43,9 @@ const VolunteerDashboard: React.FC = () => {
   const [tasks, setTasks] = useState<VolunteerTask[]>([]);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [taskSearch, setTaskSearch] = useState('');
+  const [skillFilter, setSkillFilter] = useState('all');
+  const [taskSort, setTaskSort] = useState<'soonest' | 'latest' | 'title'>('soonest');
   // Active check-in sessions: taskId -> { logId, checkInAt }
   const [activeCheckins, setActiveCheckins] = useState<
     Record<string, { logId: string; at: Date }>
@@ -82,6 +85,29 @@ const VolunteerDashboard: React.FC = () => {
           )
         : [],
     [tasks, profile]
+  );
+
+  const filterAndSortTasks = useCallback((items: VolunteerTask[]) => {
+    const q = taskSearch.trim().toLowerCase();
+    return items.filter((task) => {
+      const matchesSearch = !q || [task.title, task.description, task.location, task.eventName]
+        .some((value) => value?.toLowerCase().includes(q));
+      const matchesSkill = skillFilter === 'all' || task.skillsNeeded.includes(skillFilter);
+      return matchesSearch && matchesSkill;
+    }).sort((a, b) => {
+      if (taskSort === 'title') return a.title.localeCompare(b.title);
+      const delta = a.startDateTime.getTime() - b.startDateTime.getTime();
+      return taskSort === 'latest' ? -delta : delta;
+    });
+  }, [taskSearch, skillFilter, taskSort]);
+
+  const visibleOpenTasks = useMemo(
+    () => filterAndSortTasks(openTasks),
+    [openTasks, filterAndSortTasks]
+  );
+  const visibleMyTasks = useMemo(
+    () => filterAndSortTasks(myTasks),
+    [myTasks, filterAndSortTasks]
   );
 
   const signUp = async (task: VolunteerTask) => {
@@ -159,10 +185,13 @@ const VolunteerDashboard: React.FC = () => {
 
         {tab === 'open' && (
           <section className="panel">
-            <h2>Tasks you can sign up for</h2>
-            {openTasks.length === 0 && <p className="muted">No open tasks right now.</p>}
+            <div className="panel-head results-heading">
+              <div><h2>Tasks you can sign up for</h2><p className="muted small">{visibleOpenTasks.length} opportunities shown</p></div>
+            </div>
+            <VolunteerTaskFilters search={taskSearch} setSearch={setTaskSearch} skill={skillFilter} setSkill={setSkillFilter} sort={taskSort} setSort={setTaskSort} />
+            {visibleOpenTasks.length === 0 && <div className="empty-state"><strong>No matching open tasks</strong><span>Try another search or skill.</span></div>}
             <div className="task-list">
-              {openTasks.map((task) => {
+              {visibleOpenTasks.map((task) => {
                 const full = isTaskFull(task);
                 const matches = task.skillsNeeded.some((s) => profile.skills.includes(s));
                 return (
@@ -173,6 +202,7 @@ const VolunteerDashboard: React.FC = () => {
                           {task.title}
                           {matches && <span className="match-tag">matches your skills</span>}
                         </h3>
+                        {task.eventName && <p className="event-label">{task.eventName}</p>}
                         <p className="muted">
                           {formatDate(task.startDateTime)}
                           {task.location ? ` · ${task.location}` : ''}
@@ -200,10 +230,13 @@ const VolunteerDashboard: React.FC = () => {
 
         {tab === 'mine' && (
           <section className="panel">
-            <h2>Your tasks</h2>
-            {myTasks.length === 0 && <p className="muted">You have no assigned tasks yet.</p>}
+            <div className="panel-head results-heading">
+              <div><h2>Your tasks</h2><p className="muted small">{visibleMyTasks.length} assignments shown</p></div>
+            </div>
+            <VolunteerTaskFilters search={taskSearch} setSearch={setTaskSearch} skill={skillFilter} setSkill={setSkillFilter} sort={taskSort} setSort={setTaskSort} />
+            {visibleMyTasks.length === 0 && <div className="empty-state"><strong>No matching assignments</strong><span>Your assigned tasks will appear here.</span></div>}
             <div className="task-list">
-              {myTasks.map((task) => {
+              {visibleMyTasks.map((task) => {
                 const checkedIn = Boolean(activeCheckins[task.id]);
                 const isToday =
                   Math.abs(task.startDateTime.getTime() - Date.now()) < 24 * 3600 * 1000;
@@ -212,6 +245,7 @@ const VolunteerDashboard: React.FC = () => {
                     <div className="task-card-head">
                       <div>
                         <h3>{task.title}</h3>
+                        {task.eventName && <p className="event-label">{task.eventName}</p>}
                         <p className="muted">
                           {formatDate(task.startDateTime)}
                           {task.location ? ` · ${task.location}` : ''}
@@ -251,6 +285,21 @@ const VolunteerDashboard: React.FC = () => {
     </div>
   );
 };
+
+const VolunteerTaskFilters: React.FC<{
+  search: string;
+  setSearch: (value: string) => void;
+  skill: string;
+  setSkill: (value: string) => void;
+  sort: 'soonest' | 'latest' | 'title';
+  setSort: (value: 'soonest' | 'latest' | 'title') => void;
+}> = ({ search, setSearch, skill, setSkill, sort, setSort }) => (
+  <div className="filter-bar volunteer-task-filters">
+    <label className="search-field"><span>Search</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Task, event, or location" /></label>
+    <label><span>Skill</span><select value={skill} onChange={(e) => setSkill(e.target.value)}><option value="all">All skills</option>{SKILL_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+    <label><span>Sort</span><select value={sort} onChange={(e) => setSort(e.target.value as 'soonest' | 'latest' | 'title')}><option value="soonest">Soonest first</option><option value="latest">Latest first</option><option value="title">Task name</option></select></label>
+  </div>
+);
 
 // ---------------------------------------------------------------------------
 // Profile tab

@@ -183,6 +183,10 @@ const TasksTab: React.FC<{
 }> = ({ tasks, volunteers, events, setError, uid }) => {
   const [form, setForm] = useState(emptyTaskForm);
   const [saving, setSaving] = useState(false);
+  const [taskSearch, setTaskSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
+  const [eventFilter, setEventFilter] = useState('all');
+  const [taskSort, setTaskSort] = useState<'soonest' | 'latest' | 'title'>('soonest');
 
   const volunteerById = useMemo(() => {
     const map = new Map<string, VolunteerProfile>();
@@ -190,32 +194,59 @@ const TasksTab: React.FC<{
     return map;
   }, [volunteers]);
 
+  const filteredTasks = useMemo(() => {
+    const q = taskSearch.trim().toLowerCase();
+    const result = tasks.filter((task) => {
+      const matchesSearch = !q || [task.title, task.description, task.location, task.eventName]
+        .some((value) => value?.toLowerCase().includes(q));
+      const matchesStatus = statusFilter === 'all' || task.status === statusFilter;
+      const matchesEvent = eventFilter === 'all'
+        || (eventFilter === '__none__' ? !task.eventId : task.eventId === eventFilter);
+      return matchesSearch && matchesStatus && matchesEvent;
+    });
+    return result.sort((a, b) => {
+      if (taskSort === 'title') return a.title.localeCompare(b.title);
+      const delta = a.startDateTime.getTime() - b.startDateTime.getTime();
+      return taskSort === 'latest' ? -delta : delta;
+    });
+  }, [tasks, taskSearch, statusFilter, eventFilter, taskSort]);
+
+  const taskStats = useMemo(() => ({
+    total: tasks.length,
+    open: tasks.filter((task) => task.status === 'open').length,
+    needsPeople: tasks.filter((task) =>
+      task.status !== 'cancelled' && task.status !== 'completed' && openSlots(task) > 0
+    ).length,
+    assigned: tasks.reduce((sum, task) => sum + task.assignedVolunteers.length, 0),
+  }), [tasks]);
+
   // Group tasks first by event (standalone tasks fall under "Ungrouped"),
   // then group each event's tasks into recurring series.
   const eventSections = useMemo(() => {
     const byEvent = new Map<string, { name: string; tasks: VolunteerTask[] }>();
-    for (const task of tasks) {
+    for (const task of filteredTasks) {
       const key = task.eventId || '__none__';
       const name = task.eventId ? task.eventName || 'Event' : 'Ungrouped tasks';
       if (!byEvent.has(key)) byEvent.set(key, { name, tasks: [] });
       byEvent.get(key)!.tasks.push(task);
     }
-    const sections = Array.from(byEvent.entries()).map(([key, val]) => ({
-      key,
-      name: val.name,
-      isEvent: key !== '__none__',
-      groups: groupTasksBySeries(val.tasks),
-    }));
+    const sections = Array.from(byEvent.entries()).map(([key, val]) => {
+      const groups = groupTasksBySeries(val.tasks);
+      if (taskSort === 'latest') groups.reverse();
+      if (taskSort === 'title') groups.sort((a, b) => a.title.localeCompare(b.title));
+      return { key, name: val.name, isEvent: key !== '__none__', groups };
+    });
     // Events first (by earliest upcoming task), ungrouped last.
     sections.sort((a, b) => {
       if (a.key === '__none__') return 1;
       if (b.key === '__none__') return -1;
+      if (taskSort === 'title') return a.name.localeCompare(b.name);
       const at = a.groups[0]?.occurrences[0]?.startDateTime.getTime() || 0;
       const bt = b.groups[0]?.occurrences[0]?.startDateTime.getTime() || 0;
-      return at - bt;
+      return taskSort === 'latest' ? bt - at : at - bt;
     });
     return sections;
-  }, [tasks]);
+  }, [filteredTasks, taskSort]);
 
   const toggleSkill = (skill: string) => {
     setForm((f) => ({
@@ -406,13 +437,60 @@ const TasksTab: React.FC<{
         </form>
       </section>
 
-      <section className="panel">
-        <h2>Tasks</h2>
+      <section className="panel results-panel">
+        <div className="summary-strip" aria-label="Task summary">
+          <div><strong>{taskStats.total}</strong><span>Upcoming</span></div>
+          <div><strong>{taskStats.open}</strong><span>Open</span></div>
+          <div><strong>{taskStats.needsPeople}</strong><span>Need people</span></div>
+          <div><strong>{taskStats.assigned}</strong><span>Assignments</span></div>
+        </div>
+        <div className="panel-head results-heading">
+          <div>
+            <h2>Tasks</h2>
+            <p className="muted small">{filteredTasks.length} of {tasks.length} occurrences shown</p>
+          </div>
+          {(taskSearch || statusFilter !== 'all' || eventFilter !== 'all') && (
+            <button className="link-btn" onClick={() => {
+              setTaskSearch('');
+              setStatusFilter('all');
+              setEventFilter('all');
+            }}>Clear filters</button>
+          )}
+        </div>
+        <div className="filter-bar">
+          <label className="search-field">
+            <span>Search</span>
+            <input value={taskSearch} onChange={(e) => setTaskSearch(e.target.value)} placeholder="Task, event, or location" />
+          </label>
+          <label>
+            <span>Status</span>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'all' | TaskStatus)}>
+              <option value="all">All statuses</option>
+              {STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status.replace('_', ' ')}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Event</span>
+            <select value={eventFilter} onChange={(e) => setEventFilter(e.target.value)}>
+              <option value="all">All events</option>
+              <option value="__none__">Standalone</option>
+              {events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Sort</span>
+            <select value={taskSort} onChange={(e) => setTaskSort(e.target.value as typeof taskSort)}>
+              <option value="soonest">Soonest first</option>
+              <option value="latest">Latest first</option>
+              <option value="title">Task name</option>
+            </select>
+          </label>
+        </div>
         <p className="muted small">
           Showing the next several months. Recurring tasks are grouped — expand a series to
           assign different volunteers to each date.
         </p>
-        {eventSections.length === 0 && <p className="muted">No tasks yet.</p>}
+        {eventSections.length === 0 && <div className="empty-state"><strong>No matching tasks</strong><span>Adjust the filters or create a new task.</span></div>}
         {eventSections.map((section) => (
           <div key={section.key} className="event-section">
             {section.isEvent && (
@@ -609,6 +687,8 @@ const VolunteersTab: React.FC<{
   const [editing, setEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(emptyVolunteerForm);
   const [search, setSearch] = useState('');
+  const [skillFilter, setSkillFilter] = useState('all');
+  const [volunteerSort, setVolunteerSort] = useState<'name' | 'hours' | 'newest'>('name');
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -696,7 +776,13 @@ const VolunteersTab: React.FC<{
 
   const filtered = volunteers.filter((v) => {
     const q = search.trim().toLowerCase();
-    return !q || v.name.toLowerCase().includes(q) || v.email.toLowerCase().includes(q);
+    const matchesSearch = !q || [v.name, v.email, v.phoneNumber]
+      .some((value) => value.toLowerCase().includes(q));
+    return matchesSearch && (skillFilter === 'all' || v.skills.includes(skillFilter));
+  }).sort((a, b) => {
+    if (volunteerSort === 'hours') return b.totalHours - a.totalHours;
+    if (volunteerSort === 'newest') return b.joinedDate.getTime() - a.joinedDate.getTime();
+    return a.name.localeCompare(b.name);
   });
 
   return (
@@ -756,12 +842,31 @@ const VolunteersTab: React.FC<{
           </div>
         </div>
         <p className="muted small">CSV columns: first name, last name, email, phone.</p>
+        <p className="results-count">{filtered.length} of {volunteers.length} volunteers shown</p>
         <input
           className="search"
           placeholder="Search name or email…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <div className="compact-filters">
+          <label>
+            <span>Skill</span>
+            <select value={skillFilter} onChange={(e) => setSkillFilter(e.target.value)}>
+              <option value="all">All skills</option>
+              {SKILL_OPTIONS.map((skill) => <option key={skill} value={skill}>{skill}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Sort</span>
+            <select value={volunteerSort} onChange={(e) => setVolunteerSort(e.target.value as typeof volunteerSort)}>
+              <option value="name">Name</option>
+              <option value="hours">Most hours</option>
+              <option value="newest">Newest</option>
+            </select>
+          </label>
+        </div>
+        {filtered.length === 0 && <div className="empty-state"><strong>No matching volunteers</strong><span>Adjust your search or skill filter.</span></div>}
         <div className="volunteer-list">
           {filtered.map((v) => (
             <div key={v.uid} className="volunteer-card">
