@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SKILL_OPTIONS, TempleEvent } from '../helpers/types';
+import { TempleEvent } from '../helpers/types';
 import { isAiConfigured, parseEventRequest, ParsedTask } from '../helpers/ai';
 import { createEvent, createTask } from '../helpers/store';
 
@@ -68,23 +68,6 @@ const AICreateTab: React.FC<Props> = ({ uid, events, setError }) => {
     setTasks((prev) => (prev ? prev.filter((_, idx) => idx !== i) : prev));
   };
 
-  const toggleSkill = (i: number, skill: string) => {
-    setTasks((prev) =>
-      prev
-        ? prev.map((t, idx) =>
-            idx === i
-              ? {
-                  ...t,
-                  skills: t.skills.includes(skill)
-                    ? t.skills.filter((s) => s !== skill)
-                    : [...t.skills, skill],
-                }
-              : t
-          )
-        : prev
-    );
-  };
-
   const handleCreateAll = async () => {
     if (!tasks || tasks.length === 0) return;
     setError('');
@@ -118,7 +101,7 @@ const AICreateTab: React.FC<Props> = ({ uid, events, setError }) => {
           title: t.title,
           startDateTime: new Date(t.startDateTime),
           location: t.location,
-          skillsNeeded: t.skills,
+          skillsNeeded: [],
           volunteersNeeded: t.volunteersNeeded,
           openForSignup: t.openForSignup,
           recurrence: 'none',
@@ -283,18 +266,6 @@ const AICreateTab: React.FC<Props> = ({ uid, events, setError }) => {
                       onChange={(e) => updateTask(i, { location: e.target.value })}
                     />
                   </div>
-                </div>
-                <div className="chip-group">
-                  {SKILL_OPTIONS.map((s) => (
-                    <button
-                      type="button"
-                      key={s}
-                      className={`chip ${t.skills.includes(s) ? 'chip-on' : ''}`}
-                      onClick={() => toggleSkill(i, s)}
-                    >
-                      {s}
-                    </button>
-                  ))}
                 </div>
                 <label className="checkbox-row">
                   <input

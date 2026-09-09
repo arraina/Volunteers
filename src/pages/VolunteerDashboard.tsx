@@ -11,7 +11,6 @@ import { auth } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
 import {
   NotificationChannel,
-  SKILL_OPTIONS,
   VolunteerProfile,
   VolunteerTask,
   WEEKDAYS,
@@ -44,7 +43,6 @@ const VolunteerDashboard: React.FC = () => {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [taskSearch, setTaskSearch] = useState('');
-  const [skillFilter, setSkillFilter] = useState('all');
   const [taskSort, setTaskSort] = useState<'soonest' | 'latest' | 'title'>('soonest');
   // Active check-in sessions: taskId -> { logId, checkInAt }
   const [activeCheckins, setActiveCheckins] = useState<
@@ -92,14 +90,13 @@ const VolunteerDashboard: React.FC = () => {
     return items.filter((task) => {
       const matchesSearch = !q || [task.title, task.description, task.location, task.eventName]
         .some((value) => value?.toLowerCase().includes(q));
-      const matchesSkill = skillFilter === 'all' || task.skillsNeeded.includes(skillFilter);
-      return matchesSearch && matchesSkill;
+      return matchesSearch;
     }).sort((a, b) => {
       if (taskSort === 'title') return a.title.localeCompare(b.title);
       const delta = a.startDateTime.getTime() - b.startDateTime.getTime();
       return taskSort === 'latest' ? -delta : delta;
     });
-  }, [taskSearch, skillFilter, taskSort]);
+  }, [taskSearch, taskSort]);
 
   const visibleOpenTasks = useMemo(
     () => filterAndSortTasks(openTasks),
@@ -188,19 +185,17 @@ const VolunteerDashboard: React.FC = () => {
             <div className="panel-head results-heading">
               <div><h2>Tasks you can sign up for</h2><p className="muted small">{visibleOpenTasks.length} opportunities shown</p></div>
             </div>
-            <VolunteerTaskFilters search={taskSearch} setSearch={setTaskSearch} skill={skillFilter} setSkill={setSkillFilter} sort={taskSort} setSort={setTaskSort} />
-            {visibleOpenTasks.length === 0 && <div className="empty-state"><strong>No matching open tasks</strong><span>Try another search or skill.</span></div>}
+            <VolunteerTaskFilters search={taskSearch} setSearch={setTaskSearch} sort={taskSort} setSort={setTaskSort} />
+            {visibleOpenTasks.length === 0 && <div className="empty-state"><strong>No matching open tasks</strong><span>Try another search.</span></div>}
             <div className="task-list">
               {visibleOpenTasks.map((task) => {
                 const full = isTaskFull(task);
-                const matches = task.skillsNeeded.some((s) => profile.skills.includes(s));
                 return (
                   <div key={task.id} className="task-card">
                     <div className="task-card-head">
                       <div>
                         <h3>
                           {task.title}
-                          {matches && <span className="match-tag">matches your skills</span>}
                         </h3>
                         {task.eventName && <p className="event-label">{task.eventName}</p>}
                         <p className="muted">
@@ -210,9 +205,6 @@ const VolunteerDashboard: React.FC = () => {
                       </div>
                     </div>
                     {task.description && <p>{task.description}</p>}
-                    {task.skillsNeeded.length > 0 && (
-                      <p className="muted small">Skills: {task.skillsNeeded.join(', ')}</p>
-                    )}
                     <p className="small">{openSlots(task)} of {task.volunteersNeeded} slots open</p>
                     <button
                       className="primary-btn"
@@ -233,7 +225,7 @@ const VolunteerDashboard: React.FC = () => {
             <div className="panel-head results-heading">
               <div><h2>Your tasks</h2><p className="muted small">{visibleMyTasks.length} assignments shown</p></div>
             </div>
-            <VolunteerTaskFilters search={taskSearch} setSearch={setTaskSearch} skill={skillFilter} setSkill={setSkillFilter} sort={taskSort} setSort={setTaskSort} />
+            <VolunteerTaskFilters search={taskSearch} setSearch={setTaskSearch} sort={taskSort} setSort={setTaskSort} />
             {visibleMyTasks.length === 0 && <div className="empty-state"><strong>No matching assignments</strong><span>Your assigned tasks will appear here.</span></div>}
             <div className="task-list">
               {visibleMyTasks.map((task) => {
@@ -289,14 +281,11 @@ const VolunteerDashboard: React.FC = () => {
 const VolunteerTaskFilters: React.FC<{
   search: string;
   setSearch: (value: string) => void;
-  skill: string;
-  setSkill: (value: string) => void;
   sort: 'soonest' | 'latest' | 'title';
   setSort: (value: 'soonest' | 'latest' | 'title') => void;
-}> = ({ search, setSearch, skill, setSkill, sort, setSort }) => (
+}> = ({ search, setSearch, sort, setSort }) => (
   <div className="filter-bar volunteer-task-filters">
     <label className="search-field"><span>Search</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Task, event, or location" /></label>
-    <label><span>Skill</span><select value={skill} onChange={(e) => setSkill(e.target.value)}><option value="all">All skills</option>{SKILL_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
     <label><span>Sort</span><select value={sort} onChange={(e) => setSort(e.target.value as 'soonest' | 'latest' | 'title')}><option value="soonest">Soonest first</option><option value="latest">Latest first</option><option value="title">Task name</option></select></label>
   </div>
 );
@@ -317,7 +306,6 @@ const ProfileTab: React.FC<{
   const [phoneNumber, setPhoneNumber] = useState(
     profile.phoneNumber || sessionStorage.getItem(pendingPhoneKey) || ''
   );
-  const [skills, setSkills] = useState<string[]>(profile.skills);
   const [availability, setAvailability] = useState<string[]>(profile.availability);
   const [prefs, setPrefs] = useState(profile.notificationPrefs);
   const [pushBusy, setPushBusy] = useState(false);
@@ -342,7 +330,6 @@ const ProfileTab: React.FC<{
       await updateVolunteer(profile.uid, {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
-        skills,
         availability,
         notificationPrefs: prefs,
       });
@@ -465,20 +452,6 @@ const ProfileTab: React.FC<{
             </div>
           )}
           <div id="phone-recaptcha" />
-        </div>
-
-        <label className="field-label">Your skills / interests</label>
-        <div className="chip-group">
-          {SKILL_OPTIONS.map((s) => (
-            <button
-              type="button"
-              key={s}
-              className={`chip ${skills.includes(s) ? 'chip-on' : ''}`}
-              onClick={() => toggle(skills, s, setSkills)}
-            >
-              {s}
-            </button>
-          ))}
         </div>
 
         <label className="field-label">Days you're usually available</label>

@@ -13,7 +13,6 @@ import { useAuth } from '../helpers/useAuth';
 import {
   NotificationChannel,
   RecurrenceFrequency,
-  SKILL_OPTIONS,
   TaskStatus,
   TempleEvent,
   VolunteerProfile,
@@ -61,7 +60,6 @@ const emptyTaskForm = {
   startDateTime: '',
   endDateTime: '',
   location: '',
-  skillsNeeded: [] as string[],
   volunteersNeeded: '1',
   openForSignup: true,
   recurrence: 'none' as RecurrenceFrequency,
@@ -288,15 +286,6 @@ const TasksTab: React.FC<{
     return sections;
   }, [filteredTasks, taskSort]);
 
-  const toggleSkill = (skill: string) => {
-    setForm((f) => ({
-      ...f,
-      skillsNeeded: f.skillsNeeded.includes(skill)
-        ? f.skillsNeeded.filter((s) => s !== skill)
-        : [...f.skillsNeeded, skill],
-    }));
-  };
-
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -317,7 +306,7 @@ const TasksTab: React.FC<{
         startDateTime: new Date(form.startDateTime),
         endDateTime: form.endDateTime ? new Date(form.endDateTime) : null,
         location: form.location,
-        skillsNeeded: form.skillsNeeded,
+        skillsNeeded: [],
         volunteersNeeded: needed,
         openForSignup: form.openForSignup,
         recurrence: form.recurrence,
@@ -398,19 +387,6 @@ const TasksTab: React.FC<{
             value={form.location}
             onChange={(e) => setForm({ ...form, location: e.target.value })}
           />
-          <label className="field-label">Skills needed</label>
-          <div className="chip-group">
-            {SKILL_OPTIONS.map((skill) => (
-              <button
-                type="button"
-                key={skill}
-                className={`chip ${form.skillsNeeded.includes(skill) ? 'chip-on' : ''}`}
-                onClick={() => toggleSkill(skill)}
-              >
-                {skill}
-              </button>
-            ))}
-          </div>
           <div className="row">
             <div>
               <label className="field-label">Volunteers needed</label>
@@ -727,7 +703,6 @@ const VolunteersTab: React.FC<{
   const [editing, setEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(emptyVolunteerForm);
   const [search, setSearch] = useState('');
-  const [skillFilter, setSkillFilter] = useState('all');
   const [volunteerSort, setVolunteerSort] = useState<'name' | 'hours' | 'newest'>('name');
   const [resendingInvitation, setResendingInvitation] = useState<string | null>(null);
 
@@ -840,14 +815,13 @@ const VolunteersTab: React.FC<{
   };
 
   const exportCsv = () => {
-    const header = 'Name,Email,Phone,Skills,Total Hours,Joined\n';
+    const header = 'Name,Email,Phone,Total Hours,Joined\n';
     const rows = volunteers
       .map((v) =>
         [
           v.name,
           v.email,
           v.phoneNumber,
-          `"${v.skills.join('; ')}"`,
           v.totalHours,
           v.joinedDate.toLocaleDateString(),
         ].join(',')
@@ -866,7 +840,7 @@ const VolunteersTab: React.FC<{
     const q = search.trim().toLowerCase();
     const matchesSearch = !q || [v.name, v.email, v.phoneNumber]
       .some((value) => value.toLowerCase().includes(q));
-    return matchesSearch && (skillFilter === 'all' || v.skills.includes(skillFilter));
+    return matchesSearch;
   }).sort((a, b) => {
     if (volunteerSort === 'hours') return b.totalHours - a.totalHours;
     if (volunteerSort === 'newest') return b.joinedDate.getTime() - a.joinedDate.getTime();
@@ -952,13 +926,6 @@ const VolunteersTab: React.FC<{
         />
         <div className="compact-filters">
           <label>
-            <span>Skill</span>
-            <select value={skillFilter} onChange={(e) => setSkillFilter(e.target.value)}>
-              <option value="all">All skills</option>
-              {SKILL_OPTIONS.map((skill) => <option key={skill} value={skill}>{skill}</option>)}
-            </select>
-          </label>
-          <label>
             <span>Sort</span>
             <select value={volunteerSort} onChange={(e) => setVolunteerSort(e.target.value as typeof volunteerSort)}>
               <option value="name">Name</option>
@@ -967,7 +934,7 @@ const VolunteersTab: React.FC<{
             </select>
           </label>
         </div>
-        {filtered.length === 0 && <div className="empty-state"><strong>No matching volunteers</strong><span>Adjust your search or skill filter.</span></div>}
+        {filtered.length === 0 && <div className="empty-state"><strong>No matching volunteers</strong><span>Adjust your search.</span></div>}
         <div className="volunteer-list">
           {filtered.map((v) => (
             <div key={v.uid} className="volunteer-card">
@@ -1002,9 +969,6 @@ const VolunteersTab: React.FC<{
                     <p className="muted small">
                       {v.email} · {v.phoneNumber || 'no phone'} · {v.totalHours}h
                     </p>
-                    {v.skills.length > 0 && (
-                      <p className="muted small">{v.skills.join(', ')}</p>
-                    )}
                   </div>
                   <div className="row">
                     {v.invitationStatus === 'invited' && (
@@ -1049,7 +1013,6 @@ const AnnouncementsTab: React.FC<{ uid?: string; setError: (s: string) => void }
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [channels, setChannels] = useState<NotificationChannel[]>(['whatsapp', 'email']);
-  const [audienceSkills, setAudienceSkills] = useState<string[]>([]);
   const [sent, setSent] = useState(false);
 
   const toggleChannel = (c: NotificationChannel) =>
@@ -1065,7 +1028,7 @@ const AnnouncementsTab: React.FC<{ uid?: string; setError: (s: string) => void }
         title: title.trim(),
         body: body.trim(),
         channels,
-        audienceSkills,
+        audienceSkills: [],
         createdBy: uid,
       });
       setTitle('');
@@ -1100,23 +1063,6 @@ const AnnouncementsTab: React.FC<{ uid?: string; setError: (s: string) => void }
               onClick={() => toggleChannel(c)}
             >
               {c}
-            </button>
-          ))}
-        </div>
-        <label className="field-label">Only volunteers with skills (optional)</label>
-        <div className="chip-group">
-          {SKILL_OPTIONS.map((s) => (
-            <button
-              type="button"
-              key={s}
-              className={`chip ${audienceSkills.includes(s) ? 'chip-on' : ''}`}
-              onClick={() =>
-                setAudienceSkills((prev) =>
-                  prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
-                )
-              }
-            >
-              {s}
             </button>
           ))}
         </div>
