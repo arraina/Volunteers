@@ -475,15 +475,27 @@ const ProfileTab: React.FC<{
               <input
                 type="checkbox"
                 checked={prefs[c]}
-                onChange={(e) => setPrefs({ ...prefs, [c]: e.target.checked })}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  if (
+                    c === 'whatsapp' &&
+                    !enabled &&
+                    !window.confirm(
+                      'Turning off WhatsApp will deactivate your volunteer profile. You will no longer receive task or service notifications. Do you want to continue?'
+                    )
+                  ) {
+                    return;
+                  }
+                  setPrefs({ ...prefs, [c]: enabled });
+                }}
               />
               {c === 'whatsapp' ? 'WhatsApp (required while active)' : c === 'email' ? 'Email' : 'Browser push'}
             </label>
           ))}
         </div>
         <p className="muted small">
-          Turning off WhatsApp makes your profile inactive and prevents new task assignments.
-          Your service history is preserved.
+          Turning off WhatsApp deactivates your profile, prevents new task assignments, and stops
+          task and service notifications. Your service history is preserved.
         </p>
 
         <button type="submit" className="primary-btn">
