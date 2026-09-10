@@ -262,3 +262,28 @@
   justify-content: center;
   margin-top: 1.25rem;
 }
+
+@media (max-width: 560px) {
+  .auth-panel {
+    align-items: flex-start;
+    padding: 1rem;
+  }
+
+  .auth-card {
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .auth-card h1 {
+    font-size: 1.4rem;
+  }
+
+  .verification-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .verification-actions button {
+    width: 100%;
+  }
+}

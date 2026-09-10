@@ -44,3 +44,18 @@
   padding-top: 8px;
   color: #4d6652;
 }
+
+@media (max-width: 560px) {
+  .setup-required {
+    align-items: start;
+    padding: 1rem;
+  }
+
+  .setup-panel {
+    padding: 1.25rem;
+  }
+
+  .setup-panel h1 {
+    font-size: 1.45rem;
+  }
+}

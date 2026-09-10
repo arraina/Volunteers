@@ -63,6 +63,11 @@
   padding: 0 1.5rem;
   background: #fff;
   border-bottom: 1px solid #e2e8f0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tab-bar button {
@@ -73,6 +78,9 @@
   color: #64748b;
   font-weight: 500;
   border-bottom: 3px solid transparent;
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  white-space: nowrap;
 }
 
 .tab-bar button.active {
@@ -764,5 +772,151 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 0.75rem;
+  }
+}
+
+/* Mobile usability: prevent card overflow and turn dense desktop controls into
+   comfortable, full-width touch targets. */
+.dashboard-header,
+.dashboard-content,
+.panel,
+.task-card,
+.volunteer-card,
+.occurrence-row,
+.row > div,
+.volunteer-card > div {
+  min-width: 0;
+}
+
+.user-info,
+.volunteer-card p,
+.volunteer-card strong,
+.task-card p,
+.task-card h3,
+.occurrence-row span {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 620px) {
+  .tab-bar {
+    padding: 0 0.25rem;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  .tab-bar button {
+    min-height: 48px;
+    padding: 0.75rem 0.8rem;
+  }
+
+  .dashboard-header h1 {
+    font-size: 1.05rem;
+  }
+
+  .header-actions {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .panel-head {
+    flex-wrap: wrap;
+  }
+
+  .row,
+  .volunteer-card,
+  .task-card-head,
+  .occurrence-head,
+  .task-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .task-card-head,
+  .occurrence-head {
+    gap: 0.5rem;
+  }
+
+  .status-badge {
+    align-self: flex-start;
+  }
+
+  .series-tag,
+  .admin-tag {
+    display: inline-block;
+    margin: 0.3rem 0 0;
+  }
+
+  .task-actions select,
+  .task-actions > button,
+  .trash-card .task-actions,
+  .volunteer-card .row,
+  .volunteer-card .row button {
+    width: 100%;
+  }
+
+  .assigned-list li {
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .assigned-list .link-btn {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+
+  .report-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .report-table th,
+  .report-table td {
+    padding: 0.65rem;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.65rem;
+  }
+
+  .stat-card {
+    padding: 0.9rem;
+  }
+
+  .stat-num {
+    font-size: 1.45rem;
+  }
+
+  .checkbox-row {
+    align-items: flex-start;
+    line-height: 1.4;
+  }
+
+  .checkbox-row input {
+    flex: 0 0 auto;
+    min-height: 20px;
+    margin-top: 0.05rem;
+  }
+
+  .ai-preview .row > input,
+  .ai-preview .row > button,
+  .file-label,
+  .secondary-btn {
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .summary-strip,
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-strip > div {
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
   }
 }

@@ -40,6 +40,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background: var(--bg);
   color: var(--ink);
+  overflow-x: hidden;
 }
 
 code {
@@ -59,4 +60,36 @@ input,
 select,
 textarea {
   font-family: inherit;
+  max-width: 100%;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(76, 175, 80, 0.35);
+  outline-offset: 2px;
+}
+
+@media (max-width: 620px) {
+  button,
+  select,
+  input {
+    min-height: 44px;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
