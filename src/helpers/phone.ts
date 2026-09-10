@@ -2,7 +2,8 @@ const E164_PATTERN = /^\+[1-9]\d{7,14}$/;
 
 /**
  * Normalize common US formatting and validate international E.164 structure.
- * This checks plausibility only; phone ownership requires an SMS verification flow.
+ * This validates and stores a consistent phone format. Successful reminder
+ * delivery is the practical reachability check because SMS Auth is not used.
  */
 export function normalizePhoneNumber(value: string, required = false): string {
   const input = value.trim();

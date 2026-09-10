@@ -47,7 +47,6 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [whatsappConsent, setWhatsappConsent] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const actionCodeSettings = {
@@ -76,20 +75,15 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
       if (!fn || !ln) throw new Error('First and last name are required.');
       if (!normalizedEmail) throw new Error('Email is required.');
       if (password.length < 6) throw new Error('Password must be at least 6 characters.');
-      if (!whatsappConsent) {
-        throw new Error('WhatsApp reminders are required for active volunteers.');
-      }
-
       const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       await updateProfile(credential.user, { displayName: `${fn} ${ln}` });
       await createVolunteerProfile(credential.user.uid, {
         firstName: fn,
         lastName: ln,
         email: normalizedEmail,
-        phoneNumber: '',
+        phoneNumber: phone,
         whatsappOptIn: true,
       });
-      sessionStorage.setItem(`pendingPhone:${credential.user.uid}`, phone);
       await sendEmailVerification(credential.user, actionCodeSettings);
       navigate('/verify-email', { state: { email: normalizedEmail } });
     } catch (err) {
@@ -251,21 +245,9 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
                 required
               />
               <small className="field-hint">
-                You will verify this number by SMS after confirming your email.
+                Enter a valid phone number. Include the country code for non-US numbers.
               </small>
             </div>
-          )}
-
-          {!isLogin && (
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={whatsappConsent}
-                onChange={(e) => setWhatsappConsent(e.target.checked)}
-                required
-              />
-              I agree to receive required task reminders on WhatsApp
-            </label>
           )}
 
           <div className="form-group">

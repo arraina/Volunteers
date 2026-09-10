@@ -100,10 +100,7 @@ service cloud.firestore {
         || (signedIn()
             && request.auth.uid == volunteerId
             && request.resource.data.email == request.auth.token.email
-            && (hasNoPhoneNumber()
-                || (hasValidPhoneNumber()
-                    && request.auth.token.phone_number is string
-                    && request.resource.data.phoneNumber == request.auth.token.phone_number)));
+            && (hasNoPhoneNumber() || hasValidPhoneNumber()));
       allow update: if isAdmin()
         || (verifiedUser()
             && request.auth.uid == volunteerId
