@@ -31,7 +31,8 @@ import {
   AdminAccess,
   subscribeEvents,
   permanentlyDeleteTaskBatch,
-  deleteVolunteer,
+  deleteVolunteerAccount,
+  deleteVolunteerProfile,
   getHourLogs,
   getEventFeedbackRecords,
   getPastTasks,
@@ -94,6 +95,8 @@ const emptyVolunteerForm = {
   whatsappOptIn: true,
 };
 
+const secureAccountDeletionEnabled = process.env.REACT_APP_ACCOUNT_DELETION_ENABLED === 'true';
+
 const toDateTimeInput = (date?: Date) => {
   if (!date) return '';
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
@@ -134,7 +137,7 @@ async function createVolunteerInvitation(input: typeof emptyVolunteerForm): Prom
     await sendPasswordResetEmail(auth, email, invitationSettings());
     await recordInvitationSent(invitedUser.uid).catch(() => undefined);
   } catch (error) {
-    if (profileCreated && invitedUser) await deleteVolunteer(invitedUser.uid).catch(() => undefined);
+    if (profileCreated && invitedUser) await deleteVolunteerProfile(invitedUser.uid).catch(() => undefined);
     if (invitedUser) await deleteUser(invitedUser).catch(() => undefined);
     throw error;
   } finally {
@@ -404,12 +407,14 @@ const TasksTab: React.FC<{
         <form onSubmit={handleCreate} className="stacked-form">
           <input
             type="text"
+            aria-label="Task title"
             placeholder="Task title (e.g. Kitchen prep for Sunday feast)"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
             required
           />
           <textarea
+            aria-label="Task description"
             placeholder="Description"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -441,6 +446,7 @@ const TasksTab: React.FC<{
           />
           <input
             type="text"
+            aria-label="Task location"
             placeholder="Location"
             value={form.location}
             onChange={(e) => setForm({ ...form, location: e.target.value })}
@@ -625,15 +631,21 @@ const SeriesCard: React.FC<{
 }> = ({ group, volunteers, volunteerById, onAssign, onRemove, onTrash, setError }) => {
   const isSeries = group.recurrence !== 'none' && !!group.seriesId;
   const [expanded, setExpanded] = useState(!isSeries);
+  const [scopeRequest, setScopeRequest] = useState<{
+    verb: string;
+    resolve: (scope: SeriesScope | null) => void;
+  } | null>(null);
   const upcoming = group.occurrences.filter((o) => o.startDateTime >= new Date());
   const next = upcoming[0] || group.occurrences[0];
 
-  const askScope = (verb: string): SeriesScope | null => {
-    if (!isSeries) return 'one';
-    const all = window.confirm(
-      `${verb} — apply to ALL future dates in this series?\n\nOK = this and all future dates\nCancel = just this one date`
-    );
-    return all ? 'future' : 'one';
+  const askScope = (verb: string): Promise<SeriesScope | null> => {
+    if (!isSeries) return Promise.resolve('one');
+    return new Promise((resolve) => setScopeRequest({ verb, resolve }));
+  };
+
+  const chooseScope = (scope: SeriesScope | null) => {
+    scopeRequest?.resolve(scope);
+    setScopeRequest(null);
   };
 
   return (
@@ -676,6 +688,17 @@ const SeriesCard: React.FC<{
           ))}
         </div>
       )}
+      {scopeRequest && <div className="scope-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) chooseScope(null); }}>
+        <section className="scope-dialog" role="dialog" aria-modal="true" aria-labelledby={`scope-title-${group.seriesId}`}>
+          <h3 id={`scope-title-${group.seriesId}`}>{scopeRequest.verb}</h3>
+          <p>This task repeats. Which dates should be changed?</p>
+          <div className="scope-dialog-actions">
+            <button className="primary-btn" onClick={() => chooseScope('one')}>Only this date</button>
+            <button className="secondary-btn" onClick={() => chooseScope('future')}>This and future dates</button>
+            <button className="link-btn" onClick={() => chooseScope(null)}>Cancel</button>
+          </div>
+        </section>
+      </div>}
     </div>
   );
 };
@@ -687,7 +710,7 @@ const OccurrenceRow: React.FC<{
   onAssign: (task: VolunteerTask, volunteerId: string) => Promise<void>;
   onRemove: (task: VolunteerTask, volunteerId: string) => void;
   onTrash: (task: VolunteerTask, scope: SeriesScope) => Promise<void>;
-  askScope: (verb: string) => SeriesScope | null;
+  askScope: (verb: string) => Promise<SeriesScope | null>;
   setError: (s: string) => void;
 }> = ({ task, volunteers, volunteerById, onAssign, onRemove, onTrash, askScope, setError }) => {
   const [assigning, setAssigning] = useState(false);
@@ -719,7 +742,7 @@ const OccurrenceRow: React.FC<{
       setError(`Volunteers needed must be at least ${Math.max(1, task.assignedVolunteers.length)}.`);
       return;
     }
-    const scope = askScope('Edit task');
+    const scope = await askScope('Edit task');
     if (!scope) return;
     const startChanged = editForm.startDateTime !== toDateTimeInput(task.startDateTime);
     const endChanged = editForm.endDateTime !== toDateTimeInput(task.endDateTime);
@@ -761,7 +784,7 @@ const OccurrenceRow: React.FC<{
         <ul className="assigned-list">
           {task.assignedVolunteers.map((vid) => (
             <li key={vid}>
-              {volunteerById.get(vid)?.name || vid}
+              {volunteerById.get(vid)?.name || (vid.startsWith('former_') ? 'Former volunteer' : vid)}
               <button className="link-btn" onClick={() => onRemove(task, vid)}>
                 remove
               </button>
@@ -818,7 +841,7 @@ const OccurrenceRow: React.FC<{
         <button className="secondary-btn" onClick={() => { setEditForm(taskEditValues(task)); setEditing((value) => !value); }}>{editing ? 'Close editor' : 'Edit Task'}</button>
         {status !== 'completed' && <button className="link-btn danger" onClick={async () => {
           const nextStatus: TaskStatus = status === 'cancelled' ? 'open' : 'cancelled';
-          const scope = askScope(status === 'cancelled' ? 'Reopen task' : 'Cancel task');
+          const scope = await askScope(status === 'cancelled' ? 'Reopen task' : 'Cancel task');
           if (!scope) return;
           try {
             await updateTaskStatusScoped(task, nextStatus, scope);
@@ -831,7 +854,7 @@ const OccurrenceRow: React.FC<{
         <button
           className="danger-btn"
           onClick={async () => {
-            const scope = askScope('Delete');
+            const scope = await askScope('Move task to Trash');
             if (!scope) return;
             if (!window.confirm('Move this task to Trash? It can be restored for 30 days.')) return;
             try {
@@ -1061,7 +1084,6 @@ const VolunteersTab: React.FC<{
       await updateVolunteer(uid, {
         firstName: editForm.firstName,
         lastName: editForm.lastName,
-        email: editForm.email,
         phoneNumber: editForm.phoneNumber,
       });
       setEditing(null);
@@ -1162,12 +1184,14 @@ const VolunteersTab: React.FC<{
         </p>
         <form onSubmit={handleAdd} className="stacked-form">
           <input
+            aria-label="Volunteer first name"
             placeholder="First name"
             value={form.firstName}
             onChange={(e) => setForm({ ...form, firstName: e.target.value })}
             required
           />
           <input
+            aria-label="Volunteer last name"
             placeholder="Last name"
             value={form.lastName}
             onChange={(e) => setForm({ ...form, lastName: e.target.value })}
@@ -1175,6 +1199,7 @@ const VolunteersTab: React.FC<{
           />
           <input
             type="email"
+            aria-label="Volunteer email"
             placeholder="Email"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -1182,6 +1207,7 @@ const VolunteersTab: React.FC<{
           />
           <input
             type="tel"
+            aria-label="Volunteer phone number"
             placeholder="Phone (for reminders)"
             value={form.phoneNumber}
             onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
@@ -1225,6 +1251,7 @@ const VolunteersTab: React.FC<{
         <p className="results-count">{filtered.length} of {volunteers.length} volunteers shown</p>
         <input
           className="search"
+          aria-label="Search volunteers"
           placeholder="Search name or email…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -1246,21 +1273,24 @@ const VolunteersTab: React.FC<{
               {editing === v.uid ? (
                 <div className="stacked-form">
                   <input
+                    aria-label="Volunteer first name"
                     value={editForm.firstName}
                     onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
                   />
                   <input
+                    aria-label="Volunteer last name"
                     value={editForm.lastName}
                     onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
                   />
                   <input
                     type="email"
+                    aria-label="Login email"
                     value={editForm.email}
-                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    placeholder="Notification email"
-                    required
+                    disabled
                   />
+                  <small className="field-hint">Login email cannot be changed here. The volunteer must continue using this email to sign in.</small>
                   <input
+                    aria-label="Volunteer phone number"
                     value={editForm.phoneNumber}
                     onChange={(e) => setEditForm({ ...editForm, phoneNumber: e.target.value })}
                   />
@@ -1297,11 +1327,18 @@ const VolunteersTab: React.FC<{
                     </button>
                     <button
                       className="link-btn danger"
-                      onClick={() => {
-                        if (window.confirm(`Remove ${v.name}?`)) deleteVolunteer(v.uid);
+                      disabled={!secureAccountDeletionEnabled}
+                      title={secureAccountDeletionEnabled ? 'Permanently delete this account' : 'Requires Firebase Blaze plan and the secure deletion function'}
+                      onClick={async () => {
+                        if (!window.confirm(`Permanently delete ${v.name}'s login and profile? Future assignments will be removed and completed service history will be anonymized. This cannot be undone.`)) return;
+                        try {
+                          await deleteVolunteerAccount(v.uid);
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : 'Failed to delete volunteer account.');
+                        }
                       }}
                     >
-                      Remove
+                      {secureAccountDeletionEnabled ? 'Delete account' : 'Account deletion requires Blaze'}
                     </button>
                   </div>
                 </>
@@ -1359,8 +1396,9 @@ const AnnouncementsTab: React.FC<{ uid?: string; setError: (s: string) => void }
       </p>
       {sent && <div className="success-message">Announcement queued for delivery.</div>}
       <form onSubmit={handleSend} className="stacked-form">
-        <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input aria-label="Announcement title" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
         <textarea
+          aria-label="Announcement message"
           placeholder="Message to volunteers"
           value={body}
           onChange={(e) => setBody(e.target.value)}
@@ -1477,7 +1515,7 @@ const HistoryTab: React.FC<{
                     <p className="small muted">
                       Volunteers:{' '}
                       {task.assignedVolunteers
-                        .map((vid) => volunteerById.get(vid)?.name || 'Unknown')
+                        .map((vid) => volunteerById.get(vid)?.name || (vid.startsWith('former_') ? 'Former volunteer' : 'Unknown'))
                         .join(', ')}
                     </p>
                   ) : (

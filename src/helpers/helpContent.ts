@@ -162,6 +162,8 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: 'Add one volunteer', text: 'Open Volunteers, enter all required details including phone, confirm WhatsApp consent, and send the invitation. The volunteer receives a password-setting workflow and has the same Firebase login capability as a self-registered user.' },
       { heading: 'Bulk CSV import', text: 'Use the CSV import control and its expected columns. Imported records follow the same active-profile, phone, WhatsApp, and invitation rules as individually added records. Review validation errors before retrying rejected rows.' },
       { heading: 'Edit and assign', text: 'Admins can update volunteer details and assign active volunteers with a WhatsApp phone to tasks. Reaching the required count disables further assignment.' },
+      { heading: 'Login email', text: 'A volunteer login email is read-only in the Admin editor so the profile cannot disagree with Firebase Authentication. Use the existing email for login and password reset.' },
+      { heading: 'Delete an account', text: 'When secure account deletion is enabled, choose Delete account only after confirming the correct person. It deletes the Firebase login and profile, removes future assignments, and preserves completed service and feedback only in anonymized form. This control requires the Firebase Blaze plan; an Admin account must first have its Admin access removed by the Owner.' },
       { heading: 'Invitations', text: 'Use Resend Invitation when a volunteer did not act on the original email. The volunteer may alternatively use Forgot password. An unaccepted invitation does not prevent an admin from assigning the volunteer; reminder delivery still depends on valid configured contact channels.' },
     ], keywords: ['add volunteer', 'csv', 'bulk import', 'edit volunteer', 'resend invitation', 'assign'],
   },
@@ -218,7 +220,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: 'Cancel versus Trash', text: 'Cancel when a task will not happen but its record should remain visible in history; use Reopen to reverse it. Move to Trash when the task record should be removed from active views.' },
       { heading: 'Admin boundary', text: 'Admins can cancel, reopen, and move tasks to Trash. They cannot restore or permanently delete trashed tasks.' },
       { heading: 'Owner recovery', text: 'The Owner can restore a task or a deleted group of recurring occurrences from Task Trash. Permanent deletion requires confirmation and cannot be undone. Trash is automatically purged after 30 days.' },
-    ], keywords: ['delete', 'trash', 'undo', 'restore', 'permanent', 'cancel', 'reopen', '30 days'],
+    ], keywords: ['delete', 'deleted', 'trash', 'task recovery', 'undo', 'restore', 'permanent', 'cancel', 'reopen', '30 days'],
   },
   {
     id: 'analytics', title: 'Analytics, filters, and planning decisions', category: 'Reports', roles: ['admin', 'owner'],
@@ -260,7 +262,11 @@ export function findHelpArticles(query: string, articles = HELP_ARTICLES): HelpA
     .map((article) => {
       const haystack = helpArticleText(article).toLowerCase();
       const title = article.title.toLowerCase();
-      const score = words.reduce((sum, word) => sum + (title.includes(word) ? 4 : 0) + (haystack.includes(word) ? 1 : 0), 0);
+      const keywords = article.keywords.join(' ').toLowerCase();
+      const score = words.reduce((sum, word) => sum
+        + (title.includes(word) ? 6 : 0)
+        + (keywords.includes(word) ? 4 : 0)
+        + (haystack.includes(word) ? 1 : 0), 0);
       return { article, score };
     })
     .filter(({ score }) => score > 0)

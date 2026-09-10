@@ -272,6 +272,7 @@ const AICreateTab: React.FC<Props> = ({ uid, events, tasks: existingTasks, volun
           </select>
         )}
         <textarea
+          aria-label="AI task request"
           placeholder={
             mode === 'manage'
               ? 'e.g. move kitchen prep on September 14 to 3 PM and assign Priya; remove John from parking'

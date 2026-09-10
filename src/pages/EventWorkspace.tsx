@@ -198,12 +198,12 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
       <section className="panel">
         <h2>Planning meetings</h2>
         <form className="stacked-form" onSubmit={addMeeting}>
-          <input placeholder="Meeting title" value={meeting.title} onChange={(e) => setMeeting({ ...meeting, title: e.target.value })} required />
+          <input aria-label="Meeting title" placeholder="Meeting title" value={meeting.title} onChange={(e) => setMeeting({ ...meeting, title: e.target.value })} required />
           <input type="datetime-local" value={meeting.meetingDate} onChange={(e) => setMeeting({ ...meeting, meetingDate: e.target.value })} />
-          <input placeholder="Attendees" value={meeting.attendees} onChange={(e) => setMeeting({ ...meeting, attendees: e.target.value })} />
-          <textarea placeholder="Discussion notes" value={meeting.notes} onChange={(e) => setMeeting({ ...meeting, notes: e.target.value })} />
-          <textarea placeholder="Decisions made" value={meeting.decisions} onChange={(e) => setMeeting({ ...meeting, decisions: e.target.value })} />
-          <textarea placeholder="Action items — include owner and due date" value={meeting.actionItems} onChange={(e) => setMeeting({ ...meeting, actionItems: e.target.value })} />
+          <input aria-label="Meeting attendees" placeholder="Attendees" value={meeting.attendees} onChange={(e) => setMeeting({ ...meeting, attendees: e.target.value })} />
+          <textarea aria-label="Discussion notes" placeholder="Discussion notes" value={meeting.notes} onChange={(e) => setMeeting({ ...meeting, notes: e.target.value })} />
+          <textarea aria-label="Decisions made" placeholder="Decisions made" value={meeting.decisions} onChange={(e) => setMeeting({ ...meeting, decisions: e.target.value })} />
+          <textarea aria-label="Action items" placeholder="Action items — include owner and due date" value={meeting.actionItems} onChange={(e) => setMeeting({ ...meeting, actionItems: e.target.value })} />
           <button className="primary-btn" type="submit">Save meeting notes</button>
         </form>
         {meetings.map((item) => <div className="task-card" key={item.id}>
@@ -223,7 +223,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
         </div>)}
         <div className="stacked-form">
           <label className="field-label">Lessons for next time</label>
-          <textarea value={lessons} onChange={(e) => setLessons(e.target.value)} placeholder="Summarize improvements to carry into the next event" />
+          <textarea aria-label="Lessons for next time" value={lessons} onChange={(e) => setLessons(e.target.value)} placeholder="Summarize improvements to carry into the next event" />
           <button className="primary-btn" onClick={saveLessons}>Save lessons</button>
         </div>
       </section>

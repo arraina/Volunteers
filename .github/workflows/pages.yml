@@ -44,6 +44,7 @@ jobs:
           REACT_APP_FIREBASE_APP_ID: ${{ vars.REACT_APP_FIREBASE_APP_ID }}
           REACT_APP_FIREBASE_MEASUREMENT_ID: ${{ vars.REACT_APP_FIREBASE_MEASUREMENT_ID }}
           REACT_APP_FIREBASE_VAPID_KEY: ${{ vars.REACT_APP_FIREBASE_VAPID_KEY }}
+          REACT_APP_ACCOUNT_DELETION_ENABLED: ${{ vars.REACT_APP_ACCOUNT_DELETION_ENABLED }}
           # Prefer a server-side proxy so the Gemini key is not shipped in the
           # public JavaScript bundle. Direct-key mode remains available for a
           # referrer-restricted key.

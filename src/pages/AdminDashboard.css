@@ -529,6 +529,42 @@
   justify-content: flex-end;
 }
 
+.scope-dialog-backdrop {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.52);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1rem;
+  position: fixed;
+  z-index: 100;
+}
+
+.scope-dialog {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  max-width: 520px;
+  padding: 1.25rem;
+  width: 100%;
+}
+
+.scope-dialog h3 {
+  font-size: 1.1rem;
+  margin: 0 0 0.45rem;
+}
+
+.scope-dialog p {
+  color: var(--muted);
+  margin: 0 0 1rem;
+}
+
+.scope-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 .analytics-heading {
   margin-bottom: 1rem;
 }
@@ -917,6 +953,14 @@
   }
 
   .task-edit-actions button {
+    width: 100%;
+  }
+
+  .scope-dialog-actions {
+    flex-direction: column;
+  }
+
+  .scope-dialog-actions button {
     width: 100%;
   }
 

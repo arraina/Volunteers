@@ -1,6 +1,7 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getFunctions, type Functions } from 'firebase/functions';
 
 // All Firebase web config comes from environment variables (see .env.example).
 // The Firebase web API key is not a secret, but keeping config in env keeps the
@@ -22,11 +23,13 @@ export const isFirebaseConfigured = Boolean(
 let appInstance: FirebaseApp | undefined;
 let authInstance: Auth | undefined;
 let dbInstance: Firestore | undefined;
+let functionsInstance: Functions | undefined;
 
 if (isFirebaseConfigured) {
   appInstance = initializeApp(firebaseConfig);
   authInstance = getAuth(appInstance);
   dbInstance = getFirestore(appInstance);
+  functionsInstance = getFunctions(appInstance, 'us-central1');
 } else if (typeof window !== 'undefined') {
   // eslint-disable-next-line no-console
   console.warn(
@@ -37,5 +40,6 @@ if (isFirebaseConfigured) {
 export const app = appInstance as FirebaseApp;
 export const auth = authInstance as Auth;
 export const db = dbInstance as Firestore;
+export const functions = functionsInstance as Functions;
 
 export default app;

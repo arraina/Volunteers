@@ -20,7 +20,8 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../config/firebase';
 import { normalizePhoneNumber } from './phone';
 import {
   Announcement,
@@ -245,7 +246,7 @@ export async function bulkImportVolunteers(
   return { added, skipped };
 }
 
-export async function deleteVolunteer(uid: string): Promise<void> {
+export async function deleteVolunteerProfile(uid: string): Promise<void> {
   // Remove from any tasks first.
   const tasksSnap = await getDocs(
     query(collection(db, 'tasks'), where('assignedVolunteers', 'array-contains', uid))
@@ -256,6 +257,12 @@ export async function deleteVolunteer(uid: string): Promise<void> {
     )
   );
   await deleteDoc(doc(db, 'volunteers', uid));
+}
+
+/** Securely delete another user's Auth account and remove/anonymize their data. */
+export async function deleteVolunteerAccount(uid: string): Promise<void> {
+  const removeAccount = httpsCallable<{ uid: string }, { deleted: boolean }>(functions, 'deleteVolunteerAccount');
+  await removeAccount({ uid });
 }
 
 export async function registerPushToken(uid: string, token: string): Promise<void> {

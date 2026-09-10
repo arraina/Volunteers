@@ -357,8 +357,8 @@ const ProfileTab: React.FC<{
       <h2>My Profile</h2>
       <form onSubmit={save} className="stacked-form">
         <div className="row">
-          <input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First name" />
-          <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name" />
+          <input aria-label="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First name" />
+          <input aria-label="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name" />
         </div>
         <input value={profile.email} disabled />
         <input
