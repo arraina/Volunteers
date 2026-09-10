@@ -11,7 +11,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { createEvent, createTask } from '../helpers/store';
+import { createEvent, createTask, trashRecord } from '../helpers/store';
 import { TempleEvent, VolunteerTask, formatDate } from '../helpers/types';
 
 interface Props {
@@ -83,20 +83,20 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
     if (!eventId) return;
     const unsubMeetings = onSnapshot(
       query(collection(db, 'eventMeetings'), where('eventId', '==', eventId)),
-      (snap) => setMeetings(snap.docs.map((item) => {
+      (snap) => setMeetings(snap.docs.filter((item) => item.data().deleted !== true).map((item) => {
         const data = item.data();
         return { id: item.id, ...data, meetingDate: data.meetingDate?.toDate?.() } as Meeting;
       }))
     );
     const unsubFeedback = onSnapshot(
       query(collection(db, 'eventFeedback'), where('eventId', '==', eventId)),
-      (snap) => setFeedback(snap.docs.map((item) => ({ id: item.id, ...item.data() } as Feedback)))
+      (snap) => setFeedback(snap.docs.filter((item) => item.data().deleted !== true).map((item) => ({ id: item.id, ...item.data() } as Feedback)))
     );
     return () => { unsubMeetings(); unsubFeedback(); };
   }, [eventId]);
 
   useEffect(() => onSnapshot(collection(db, 'eventTemplates'), (snap) => {
-    setTemplates(snap.docs.map((item) => ({ id: item.id, ...item.data() } as EventTemplate)));
+    setTemplates(snap.docs.filter((item) => item.data().deleted !== true).map((item) => ({ id: item.id, ...item.data() } as EventTemplate)));
   }), []);
 
   useEffect(() => setLessons(event?.lessonsLearned || ''), [event]);
@@ -122,6 +122,15 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
     if (!eventId) return;
     await updateDoc(doc(db, 'events', eventId), { lessonsLearned: lessons.trim(), updatedAt: serverTimestamp() });
     window.alert('Lessons saved.');
+  };
+
+  const moveToTrash = async (collectionName: 'events' | 'eventMeetings' | 'eventTemplates' | 'eventFeedback', id: string, label: string) => {
+    if (!window.confirm(`Move ${label} to Trash? The Owner can restore it for 30 days.`)) return;
+    try {
+      await trashRecord(collectionName, id, uid);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : `Could not move ${label} to Trash.`);
+    }
   };
 
   const saveTemplate = async () => {
@@ -191,6 +200,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
       {event && <div className="row">
         <button className="secondary-btn" onClick={exportCalendar}>Download calendar (.ics)</button>
         <button className="secondary-btn" onClick={saveTemplate} disabled={!eventTasks.length}>Save as template</button>
+        <button className="danger-btn" onClick={() => moveToTrash('events', event.id, `event “${event.name}”`)}>Move event to Trash</button>
       </div>}
     </section>
 
@@ -212,6 +222,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
           {item.notes && <p><strong>Notes:</strong> {item.notes}</p>}
           {item.decisions && <p><strong>Decisions:</strong> {item.decisions}</p>}
           {item.actionItems && <p><strong>Actions:</strong> {item.actionItems}</p>}
+          <button className="link-btn danger" onClick={() => moveToTrash('eventMeetings', item.id, `meeting “${item.title}”`)}>Move to Trash</button>
         </div>)}
       </section>
 
@@ -220,6 +231,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
         {feedback.map((item) => <div className="task-card" key={item.id}>
           {item.anonymous && <strong>Anonymous</strong>}
           <p>{item.feedbackText || [item.wentWell, item.improve, item.comments].filter(Boolean).join('\n\n')}</p>
+          <button className="link-btn danger" onClick={() => moveToTrash('eventFeedback', item.id, 'this feedback')}>Move to Trash</button>
         </div>)}
         <div className="stacked-form">
           <label className="field-label">Lessons for next time</label>
@@ -238,6 +250,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
         {templates.map((template) => <div className="task-card" key={template.id}>
           <strong>{template.name}</strong><p className="muted small">{template.tasks.length} task(s)</p>
           <button className="secondary-btn" onClick={() => createFromTemplate(template)}>Create event from this template</button>
+          <button className="link-btn danger" onClick={() => moveToTrash('eventTemplates', template.id, `template “${template.name}”`)}>Move to Trash</button>
         </div>)}
       </div>}
     </section>

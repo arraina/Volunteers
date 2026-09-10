@@ -68,6 +68,9 @@ export interface VolunteerProfile {
   invitationLastSentAt?: Date;
   invitationSendCount?: number;
   participationStatus?: 'active' | 'inactive';
+  deleted?: boolean;
+  deletedAt?: Date;
+  deletedBy?: string;
   /** FCM web-push tokens for this volunteer's devices. */
   pushTokens?: string[];
   /** Total volunteered hours (rolled up from hour logs). */
@@ -271,7 +274,10 @@ export function normalizeVolunteer(uid: string, data: Record<string, any>): Volu
     invitationSendCount:
       typeof data.invitationSendCount === 'number' ? data.invitationSendCount : 0,
     participationStatus:
-      whatsappEnabled && Boolean(data.phoneNumber) ? 'active' : 'inactive',
+      data.deleted === true ? 'inactive' : whatsappEnabled && Boolean(data.phoneNumber) ? 'active' : 'inactive',
+    deleted: data.deleted === true,
+    deletedAt: data.deletedAt ? firestoreTimestampToDate(data.deletedAt) : undefined,
+    deletedBy: data.deletedBy || undefined,
     pushTokens: Array.isArray(data.pushTokens) ? data.pushTokens : [],
     totalHours: typeof data.totalHours === 'number' ? data.totalHours : 0,
     isAdmin: data.isAdmin === true,

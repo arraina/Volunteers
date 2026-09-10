@@ -12,6 +12,7 @@ import { auth, firebaseConfig } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
 import {
   NotificationChannel,
+  Announcement,
   EventFeedbackRecord,
   RecurrenceFrequency,
   TaskStatus,
@@ -31,7 +32,6 @@ import {
   AdminAccess,
   subscribeEvents,
   permanentlyDeleteTaskBatch,
-  deleteVolunteerAccount,
   deleteVolunteerProfile,
   getHourLogs,
   getEventFeedbackRecords,
@@ -44,6 +44,12 @@ import {
   SeriesScope,
   subscribeTasks,
   subscribeDeletedTasks,
+  subscribeDeletedRecords,
+  TrashRecord,
+  trashRecord,
+  restoreTrashRecord,
+  permanentlyDeleteTrashRecord,
+  subscribeAnnouncements,
   subscribeVolunteers,
   updateTaskStatusScoped,
   updateTaskManagementFieldsScoped,
@@ -94,8 +100,6 @@ const emptyVolunteerForm = {
   phoneNumber: '',
   whatsappOptIn: true,
 };
-
-const secureAccountDeletionEnabled = process.env.REACT_APP_ACCOUNT_DELETION_ENABLED === 'true';
 
 const toDateTimeInput = (date?: Date) => {
   if (!date) return '';
@@ -154,6 +158,7 @@ const AdminDashboard: React.FC = () => {
   const [volunteers, setVolunteers] = useState<VolunteerProfile[]>([]);
   const [events, setEvents] = useState<TempleEvent[]>([]);
   const [deletedTasks, setDeletedTasks] = useState<VolunteerTask[]>([]);
+  const [deletedRecords, setDeletedRecords] = useState<TrashRecord[]>([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -161,11 +166,13 @@ const AdminDashboard: React.FC = () => {
     const unsubVols = subscribeVolunteers(setVolunteers);
     const unsubEvents = subscribeEvents(setEvents);
     const unsubTrash = subscribeDeletedTasks(setDeletedTasks);
+    const unsubRecordTrash = subscribeDeletedRecords(setDeletedRecords);
     return () => {
       unsubTasks();
       unsubVols();
       unsubEvents();
       unsubTrash();
+      unsubRecordTrash();
     };
   }, []);
 
@@ -218,7 +225,7 @@ const AdminDashboard: React.FC = () => {
           Analytics
         </button>
         <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')}>
-          Trash ({deletedTasks.length})
+          Trash ({deletedTasks.length + deletedRecords.length})
         </button>
         {isOwner && <button className={tab === 'admins' ? 'active' : ''} onClick={() => setTab('admins')}>
           Admin Management
@@ -248,13 +255,13 @@ const AdminDashboard: React.FC = () => {
           />
         )}
         {tab === 'events' && <EventWorkspace uid={user?.uid} events={events} tasks={tasks} setError={setError} />}
-        {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} setError={setError} />}
+        {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} uid={user?.uid} setError={setError} />}
         {tab === 'announcements' && (
           <AnnouncementsTab uid={user?.uid} setError={setError} />
         )}
         {tab === 'history' && <HistoryTab volunteers={volunteers} setError={setError} />}
         {tab === 'reports' && <ReportsTab volunteers={volunteers} tasks={tasks} events={events} />}
-        {tab === 'trash' && <TrashTab tasks={deletedTasks} isOwner={isOwner} setError={setError} />}
+        {tab === 'trash' && <TrashTab tasks={deletedTasks} records={deletedRecords} isOwner={isOwner} setError={setError} />}
         {tab === 'admins' && isOwner && <AdminManagementTab ownerUid={user?.uid || ''} volunteers={volunteers} setError={setError} />}
       </div>
     </div>
@@ -912,7 +919,7 @@ const AdminManagementTab: React.FC<{
     setBusy(true);
     setError('');
     try {
-      await revokeAdminAccess(admin.uid);
+      await revokeAdminAccess(admin.uid, ownerUid);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove Admin access.');
     } finally {
@@ -954,9 +961,10 @@ const AdminManagementTab: React.FC<{
 
 const TrashTab: React.FC<{
   tasks: VolunteerTask[];
+  records: TrashRecord[];
   isOwner: boolean;
   setError: (s: string) => void;
-}> = ({ tasks, isOwner, setError }) => {
+}> = ({ tasks, records, isOwner, setError }) => {
   const [busyBatch, setBusyBatch] = useState('');
   const batches = useMemo(() => {
     const grouped = new Map<string, VolunteerTask[]>();
@@ -981,16 +989,31 @@ const TrashTab: React.FC<{
     }
   };
 
+  const runRecord = async (record: TrashRecord, action: 'restore' | 'delete') => {
+    if (action === 'delete' && !window.confirm(`Permanently delete ${record.label}? This cannot be undone.`)) return;
+    const key = `${record.collection}/${record.id}`;
+    setBusyBatch(key);
+    setError('');
+    try {
+      if (action === 'restore') await restoreTrashRecord(record);
+      else await permanentlyDeleteTrashRecord(record);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to ${action} item.`);
+    } finally {
+      setBusyBatch('');
+    }
+  };
+
   return (
     <section className="panel">
       <div className="panel-head">
         <div>
-          <h2>Task Trash</h2>
-          <p className="muted small">Deleted tasks remain recoverable for 30 days. Only the Owner can restore or permanently delete them.</p>
+          <h2>Trash</h2>
+          <p className="muted small">Deleted records remain recoverable for 30 days. Only the Owner can restore or permanently delete them.</p>
         </div>
       </div>
-      {batches.length === 0 && (
-        <div className="empty-state"><strong>Trash is empty</strong><span>Tasks moved here will remain recoverable for 30 days.</span></div>
+      {batches.length === 0 && records.length === 0 && (
+        <div className="empty-state"><strong>Trash is empty</strong><span>Items moved here will remain recoverable for 30 days.</span></div>
       )}
       <div className="trash-list">
         {batches.map(([batchId, batch]) => {
@@ -1014,6 +1037,18 @@ const TrashTab: React.FC<{
           );
         })}
       </div>
+      <div className="trash-list">
+        {records.map((record) => {
+          const key = `${record.collection}/${record.id}`;
+          return <div className="trash-card" key={key}>
+            <div><strong>{record.label}</strong><p className="muted small">{record.collection} · Deleted {record.deletedAt?.toLocaleString() || 'recently'}</p></div>
+            <div className="task-actions">{isOwner ? <>
+              <button disabled={busyBatch === key} className="primary-btn compact-btn" onClick={() => runRecord(record, 'restore')}>Restore</button>
+              <button disabled={busyBatch === key} className="danger-btn" onClick={() => runRecord(record, 'delete')}>Delete permanently</button>
+            </> : <span className="muted small">Owner approval required.</span>}</div>
+          </div>;
+        })}
+      </div>
     </section>
   );
 };
@@ -1024,8 +1059,9 @@ const TrashTab: React.FC<{
 
 const VolunteersTab: React.FC<{
   volunteers: VolunteerProfile[];
+  uid?: string;
   setError: (s: string) => void;
-}> = ({ volunteers, setError }) => {
+}> = ({ volunteers, uid, setError }) => {
   const [form, setForm] = useState(emptyVolunteerForm);
   const [editing, setEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(emptyVolunteerForm);
@@ -1325,21 +1361,11 @@ const VolunteersTab: React.FC<{
                     <button className="link-btn" onClick={() => startEdit(v)}>
                       Edit
                     </button>
-                    <button
-                      className="link-btn danger"
-                      disabled={!secureAccountDeletionEnabled}
-                      title={secureAccountDeletionEnabled ? 'Permanently delete this account' : 'Requires Firebase Blaze plan and the secure deletion function'}
-                      onClick={async () => {
-                        if (!window.confirm(`Permanently delete ${v.name}'s login and profile? Future assignments will be removed and completed service history will be anonymized. This cannot be undone.`)) return;
-                        try {
-                          await deleteVolunteerAccount(v.uid);
-                        } catch (err) {
-                          setError(err instanceof Error ? err.message : 'Failed to delete volunteer account.');
-                        }
-                      }}
-                    >
-                      {secureAccountDeletionEnabled ? 'Delete account' : 'Account deletion requires Blaze'}
-                    </button>
+                    <button className="link-btn danger" onClick={async () => {
+                      if (!window.confirm(`Move ${v.name}'s profile to Trash? They will become inactive and unavailable for new assignments. The Owner can restore it.`)) return;
+                      try { await trashRecord('volunteers', v.uid, uid); }
+                      catch (err) { setError(err instanceof Error ? err.message : 'Failed to move volunteer to Trash.'); }
+                    }}>Move to Trash</button>
                   </div>
                 </>
               )}
@@ -1363,6 +1389,9 @@ const AnnouncementsTab: React.FC<{ uid?: string; setError: (s: string) => void }
   const [body, setBody] = useState('');
   const [channels, setChannels] = useState<NotificationChannel[]>(['whatsapp', 'email']);
   const [sent, setSent] = useState(false);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+
+  useEffect(() => subscribeAnnouncements(setAnnouncements), []);
 
   const toggleChannel = (c: NotificationChannel) =>
     setChannels((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
@@ -1420,6 +1449,16 @@ const AnnouncementsTab: React.FC<{ uid?: string; setError: (s: string) => void }
           Send Announcement
         </button>
       </form>
+      <div className="trash-list">
+        {announcements.map((announcement) => <div className="trash-card" key={announcement.id}>
+          <div><strong>{announcement.title}</strong><p className="muted small">{announcement.body}</p></div>
+          <button className="link-btn danger" onClick={async () => {
+            if (!window.confirm(`Move announcement “${announcement.title}” to Trash?`)) return;
+            try { await trashRecord('announcements', announcement.id, uid); }
+            catch (err) { setError(err instanceof Error ? err.message : 'Failed to move announcement to Trash.'); }
+          }}>Move to Trash</button>
+        </div>)}
+      </div>
     </section>
   );
 };

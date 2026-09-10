@@ -65,13 +65,13 @@ export async function createEvent(input: {
 export function subscribeEvents(cb: (e: TempleEvent[]) => void) {
   const q = query(collection(db, 'events'), orderBy('createdAt', 'desc'));
   return onSnapshot(q, (snap) => {
-    cb(snap.docs.map((d) => normalizeEvent(d.id, d.data())));
+    cb(snap.docs.filter((d) => d.data().deleted !== true).map((d) => normalizeEvent(d.id, d.data())));
   });
 }
 
 export async function getEvents(): Promise<TempleEvent[]> {
   const snap = await getDocs(collection(db, 'events'));
-  return snap.docs.map((d) => normalizeEvent(d.id, d.data()));
+  return snap.docs.filter((d) => d.data().deleted !== true).map((d) => normalizeEvent(d.id, d.data()));
 }
 
 // ---------------------------------------------------------------------------
@@ -80,12 +80,12 @@ export async function getEvents(): Promise<TempleEvent[]> {
 
 export async function getVolunteers(): Promise<VolunteerProfile[]> {
   const snap = await getDocs(collection(db, 'volunteers'));
-  return snap.docs.map((d) => normalizeVolunteer(d.id, d.data()));
+  return snap.docs.filter((d) => d.data().deleted !== true).map((d) => normalizeVolunteer(d.id, d.data()));
 }
 
 export function subscribeVolunteers(cb: (v: VolunteerProfile[]) => void) {
   return onSnapshot(collection(db, 'volunteers'), (snap) => {
-    cb(snap.docs.map((d) => normalizeVolunteer(d.id, d.data())));
+    cb(snap.docs.filter((d) => d.data().deleted !== true).map((d) => normalizeVolunteer(d.id, d.data())));
   });
 }
 
@@ -247,16 +247,84 @@ export async function bulkImportVolunteers(
 }
 
 export async function deleteVolunteerProfile(uid: string): Promise<void> {
-  // Remove from any tasks first.
-  const tasksSnap = await getDocs(
-    query(collection(db, 'tasks'), where('assignedVolunteers', 'array-contains', uid))
-  );
-  await Promise.all(
-    tasksSnap.docs.map((t) =>
-      updateDoc(t.ref, { assignedVolunteers: arrayRemove(uid), updatedAt: serverTimestamp() })
-    )
-  );
+  // Used only to roll back a failed invitation before it becomes user data.
   await deleteDoc(doc(db, 'volunteers', uid));
+}
+
+export type TrashCollection =
+  | 'volunteers' | 'events' | 'eventMeetings' | 'eventTemplates'
+  | 'eventFeedback' | 'hourLogs' | 'announcements' | 'admins';
+
+export interface TrashRecord {
+  id: string;
+  collection: TrashCollection;
+  label: string;
+  deletedAt?: Date;
+  deletedBy?: string;
+}
+
+const trashCollections: TrashCollection[] = [
+  'volunteers', 'events', 'eventMeetings', 'eventTemplates',
+  'eventFeedback', 'hourLogs', 'announcements', 'admins',
+];
+
+function trashLabel(collectionName: TrashCollection, id: string, data: Record<string, any>) {
+  if (collectionName === 'volunteers') return data.name || data.email || id;
+  if (collectionName === 'admins') return data.email || id;
+  if (collectionName === 'eventFeedback') return `Feedback for ${data.eventName || data.eventId || 'event'}`;
+  if (collectionName === 'hourLogs') return `${data.volunteerName || 'Volunteer'} hours`;
+  return data.title || data.name || id;
+}
+
+/** Subscribe to every non-task object moved to Trash. */
+export function subscribeDeletedRecords(cb: (records: TrashRecord[]) => void) {
+  const byCollection = new Map<TrashCollection, TrashRecord[]>();
+  const publish = () => cb(Array.from(byCollection.values()).flat().sort((a, b) =>
+    (b.deletedAt?.getTime() || 0) - (a.deletedAt?.getTime() || 0)
+  ));
+  const unsubs = trashCollections.map((collectionName) => onSnapshot(
+    query(collection(db, collectionName), where('deleted', '==', true)),
+    (snap) => {
+      byCollection.set(collectionName, snap.docs.map((item) => ({
+        id: item.id,
+        collection: collectionName,
+        label: trashLabel(collectionName, item.id, item.data()),
+        deletedAt: item.data().deletedAt ? firestoreTimestampToDate(item.data().deletedAt) : undefined,
+        deletedBy: item.data().deletedBy || undefined,
+      })));
+      publish();
+    }
+  ));
+  return () => unsubs.forEach((unsubscribe) => unsubscribe());
+}
+
+/** Admin soft-delete. Owner-only rules protect restoring and permanent deletion. */
+export async function trashRecord(collectionName: TrashCollection, id: string, deletedBy?: string) {
+  const payload: Record<string, any> = {
+    deleted: true,
+    deletedAt: serverTimestamp(),
+    deletedBy: deletedBy || null,
+    updatedAt: serverTimestamp(),
+  };
+  if (collectionName === 'volunteers') payload.participationStatus = 'inactive';
+  if (collectionName === 'admins') payload.isAdmin = false;
+  await updateDoc(doc(db, collectionName, id), payload);
+}
+
+export async function restoreTrashRecord(record: TrashRecord) {
+  const payload: Record<string, any> = {
+    deleted: false,
+    deletedAt: null,
+    deletedBy: null,
+    updatedAt: serverTimestamp(),
+  };
+  if (record.collection === 'volunteers') payload.participationStatus = 'active';
+  if (record.collection === 'admins') payload.isAdmin = true;
+  await updateDoc(doc(db, record.collection, record.id), payload);
+}
+
+export async function permanentlyDeleteTrashRecord(record: TrashRecord) {
+  await deleteDoc(doc(db, record.collection, record.id));
 }
 
 /** Securely delete another user's Auth account and remove/anonymize their data. */
@@ -860,7 +928,7 @@ export function subscribeAnnouncements(cb: (a: Announcement[]) => void) {
   const q = query(collection(db, 'announcements'), orderBy('createdAt', 'desc'));
   return onSnapshot(q, (snap) => {
     cb(
-      snap.docs.map((d) => ({
+      snap.docs.filter((d) => d.data().deleted !== true).map((d) => ({
         id: d.id,
         ...(d.data() as Omit<Announcement, 'id' | 'createdAt'>),
         createdAt: firestoreTimestampToDate(d.data().createdAt),
@@ -902,7 +970,7 @@ export async function checkOut(logId: string, checkInTime: Date): Promise<number
 
 export async function getHourLogs(): Promise<HourLog[]> {
   const snap = await getDocs(collection(db, 'hourLogs'));
-  return snap.docs.map((d) => {
+  return snap.docs.filter((d) => d.data().deleted !== true).map((d) => {
     const data = d.data();
     return {
       id: d.id,
@@ -921,7 +989,7 @@ export async function getSentMessages(limitCount = 1000): Promise<SentMessage[]>
   const snap = await getDocs(
     query(collection(db, 'sentMessages'), orderBy('sentAt', 'desc'), limit(limitCount))
   );
-  return snap.docs.map((d) => {
+  return snap.docs.filter((d) => d.data().deleted !== true).map((d) => {
     const data = d.data();
     return {
       id: d.id,
@@ -968,7 +1036,7 @@ export interface AdminAccess {
 export function subscribeAdmins(cb: (admins: AdminAccess[]) => void) {
   return onSnapshot(collection(db, 'admins'), (snap) => {
     cb(snap.docs
-      .filter((item) => item.data().isAdmin === true)
+      .filter((item) => item.data().isAdmin === true && item.data().deleted !== true)
       .map((item) => ({
         uid: item.id,
         email: item.data().email || '',
@@ -989,8 +1057,8 @@ export async function grantAdminAccess(volunteer: VolunteerProfile, grantedBy: s
   });
 }
 
-export async function revokeAdminAccess(uid: string): Promise<void> {
-  await deleteDoc(doc(db, 'admins', uid));
+export async function revokeAdminAccess(uid: string, removedBy?: string): Promise<void> {
+  await trashRecord('admins', uid, removedBy);
 }
 
 /** True if no admin exists yet (allows first user to claim admin). */

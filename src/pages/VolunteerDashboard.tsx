@@ -145,6 +145,14 @@ const VolunteerDashboard: React.FC = () => {
     return <div className="loading">Loading…</div>;
   }
 
+  if (profile.deleted) {
+    return <div className="auth-page"><section className="panel auth-card">
+      <h1>Profile inactive</h1>
+      <p>Your volunteer profile is currently in Trash. You cannot accept tasks or receive new assignments while it is inactive. Please contact an Owner if it should be restored.</p>
+      <button className="primary-btn" onClick={handleLogout}>Log out</button>
+    </section></div>;
+  }
+
   return (
     <div className="admin-dashboard">
       <header className="dashboard-header">
