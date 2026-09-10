@@ -11,6 +11,10 @@
 .help-question-form { display: grid; gap: .75rem; }
 .help-question-form textarea, .help-search-controls input, .help-search-controls select { border: 1px solid #cbdccf; border-radius: 10px; box-sizing: border-box; font: inherit; padding: .75rem; width: 100%; }
 .help-question-form .primary-btn { justify-self: end; width: min(100%, 260px); }
+.help-suggestions { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .8rem; }
+.help-suggestions span { color: #637267; font-size: .82rem; }
+.help-suggestions button { background: #fff; border: 1px solid #b9d9bf; border-radius: 999px; color: #267633; cursor: pointer; font-size: .82rem; padding: .4rem .7rem; }
+.help-suggestions button:hover { background: #eff9f1; }
 .help-answer { background: #eff9f1; border-left: 4px solid #399347; border-radius: 10px; margin-top: 1rem; padding: 1rem; white-space: pre-wrap; }
 .help-answer h3, .help-answer p { margin: 0 0 .55rem; }
 .help-assistant-note { color: #86660c; font-size: .85rem; }

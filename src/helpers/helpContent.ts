@@ -12,6 +12,93 @@ export interface HelpArticle {
 
 export const HELP_ARTICLES: HelpArticle[] = [
   {
+    id: 'volunteer-quick-start', title: 'How to get started as a new Volunteer', category: 'Quick Start', roles: ['volunteer'],
+    summary: 'A first-day checklist from account activation through completing your first service task.',
+    sections: [
+      { heading: '1. Activate your account', text: 'Self-register with your name, email, phone, and a password for this app, or open the invitation sent by an admin. Confirm your email before signing in. If an invitation link expired, use Forgot password.' },
+      { heading: '2. Complete My Profile', text: 'Open My Profile, check your name and phone, select the days you are usually available, and save. Availability is guidance for coordinators; it does not block you from other days.' },
+      { heading: '3. Verify your phone', text: 'In My Profile, request an SMS code and enter it when received. Keep WhatsApp enabled so your profile remains active and task reminders can reach you.' },
+      { heading: '4. Join a task', text: 'Open Open Tasks, search by event, task, or location, check the date and open places, then choose Sign Up. If the task is full, cancelled, or not open for self-signup, contact an admin.' },
+      { heading: '5. Confirm your commitment', text: 'Open My Tasks and verify that the assignment appears. Review the location and time. If plans change, withdraw early where the button is available or contact an admin.' },
+      { heading: '6. Serve and record time', text: 'For tasks using hour tracking, check in when service begins and check out when it ends. Confirm that the recorded hours appear correctly.' },
+      { heading: '7. Share feedback', text: 'After the event, open Event Feedback, select the event, and write free-flowing comments about what worked and what should improve next time.' },
+    ], keywords: ['new volunteer', 'quick start', 'first day', 'onboarding', 'how to begin', 'checklist'],
+  },
+  {
+    id: 'admin-quick-start', title: 'How to get started as a new Admin', category: 'Quick Start', roles: ['admin', 'owner'],
+    summary: 'The recommended sequence for setting up people, events, tasks, assignments, and reminders.',
+    sections: [
+      { heading: '1. Confirm access', text: 'Sign in with a verified email. The header should say Admin or Owner. If you still see the Volunteer dashboard, ask the Owner to verify your Admin access.' },
+      { heading: '2. Review volunteers', text: 'Open Volunteers. Search existing records before adding anyone to avoid duplicate logins. Confirm name, email, international phone number, active status, and WhatsApp consent.' },
+      { heading: '3. Create the event first', text: 'For an organized program, open Event Workspace and create the event with its correct name, date, and description. Standalone operational tasks can be created without an event.' },
+      { heading: '4. Create tasks', text: 'Open Tasks, enter the title and start time, then add end time, location, volunteers needed, signup setting, recurrence, and reminder hours. Link the task to the event when applicable.' },
+      { heading: '5. Check every occurrence', text: 'For recurring work, expand the series and verify the generated dates. Each occurrence has its own assignments and capacity.' },
+      { heading: '6. Fill coverage gaps', text: 'Assign eligible volunteers from the dropdown or allow self-signup. Watch Open and Need people counts. The assignment control closes automatically when capacity is reached.' },
+      { heading: '7. Verify communications', text: 'Before relying on reminders, confirm the volunteer has valid contact information and enabled channels. Review message history for provider or delivery failures.' },
+      { heading: '8. Close the learning loop', text: 'Capture meeting decisions before the event, review feedback afterward, save lessons learned, and update an event template if the event will repeat.' },
+    ], keywords: ['new admin', 'quick start', 'first day', 'onboarding', 'admin checklist', 'setup workflow'],
+  },
+  {
+    id: 'owner-quick-start', title: 'How to get started as the Owner', category: 'Quick Start', roles: ['owner'],
+    summary: 'Secure the application, delegate normal operations, and retain recovery controls.',
+    sections: [
+      { heading: '1. Confirm Owner access', text: 'Sign in and confirm that the header says Owner and Admin Management is visible. The original bootstrap administrator is treated as the protected Owner.' },
+      { heading: '2. Choose trusted Admins', text: 'Ask each coordinator to register first. Open Admin Management, select the correct existing volunteer, verify the displayed email, and choose Give Admin Access.' },
+      { heading: '3. Explain the boundary', text: 'Admins perform daily operations and can move tasks to Trash. Only the Owner manages Admin access, restores trashed tasks, and permanently deletes tasks.' },
+      { heading: '4. Review access regularly', text: 'Periodically open Admin Management and remove Admin access when a coordinator no longer needs it. Their volunteer profile, assignments, and service history remain.' },
+      { heading: '5. Protect recovery', text: 'Review Trash before its 30-day cleanup. Restore mistakes and use Delete permanently only when certain the task record is no longer needed.' },
+    ], keywords: ['new owner', 'owner setup', 'quick start', 'admin access', 'security checklist'],
+  },
+  {
+    id: 'how-to-common', title: 'How to perform common actions', category: 'How To', roles: ['everyone'],
+    summary: 'Short directions for the actions people use most often.',
+    sections: [
+      { heading: 'How to change your password', text: 'Sign out, open Log in, choose Forgot password, enter the account email, and follow the emailed link. An admin-created volunteer can use this same process.' },
+      { heading: 'How to update your phone', text: 'Open My Profile, replace the phone with its country code, save, then complete SMS verification for the new number.' },
+      { heading: 'How to find a task', text: 'Open Open Tasks and type part of the task, event, or location into Search. Adjust filters or sorting if available. Clear filters if an expected task is missing.' },
+      { heading: 'How to know you are assigned', text: 'After signup or admin assignment, the task appears under My Tasks and its assigned count increases. If it does not appear, refresh and ask an admin to confirm the saved assignment.' },
+      { heading: 'How to stop participating', text: 'Withdraw from future self-signup tasks where allowed and contact an admin about locked assignments. Turning off required WhatsApp makes the profile inactive; it is not a substitute for cancelling one task.' },
+      { heading: 'How to get help', text: 'Search this manual or ask the Help Assistant using a specific question. Include the screen name, action attempted, and exact error message. Do not include passwords, SMS codes, or access tokens.' },
+    ], keywords: ['how to', 'common actions', 'password', 'update phone', 'find task', 'assigned', 'get help'],
+  },
+  {
+    id: 'how-to-admin-actions', title: 'How to perform common Admin actions', category: 'How To', roles: ['admin', 'owner'],
+    summary: 'Step-by-step directions for routine volunteer and task administration.',
+    sections: [
+      { heading: 'How to add one volunteer', text: 'Open Volunteers. Enter first name, last name, email, and international phone. Confirm WhatsApp consent, then choose Add Volunteer & Send Invitation. Tell the volunteer to check email and set a password.' },
+      { heading: 'How to resend an invitation', text: 'Find the person under Volunteers and choose Resend Invitation. Confirm the email first. If the person already knows the login email, Forgot password gives the same password-setting outcome.' },
+      { heading: 'How to assign a volunteer', text: 'Open Tasks, find and expand the correct dated occurrence, then select an eligible person under Assign volunteer. Wait for the success message and confirm the name appears. The selector disables when the task is full.' },
+      { heading: 'How to change capacity', text: 'Use the AI Task Assistant Manage tasks mode and request the exact task, date, and new volunteer count, then review and apply the proposal. Make sure the new count is not lower than the number already assigned.' },
+      { heading: 'How to cancel and reopen', text: 'Find the dated task and choose Cancel task. For a recurring series, choose whether it applies once or to future dates. Choose Reopen on a cancelled task to reverse the action.' },
+      { heading: 'How to delete safely', text: 'Choose Move to Trash, select one or future dates for a recurring task, and confirm. Regular Admins then ask the Owner if restoration is needed. Do not use cancellation merely to hide incorrect test data.' },
+      { heading: 'How to send an announcement', text: 'Open Announcements, choose the intended audience and channels, write a clear message, verify recipients, and submit. Check delivery history afterward; external provider acceptance is separate from saving the announcement.' },
+    ], keywords: ['how to admin', 'add volunteer', 'resend', 'assign', 'capacity', 'cancel', 'delete', 'announcement'],
+  },
+  {
+    id: 'effective-workflow', title: 'Recommended workflow for every event', category: 'How To', roles: ['admin', 'owner'],
+    summary: 'A repeatable before, during, and after-event process that keeps planning and records consistent.',
+    sections: [
+      { heading: 'Before planning', text: 'Search for an existing event or template. Create one event record, confirm its date, and avoid making duplicate events for the same program.' },
+      { heading: 'During planning', text: 'Record meeting notes, decisions, action owners, and due dates. Create tasks under the event with realistic capacity, locations, and reminder timing.' },
+      { heading: 'One week before', text: 'Filter for the event and review Need people. Assign volunteers or communicate open opportunities. Confirm phone details and provider readiness rather than assuming reminders will deliver.' },
+      { heading: 'One day before', text: 'Review last-minute gaps, cancelled tasks, times, and locations. Avoid changing dates after reminders have already been sent unless volunteers are contacted directly.' },
+      { heading: 'During the event', text: 'Keep assignments current, record check-in and checkout where used, and cancel only work that will not occur.' },
+      { heading: 'After the event', text: 'Allow completion to derive from time, review service hours and delivery records, request feedback, summarize lessons, and update the reusable template.' },
+    ], keywords: ['event workflow', 'before event', 'during event', 'after event', 'planning checklist', 'best practice'],
+  },
+  {
+    id: 'troubleshooting', title: 'How to troubleshoot common problems', category: 'How To', roles: ['everyone'],
+    summary: 'Fast checks for missing tasks, assignments, messages, verification codes, and access.',
+    sections: [
+      { heading: 'A task is missing', text: 'Clear search and filters, verify the date range and event, and check whether the task is completed, cancelled, or in Trash. Volunteers only see eligible open tasks and their own assignments.' },
+      { heading: 'An assignment did not save', text: 'Confirm the task still has an open place, the volunteer is active with WhatsApp and a phone, and the person is not already assigned. Retry once and copy any error message for the Owner.' },
+      { heading: 'A reminder did not arrive', text: 'Confirm assignment, task time, reminder schedule, channel preference, and valid contact details. Admins should check message history and the email or WhatsApp provider status. Never assume a saved reminder means the provider delivered it.' },
+      { heading: 'An SMS code did not arrive', text: 'Check country code and phone digits, wait before retrying, and confirm Firebase Phone Authentication, authorized domain, quota, and billing configuration. Do not repeatedly request codes because Firebase limits verification traffic.' },
+      { heading: 'The wrong dashboard appears', text: 'Confirm the email is verified, refresh or sign out and back in, and ask the Owner to check Admin Management. Removing Admin access returns the account to its Volunteer permissions.' },
+      { heading: 'An email says the user exists', text: 'The Firebase Authentication login may remain even if a volunteer profile was deleted. Use Forgot password for that email or have an authorized system administrator remove the authentication account.' },
+    ], keywords: ['troubleshoot', 'problem', 'missing task', 'assignment not saved', 'reminder not received', 'sms code', 'wrong dashboard', 'user exists'],
+  },
+  {
     id: 'start', title: 'Getting started and signing in', category: 'Getting Started', roles: ['everyone'],
     summary: 'Create an account, verify your email, sign in, and recover a forgotten password.',
     sections: [

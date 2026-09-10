@@ -16,6 +16,11 @@ const HelpCenter: React.FC = () => {
   const [answerSources, setAnswerSources] = useState<HelpArticle[]>([]);
   const [asking, setAsking] = useState(false);
   const [assistantError, setAssistantError] = useState('');
+  const suggestedQuestions = role === 'volunteer'
+    ? ['How do I get started?', 'How do I join a task?', 'Why did my reminder not arrive?']
+    : role === 'owner'
+      ? ['How do I add an Admin?', 'How do I restore a task?', 'What should I check before an event?']
+      : ['How do I add and assign a volunteer?', 'How do recurring tasks work?', 'What should I check before an event?'];
 
   const roleArticles = useMemo(() => HELP_ARTICLES.filter((article) => {
     if (role === 'owner') return true;
@@ -70,6 +75,7 @@ const HelpCenter: React.FC = () => {
             <textarea value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="For example: How do I restore a deleted recurring task?" rows={3} />
             <button className="primary-btn" disabled={asking || !question.trim()}>{asking ? 'Finding answer…' : 'Ask Help Assistant'}</button>
           </form>
+          <div className="help-suggestions"><span>Popular questions:</span>{suggestedQuestions.map((item) => <button type="button" key={item} onClick={() => setQuestion(item)}>{item}</button>)}</div>
           {answer && <div className="help-answer" aria-live="polite"><h3>Answer</h3>{answer.split('\n').map((line, index) => line ? <p key={index}>{line}</p> : null)}
             {assistantError && <p className="help-assistant-note">{assistantError}</p>}
             {answerSources.length > 0 && <div className="help-source-links"><span>Related guides:</span>{answerSources.map((article) => <a key={article.id} href={`#help-${article.id}`}>{article.title}</a>)}</div>}
