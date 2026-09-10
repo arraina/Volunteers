@@ -24,10 +24,12 @@ import { db } from '../config/firebase';
 import { normalizePhoneNumber } from './phone';
 import {
   Announcement,
+  EventFeedbackRecord,
   HourLog,
   NotificationChannel,
   Reminder,
   RecurrenceFrequency,
+  SentMessage,
   TaskStatus,
   TempleEvent,
   VolunteerProfile,
@@ -795,6 +797,44 @@ export async function getHourLogs(): Promise<HourLog[]> {
       checkIn: firestoreTimestampToDate(data.checkIn),
       checkOut: data.checkOut ? firestoreTimestampToDate(data.checkOut) : undefined,
       hours: typeof data.hours === 'number' ? data.hours : undefined,
+    };
+  });
+}
+
+/** Recent reminder delivery outcomes for the admin analytics dashboard. */
+export async function getSentMessages(limitCount = 1000): Promise<SentMessage[]> {
+  const snap = await getDocs(
+    query(collection(db, 'sentMessages'), orderBy('sentAt', 'desc'), limit(limitCount))
+  );
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      reminderId: data.reminderId || undefined,
+      taskId: data.taskId || undefined,
+      volunteerId: data.volunteerId,
+      channel: data.channel,
+      destination: data.destination || '',
+      status: data.status,
+      providerId: data.providerId || undefined,
+      failureReason: data.failureReason || undefined,
+      sentAt: firestoreTimestampToDate(data.sentAt),
+    } as SentMessage;
+  });
+}
+
+/** Event feedback counts/text metadata used for aggregate comparisons. */
+export async function getEventFeedbackRecords(): Promise<EventFeedbackRecord[]> {
+  const snap = await getDocs(collection(db, 'eventFeedback'));
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      eventId: data.eventId || '',
+      volunteerId: data.volunteerId || '',
+      feedbackText: data.feedbackText || data.comments || '',
+      anonymous: data.anonymous === true,
+      submittedAt: data.submittedAt ? firestoreTimestampToDate(data.submittedAt) : undefined,
     };
   });
 }

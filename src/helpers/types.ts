@@ -154,6 +154,15 @@ export interface SentMessage {
   sentAt: Date;
 }
 
+export interface EventFeedbackRecord {
+  id: string;
+  eventId: string;
+  volunteerId: string;
+  feedbackText: string;
+  anonymous: boolean;
+  submittedAt?: Date;
+}
+
 export interface Announcement {
   id: string;
   title: string;

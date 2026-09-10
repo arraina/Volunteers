@@ -472,6 +472,54 @@
   color: #64748b;
 }
 
+.analytics-heading {
+  margin-bottom: 1rem;
+}
+
+.analytics-heading h2 {
+  margin: 0;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+
+.analytics-grid .panel {
+  min-width: 0;
+}
+
+.staffing-meter {
+  height: 12px;
+  overflow: hidden;
+  background: #e2e8f0;
+  border-radius: 999px;
+  margin: 0.75rem 0;
+}
+
+.staffing-meter span {
+  display: block;
+  height: 100%;
+  background: var(--green-500);
+  border-radius: inherit;
+}
+
+.attention-list {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.attention-list li {
+  margin-bottom: 0.65rem;
+}
+
+@media (max-width: 900px) {
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Dense list controls shared by admin and volunteer workspaces. */
 .two-col > .panel:first-child {
   position: sticky;

@@ -12,11 +12,13 @@ import { auth, firebaseConfig } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
 import {
   NotificationChannel,
+  EventFeedbackRecord,
   RecurrenceFrequency,
   TaskStatus,
   TempleEvent,
   VolunteerProfile,
   VolunteerTask,
+  SentMessage,
   effectiveTaskStatus,
   formatDate,
   openSlots,
@@ -30,7 +32,9 @@ import {
   deleteTaskScoped,
   deleteVolunteer,
   getHourLogs,
+  getEventFeedbackRecords,
   getPastTasks,
+  getSentMessages,
   groupTasksBySeries,
   removeVolunteerFromTask,
   recordInvitationSent,
@@ -180,7 +184,7 @@ const AdminDashboard: React.FC = () => {
           History
         </button>
         <button className={tab === 'reports' ? 'active' : ''} onClick={() => setTab('reports')}>
-          Reports
+          Analytics
         </button>
       </nav>
 
@@ -210,7 +214,7 @@ const AdminDashboard: React.FC = () => {
           <AnnouncementsTab uid={user?.uid} setError={setError} />
         )}
         {tab === 'history' && <HistoryTab volunteers={volunteers} setError={setError} />}
-        {tab === 'reports' && <ReportsTab volunteers={volunteers} tasks={tasks} />}
+        {tab === 'reports' && <ReportsTab volunteers={volunteers} tasks={tasks} events={events} />}
       </div>
     </div>
   );
@@ -1218,78 +1222,149 @@ const HistoryTab: React.FC<{
 // Reports tab
 // ---------------------------------------------------------------------------
 
-const ReportsTab: React.FC<{ volunteers: VolunteerProfile[]; tasks: VolunteerTask[] }> = ({
-  volunteers,
-  tasks,
-}) => {
+const ReportsTab: React.FC<{
+  volunteers: VolunteerProfile[];
+  tasks: VolunteerTask[];
+  events: TempleEvent[];
+}> = ({ volunteers, tasks, events }) => {
   const [logs, setLogs] = useState<HourLog[]>([]);
+  const [messages, setMessages] = useState<SentMessage[]>([]);
+  const [feedback, setFeedback] = useState<EventFeedbackRecord[]>([]);
+  const [pastTasks, setPastTasks] = useState<VolunteerTask[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getHourLogs().then(setLogs).catch(() => setLogs([]));
+    Promise.allSettled([getHourLogs(), getSentMessages(), getEventFeedbackRecords(), getPastTasks()])
+      .then(([hourLogs, sent, responses, past]) => {
+        if (hourLogs.status === 'fulfilled') setLogs(hourLogs.value);
+        if (sent.status === 'fulfilled') setMessages(sent.value);
+        if (responses.status === 'fulfilled') setFeedback(responses.value);
+        if (past.status === 'fulfilled') setPastTasks(past.value);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  const totalHours = volunteers.reduce((sum, v) => sum + (v.totalHours || 0), 0);
-  const upcoming = tasks.filter(
-    (t) => t.startDateTime > new Date() && effectiveTaskStatus(t) !== 'cancelled'
-  ).length;
-  const understaffed = tasks.filter(
-    (t) => effectiveTaskStatus(t) === 'open' && openSlots(t) > 0 && t.startDateTime > new Date()
+  const allTasks = useMemo(() => {
+    const byId = new Map<string, VolunteerTask>();
+    [...pastTasks, ...tasks].forEach((task) => byId.set(task.id, task));
+    return Array.from(byId.values());
+  }, [pastTasks, tasks]);
+  const now = new Date();
+  const thirtyDays = new Date(now.getTime() + 30 * 86400_000);
+  const upcoming = tasks.filter((task) =>
+    task.startDateTime > now && task.startDateTime <= thirtyDays && effectiveTaskStatus(task) !== 'cancelled'
+  );
+  const required = upcoming.reduce((sum, task) => sum + task.volunteersNeeded, 0);
+  const assigned = upcoming.reduce((sum, task) => sum + task.assignedVolunteers.length, 0);
+  const staffingRate = required ? Math.min(100, Math.round((assigned / required) * 100)) : 0;
+  const urgent = upcoming
+    .filter((task) => openSlots(task) > 0)
+    .sort((a, b) => a.startDateTime.getTime() - b.startDateTime.getTime());
+  const contactIssues = volunteers.filter((volunteer) =>
+    !volunteer.phoneNumber || volunteer.whatsappOptIn !== true || volunteer.participationStatus === 'inactive'
+  );
+  const failedMessages = messages.filter((message) => message.status === 'failed');
+  const activeVolunteers = volunteers.filter((volunteer) => volunteer.participationStatus !== 'inactive');
+  const totalHours = volunteers.reduce((sum, volunteer) => sum + (volunteer.totalHours || 0), 0);
+
+  const channelRows = (['whatsapp', 'email', 'push'] as NotificationChannel[]).map((channel) => {
+    const records = messages.filter((message) => message.channel === channel);
+    const sent = records.filter((message) => message.status === 'sent').length;
+    return { channel, attempted: records.length, sent, failed: records.length - sent };
+  });
+
+  const assignmentCount = new Map<string, number>();
+  allTasks.forEach((task) => task.assignedVolunteers.forEach((uid) =>
+    assignmentCount.set(uid, (assignmentCount.get(uid) || 0) + 1)
+  ));
+  const engagementRows = [...volunteers]
+    .sort((a, b) => b.totalHours - a.totalHours || (assignmentCount.get(b.uid) || 0) - (assignmentCount.get(a.uid) || 0))
+    .slice(0, 10);
+
+  const completedTasks = allTasks.filter((task) => effectiveTaskStatus(task) === 'completed');
+  const expectedAttendance = completedTasks.reduce((sum, task) => sum + task.assignedVolunteers.length, 0);
+  const attendedKeys = new Set(logs.map((log) => `${log.taskId}:${log.volunteerId}`));
+  const attended = completedTasks.reduce((sum, task) =>
+    sum + task.assignedVolunteers.filter((uid) => attendedKeys.has(`${task.id}:${uid}`)).length, 0
   );
 
+  const eventRows = events.map((event) => {
+    const eventTasks = allTasks.filter((task) => task.eventId === event.id);
+    const taskIds = new Set(eventTasks.map((task) => task.id));
+    const eventRequired = eventTasks.reduce((sum, task) => sum + task.volunteersNeeded, 0);
+    const eventAssigned = eventTasks.reduce((sum, task) => sum + task.assignedVolunteers.length, 0);
+    return {
+      event,
+      tasks: eventTasks.length,
+      staffing: eventRequired ? Math.min(100, Math.round((eventAssigned / eventRequired) * 100)) : 0,
+      hours: logs.filter((log) => taskIds.has(log.taskId)).reduce((sum, log) => sum + (log.hours || 0), 0),
+      feedback: feedback.filter((item) => item.eventId === event.id).length,
+    };
+  }).filter((row) => row.tasks > 0).sort((a, b) =>
+    (b.event.date?.getTime() || b.event.createdAt.getTime()) - (a.event.date?.getTime() || a.event.createdAt.getTime())
+  ).slice(0, 10);
+
   return (
-    <div>
-      <div className="stat-grid">
-        <div className="stat-card">
-          <span className="stat-num">{volunteers.length}</span>
-          <span className="stat-label">Volunteers</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-num">{upcoming}</span>
-          <span className="stat-label">Upcoming tasks</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-num">{totalHours}</span>
-          <span className="stat-label">Total hours served</span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-num">{understaffed.length}</span>
-          <span className="stat-label">Understaffed tasks</span>
-        </div>
+    <div className="analytics-dashboard">
+      <div className="panel-head analytics-heading">
+        <div><h2>Decision dashboard</h2><p className="muted small">Current planning signals and historical performance.</p></div>
+        {loading && <span className="muted small">Loading analytics…</span>}
       </div>
 
-      {understaffed.length > 0 && (
+      <div className="stat-grid">
+        <div className="stat-card"><span className="stat-num">{staffingRate}%</span><span className="stat-label">30-day staffing</span></div>
+        <div className="stat-card"><span className="stat-num">{urgent.length}</span><span className="stat-label">Tasks need people</span></div>
+        <div className="stat-card"><span className="stat-num">{activeVolunteers.length}</span><span className="stat-label">Active volunteers</span></div>
+        <div className="stat-card"><span className="stat-num">{totalHours.toFixed(1)}</span><span className="stat-label">Hours recorded</span></div>
+        <div className="stat-card"><span className="stat-num">{failedMessages.length}</span><span className="stat-label">Reminder failures</span></div>
+      </div>
+
+      <div className="analytics-grid">
         <section className="panel">
-          <h2>Needs more volunteers</h2>
-          <ul>
-            {understaffed.map((t) => (
-              <li key={t.id}>
-                {t.title} — {openSlots(t)} slot(s) open ({formatDate(t.startDateTime)})
-              </li>
-            ))}
-          </ul>
+          <h2>Needs attention</h2>
+          {urgent.length === 0 && contactIssues.length === 0 && failedMessages.length === 0
+            ? <p className="success-text">No current issues detected.</p>
+            : <ul className="attention-list">
+                {urgent.slice(0, 6).map((task) => <li key={task.id}><strong>{openSlots(task)} open:</strong> {task.title} — {formatDate(task.startDateTime)}</li>)}
+                {contactIssues.length > 0 && <li><strong>{contactIssues.length} volunteer(s)</strong> inactive or missing WhatsApp-ready phone details.</li>}
+                {failedMessages.length > 0 && <li><strong>{failedMessages.length} reminder delivery failure(s)</strong> in the latest {messages.length} delivery records.</li>}
+              </ul>}
         </section>
-      )}
+
+        <section className="panel">
+          <h2>Upcoming staffing · next 30 days</h2>
+          <div className="staffing-meter" aria-label={`${staffingRate}% staffed`}><span style={{ width: `${staffingRate}%` }} /></div>
+          <p className="muted small">{assigned} of {required} positions assigned across {upcoming.length} tasks.</p>
+          <table className="report-table"><thead><tr><th>Task</th><th>Date</th><th>Assigned</th><th>Open</th></tr></thead>
+            <tbody>{upcoming.slice(0, 10).map((task) => <tr key={task.id}><td>{task.title}</td><td>{formatDate(task.startDateTime)}</td><td>{task.assignedVolunteers.length}/{task.volunteersNeeded}</td><td>{openSlots(task)}</td></tr>)}</tbody>
+          </table>
+          {upcoming.length === 0 && <p className="muted">No tasks scheduled in the next 30 days.</p>}
+        </section>
+
+        <section className="panel">
+          <h2>Volunteer engagement</h2>
+          <p className="muted small">Attendance is based on check-in records: {expectedAttendance ? `${attended}/${expectedAttendance} (${Math.round(attended / expectedAttendance * 100)}%)` : 'not enough completed-task data yet'}.</p>
+          <table className="report-table"><thead><tr><th>Volunteer</th><th>Assignments</th><th>Sessions</th><th>Hours</th></tr></thead>
+            <tbody>{engagementRows.map((volunteer) => <tr key={volunteer.uid}><td>{volunteer.name}</td><td>{assignmentCount.get(volunteer.uid) || 0}</td><td>{logs.filter((log) => log.volunteerId === volunteer.uid).length}</td><td>{volunteer.totalHours}</td></tr>)}</tbody>
+          </table>
+        </section>
+
+        <section className="panel">
+          <h2>Reminder health</h2>
+          {messages.length === 0 && <p className="muted">No delivery records yet. Rates will appear after the reminder sender runs successfully.</p>}
+          <table className="report-table"><thead><tr><th>Channel</th><th>Attempted</th><th>Sent</th><th>Failed</th><th>Success</th></tr></thead>
+            <tbody>{channelRows.map((row) => <tr key={row.channel}><td>{row.channel}</td><td>{row.attempted}</td><td>{row.sent}</td><td>{row.failed}</td><td>{row.attempted ? `${Math.round(row.sent / row.attempted * 100)}%` : '—'}</td></tr>)}</tbody>
+          </table>
+          <p className="muted small">Readiness: {volunteers.filter((v) => v.whatsappOptIn && v.phoneNumber).length} WhatsApp · {volunteers.filter((v) => v.email).length} email · {volunteers.filter((v) => v.pushTokens?.length).length} browser push.</p>
+        </section>
+      </div>
 
       <section className="panel">
-        <h2>Hours by volunteer</h2>
-        <table className="report-table">
-          <thead>
-            <tr>
-              <th>Volunteer</th>
-              <th>Total Hours</th>
-              <th>Sessions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {volunteers.map((v) => (
-              <tr key={v.uid}>
-                <td>{v.name}</td>
-                <td>{v.totalHours}</td>
-                <td>{logs.filter((l) => l.volunteerId === v.uid).length}</td>
-              </tr>
-            ))}
-          </tbody>
+        <h2>Event comparison</h2>
+        <table className="report-table"><thead><tr><th>Event</th><th>Tasks</th><th>Staffing</th><th>Hours</th><th>Feedback</th></tr></thead>
+          <tbody>{eventRows.map((row) => <tr key={row.event.id}><td>{row.event.name}</td><td>{row.tasks}</td><td>{row.staffing}%</td><td>{row.hours.toFixed(1)}</td><td>{row.feedback}</td></tr>)}</tbody>
         </table>
+        {eventRows.length === 0 && <p className="muted">Event comparisons will appear after tasks are linked to events.</p>}
       </section>
     </div>
   );
