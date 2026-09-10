@@ -1022,6 +1022,14 @@
   grid-template-columns: minmax(260px, 2fr) minmax(130px, 1fr) minmax(150px, 1fr);
 }
 
+.value-filters {
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+}
+
+.value-summary {
+  margin-top: 0.75rem;
+}
+
 .table-scroll {
   max-width: 100%;
   overflow-x: auto;

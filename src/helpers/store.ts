@@ -399,6 +399,12 @@ export async function getPastTasks(limitCount = 300): Promise<VolunteerTask[]> {
   return snap.docs.filter((d) => d.data().deleted !== true).map((d) => normalizeTask(d.id, d.data()));
 }
 
+/** Complete task history used only by the Owner's monthly value reports. */
+export async function getReportingTasks(): Promise<VolunteerTask[]> {
+  const snap = await getDocs(query(collection(db, 'tasks'), orderBy('startDateTime', 'asc')));
+  return snap.docs.filter((item) => item.data().deleted !== true).map((item) => normalizeTask(item.id, item.data()));
+}
+
 export interface TaskInput {
   title: string;
   description?: string;
@@ -1018,6 +1024,53 @@ export interface AuditLog {
   userAgent?: string;
   platform?: string;
   timezone?: string;
+}
+
+export interface AppValueReport {
+  id: string;
+  month: string;
+  generatedAt?: Date;
+  volunteerHourlyValue: number;
+  adminHourlyValue: number;
+  manualMinutesPerReminder: number;
+  eventsSupported: number;
+  tasksScheduled: number;
+  completedTasks: number;
+  requiredPositions: number;
+  assignedPositions: number;
+  staffingRate: number;
+  volunteerHours: number;
+  attendedSessions: number;
+  expectedAttendance: number;
+  attendanceRate: number;
+  newVolunteers: number;
+  remindersDelivered: number;
+  reminderFailures: number;
+  whatsappCost: number;
+  adminHoursSaved: number;
+  volunteerServiceValue: number;
+  adminTimeValue: number;
+  totalValue: number;
+  netValue: number;
+}
+
+export async function getAppValueReports(): Promise<AppValueReport[]> {
+  const snap = await getDocs(query(collection(db, 'appValueReports'), orderBy('month', 'desc')));
+  return snap.docs.map((item) => {
+    const data = item.data();
+    return {
+      id: item.id,
+      ...data,
+      generatedAt: data.generatedAt ? firestoreTimestampToDate(data.generatedAt) : undefined,
+    } as AppValueReport;
+  });
+}
+
+export async function saveAppValueReport(report: Omit<AppValueReport, 'id' | 'generatedAt'>): Promise<void> {
+  await setDoc(doc(db, 'appValueReports', report.month), {
+    ...report,
+    generatedAt: serverTimestamp(),
+  });
 }
 
 /** Record a verified successful login. Audit writes are append-only. */

@@ -245,6 +245,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Monthly management-value snapshots contain organization-wide metrics.
+    // They are visible and maintainable only by the Owner.
+    match /appValueReports/{month} {
+      allow read, create, update: if isOwner();
+      allow delete: if false;
+    }
+
     // Deny everything else.
     match /{document=**} {
       allow read, write: if false;

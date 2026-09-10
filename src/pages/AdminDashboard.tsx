@@ -31,6 +31,7 @@ import {
   createTask,
   AdminAccess,
   AuditLog,
+  AppValueReport,
   subscribeEvents,
   permanentlyDeleteTaskBatch,
   deleteVolunteerProfile,
@@ -39,6 +40,8 @@ import {
   getPastTasks,
   getSentMessages,
   getAuditLogs,
+  getAppValueReports,
+  getReportingTasks,
   grantAdminAccess,
   groupTasksBySeries,
   removeVolunteerFromTask,
@@ -60,6 +63,7 @@ import {
   revokeAdminAccess,
   subscribeAdmins,
   updateVolunteer,
+  saveAppValueReport,
   DEFAULT_HORIZON_WEEKS,
 } from '../helpers/store';
 import { HourLog } from '../helpers/types';
@@ -67,7 +71,7 @@ import AICreateTab from './AICreate';
 import EventWorkspace from './EventWorkspace';
 import './AdminDashboard.css';
 
-type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'costs' | 'trash' | 'admins' | 'audit';
+type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'costs' | 'trash' | 'admins' | 'audit' | 'value';
 
 const STATUS_OPTIONS: TaskStatus[] = ['open', 'filled', 'completed', 'cancelled'];
 
@@ -238,6 +242,9 @@ const AdminDashboard: React.FC = () => {
         {isOwner && <button className={tab === 'audit' ? 'active' : ''} onClick={() => setTab('audit')}>
           Audit
         </button>}
+        {isOwner && <button className={tab === 'value' ? 'active' : ''} onClick={() => setTab('value')}>
+          App Value
+        </button>}
         <button onClick={() => navigate('/help')}>Help</button>
       </nav>
 
@@ -273,6 +280,7 @@ const AdminDashboard: React.FC = () => {
         {tab === 'trash' && <TrashTab tasks={deletedTasks} records={deletedRecords} isOwner={isOwner} setError={setError} />}
         {tab === 'admins' && isOwner && <AdminManagementTab ownerUid={user?.uid || ''} volunteers={volunteers} setError={setError} />}
         {tab === 'audit' && isOwner && <AuditTab />}
+        {tab === 'value' && isOwner && <AppValueTab volunteers={volunteers} />}
       </div>
     </div>
   );
@@ -1578,6 +1586,145 @@ const HistoryTab: React.FC<{
       </div>
     </section>
   );
+};
+
+// ---------------------------------------------------------------------------
+// Owner-only application value reports
+// ---------------------------------------------------------------------------
+
+const AppValueTab: React.FC<{ volunteers: VolunteerProfile[] }> = ({ volunteers }) => {
+  const [allTasks, setAllTasks] = useState<VolunteerTask[]>([]);
+  const [logs, setLogs] = useState<HourLog[]>([]);
+  const [messages, setMessages] = useState<SentMessage[]>([]);
+  const [reports, setReports] = useState<AppValueReport[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setLocalError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [volunteerRate, setVolunteerRate] = useState(30);
+  const [adminRate, setAdminRate] = useState(25);
+  const [minutesPerReminder, setMinutesPerReminder] = useState(2);
+
+  useEffect(() => {
+    Promise.all([getReportingTasks(), getHourLogs(), getSentMessages(10_000), getAppValueReports()])
+      .then(([taskRows, hourRows, messageRows, reportRows]) => {
+        setAllTasks(taskRows); setLogs(hourRows); setMessages(messageRows); setReports(reportRows);
+        if (reportRows[0]) {
+          setVolunteerRate(reportRows[0].volunteerHourlyValue);
+          setAdminRate(reportRows[0].adminHourlyValue);
+          setMinutesPerReminder(reportRows[0].manualMinutesPerReminder);
+        }
+      })
+      .catch((reason) => setLocalError(reason instanceof Error ? reason.message : 'Could not load application-value data.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const monthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  const currentMonth = monthKey(new Date());
+  const availableMonths = useMemo(() => {
+    const keys = new Set<string>([currentMonth]);
+    allTasks.forEach((task) => keys.add(monthKey(task.startDateTime)));
+    logs.forEach((log) => keys.add(monthKey(log.checkIn)));
+    messages.forEach((message) => keys.add(monthKey(message.sentAt)));
+    volunteers.forEach((volunteer) => keys.add(monthKey(volunteer.joinedDate)));
+    reports.forEach((report) => keys.add(report.month));
+    return Array.from(keys).sort((a, b) => b.localeCompare(a));
+  }, [allTasks, logs, messages, reports, volunteers, currentMonth]);
+
+  const buildReport = (month: string): Omit<AppValueReport, 'id' | 'generatedAt'> => {
+    const monthTasks = allTasks.filter((task) => monthKey(task.startDateTime) === month);
+    const monthLogs = logs.filter((log) => monthKey(log.checkIn) === month);
+    const monthMessages = messages.filter((message) => monthKey(message.sentAt) === month);
+    const completed = monthTasks.filter((task) => (task.endDateTime || task.startDateTime) < new Date() && effectiveTaskStatus(task) !== 'cancelled');
+    const requiredPositions = monthTasks.filter((task) => effectiveTaskStatus(task) !== 'cancelled').reduce((sum, task) => sum + task.volunteersNeeded, 0);
+    const assignedPositions = monthTasks.filter((task) => effectiveTaskStatus(task) !== 'cancelled').reduce((sum, task) => sum + task.assignedVolunteers.length, 0);
+    const expectedAttendance = completed.reduce((sum, task) => sum + task.assignedVolunteers.length, 0);
+    const completedIds = new Set(completed.map((task) => task.id));
+    const attendedSessions = new Set(monthLogs.filter((log) => completedIds.has(log.taskId)).map((log) => `${log.taskId}:${log.volunteerId}`)).size;
+    const delivered = monthMessages.filter((message) => message.status === 'sent').length;
+    const failed = monthMessages.filter((message) => message.status === 'failed').length;
+    const whatsappCost = monthMessages.filter((message) => message.channel === 'whatsapp' && message.status === 'sent')
+      .reduce((sum, message) => sum + (message.estimatedCostUsd ?? NORTH_AMERICA_UTILITY_RATE_USD), 0);
+    const volunteerHours = monthLogs.reduce((sum, log) => sum + (log.hours || 0), 0);
+    const adminHoursSaved = delivered * minutesPerReminder / 60;
+    const volunteerServiceValue = volunteerHours * volunteerRate;
+    const adminTimeValue = adminHoursSaved * adminRate;
+    const totalValue = volunteerServiceValue + adminTimeValue;
+    return {
+      month,
+      volunteerHourlyValue: volunteerRate,
+      adminHourlyValue: adminRate,
+      manualMinutesPerReminder: minutesPerReminder,
+      eventsSupported: new Set(monthTasks.map((task) => task.eventId).filter(Boolean)).size,
+      tasksScheduled: monthTasks.length,
+      completedTasks: completed.length,
+      requiredPositions,
+      assignedPositions,
+      staffingRate: requiredPositions ? Math.min(100, Math.round(assignedPositions / requiredPositions * 100)) : 0,
+      volunteerHours,
+      attendedSessions,
+      expectedAttendance,
+      attendanceRate: expectedAttendance ? Math.min(100, Math.round(attendedSessions / expectedAttendance * 100)) : 0,
+      newVolunteers: volunteers.filter((volunteer) => monthKey(volunteer.joinedDate) === month).length,
+      remindersDelivered: delivered,
+      reminderFailures: failed,
+      whatsappCost,
+      adminHoursSaved,
+      volunteerServiceValue,
+      adminTimeValue,
+      totalValue,
+      netValue: totalValue - whatsappCost,
+    };
+  };
+
+  const saveReports = async (includeMissingHistory: boolean) => {
+    setSaving(true); setLocalError(''); setNotice('');
+    try {
+      const existing = new Set(reports.map((report) => report.month));
+      const months = includeMissingHistory
+        ? availableMonths.filter((month) => month === currentMonth || !existing.has(month))
+        : [currentMonth];
+      await Promise.all(months.map((month) => saveAppValueReport(buildReport(month))));
+      setReports(await getAppValueReports());
+      setNotice(includeMissingHistory ? `${months.length} monthly report(s) generated or refreshed.` : 'Current month report refreshed and saved.');
+    } catch (reason) {
+      setLocalError(reason instanceof Error ? reason.message : 'Could not save monthly reports.');
+    } finally { setSaving(false); }
+  };
+
+  const current = reports.find((report) => report.month === currentMonth) || { id: currentMonth, ...buildReport(currentMonth) };
+  const money = (value: number) => value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  const label = (month: string) => {
+    const [year, value] = month.split('-').map(Number);
+    return new Date(year, value - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+  const exportCsv = () => {
+    const rows = ['Month,Net value,Volunteer value,Admin time value,WhatsApp cost,Volunteer hours,Staffing rate,Attendance rate,Events,Tasks,Reminders delivered', ...reports.map((report) =>
+      [report.month, report.netValue.toFixed(2), report.volunteerServiceValue.toFixed(2), report.adminTimeValue.toFixed(2), report.whatsappCost.toFixed(4), report.volunteerHours.toFixed(2), report.staffingRate, report.attendanceRate, report.eventsSupported, report.tasksScheduled, report.remindersDelivered].join(',')
+    )];
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }));
+    link.download = 'temple-app-value-reports.csv'; link.click(); URL.revokeObjectURL(link.href);
+  };
+
+  return <div className="analytics-dashboard">
+    <div className="panel-head analytics-heading"><div><h2>Application value</h2><p className="muted small">Owner-only monthly evidence of operational and financial value delivered to the temple.</p></div><button className="secondary-btn" disabled={!reports.length} onClick={exportCsv}>Export reports</button></div>
+    {error && <div className="error-message">{error}</div>}{notice && <div className="success-message">{notice}</div>}
+    <section className="panel analytics-filters"><h2>Value assumptions</h2><div className="filter-bar value-filters">
+      <label><span>Volunteer hour value ($)</span><input type="number" min="0" step="0.01" value={volunteerRate} onChange={(event) => setVolunteerRate(Number(event.target.value))} /></label>
+      <label><span>Admin hourly cost ($)</span><input type="number" min="0" step="0.01" value={adminRate} onChange={(event) => setAdminRate(Number(event.target.value))} /></label>
+      <label><span>Minutes saved/reminder</span><input type="number" min="0" step="0.5" value={minutesPerReminder} onChange={(event) => setMinutesPerReminder(Number(event.target.value))} /></label>
+    </div><p className="muted small">Change these assumptions before saving. Saved reports retain the rates used for that month.</p><div className="row"><button className="primary-btn" disabled={saving || loading} onClick={() => saveReports(false)}>Refresh &amp; save current month</button><button className="secondary-btn" disabled={saving || loading} onClick={() => saveReports(true)}>Generate missing monthly history</button></div></section>
+    <div className="stat-grid">
+      <div className="stat-card"><span className="stat-num">{money(current.netValue)}</span><span className="stat-label">Estimated net value this month</span></div>
+      <div className="stat-card"><span className="stat-num">{current.volunteerHours.toFixed(1)}</span><span className="stat-label">Volunteer hours</span></div>
+      <div className="stat-card"><span className="stat-num">{current.staffingRate}%</span><span className="stat-label">Task staffing</span></div>
+      <div className="stat-card"><span className="stat-num">{current.attendanceRate}%</span><span className="stat-label">Recorded attendance</span></div>
+      <div className="stat-card"><span className="stat-num">{current.adminHoursSaved.toFixed(1)}h</span><span className="stat-label">Estimated admin time saved</span></div>
+    </div>
+    <section className="panel"><h2>{label(currentMonth)} impact</h2><div className="summary-strip value-summary"><div><strong>{current.eventsSupported}</strong><span>Events supported</span></div><div><strong>{current.tasksScheduled}</strong><span>Tasks coordinated</span></div><div><strong>{current.remindersDelivered}</strong><span>Reminders delivered</span></div><div><strong>{current.newVolunteers}</strong><span>New volunteers</span></div></div><p className="muted small">Estimated value: {money(current.volunteerServiceValue)} in volunteer service plus {money(current.adminTimeValue)} in saved administrative time, less {money(current.whatsappCost)} in tracked WhatsApp cost. Attendance depends on check-in records; assignments without check-ins are treated as not recorded.</p></section>
+    <section className="panel"><div className="panel-head"><h2>Saved monthly reports</h2>{loading && <span className="muted small">Loading value history…</span>}</div>{!loading && !reports.length && <div className="empty-state"><strong>No saved reports yet</strong><span>Generate the current month or backfill available history.</span></div>}{reports.length > 0 && <div className="table-scroll"><table className="report-table"><thead><tr><th>Month</th><th>Net value</th><th>Hours</th><th>Staffing</th><th>Attendance</th><th>Events</th><th>Tasks</th><th>Reminders</th><th>Saved</th></tr></thead><tbody>{reports.map((report) => <tr key={report.id}><td>{label(report.month)}</td><td>{money(report.netValue)}</td><td>{report.volunteerHours.toFixed(1)}</td><td>{report.staffingRate}%</td><td>{report.attendanceRate}%</td><td>{report.eventsSupported}</td><td>{report.tasksScheduled}</td><td>{report.remindersDelivered}</td><td>{report.generatedAt?.toLocaleString() || '—'}</td></tr>)}</tbody></table></div>}</section>
+  </div>;
 };
 
 // ---------------------------------------------------------------------------
