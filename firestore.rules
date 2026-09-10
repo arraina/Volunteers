@@ -226,6 +226,25 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Successful-login audit records are append-only. A user can record only
+    // their own verified login; only the Owner can view the audit history.
+    match /auditLogs/{id} {
+      allow read: if isOwner();
+      allow create: if verifiedUser()
+        && request.resource.data.keys().hasOnly([
+          'event', 'actorId', 'email', 'role', 'occurredAt',
+          'userAgent', 'platform', 'timezone'
+        ])
+        && request.resource.data.event == 'login'
+        && request.resource.data.actorId == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.occurredAt == request.time
+        && ((request.resource.data.role == 'owner' && isOwner())
+          || (request.resource.data.role == 'admin' && isAdmin() && !isOwner())
+          || (request.resource.data.role == 'volunteer' && !isAdmin()));
+      allow update, delete: if false;
+    }
+
     // Deny everything else.
     match /{document=**} {
       allow read, write: if false;

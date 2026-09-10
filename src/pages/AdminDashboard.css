@@ -1018,6 +1018,22 @@
   }
 }
 
+.audit-filters {
+  grid-template-columns: minmax(260px, 2fr) minmax(130px, 1fr) minmax(150px, 1fr);
+}
+
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.audit-device {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .meeting-list {
   display: grid;
   gap: 0.75rem;

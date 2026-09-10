@@ -1008,6 +1008,55 @@ export async function getSentMessages(limitCount = 1000): Promise<SentMessage[]>
   });
 }
 
+export interface AuditLog {
+  id: string;
+  event: 'login';
+  actorId: string;
+  email: string;
+  role: 'owner' | 'admin' | 'volunteer';
+  occurredAt: Date;
+  userAgent?: string;
+  platform?: string;
+  timezone?: string;
+}
+
+/** Record a verified successful login. Audit writes are append-only. */
+export async function recordLoginAudit(
+  actorId: string,
+  email: string,
+  role: AuditLog['role']
+): Promise<void> {
+  await addDoc(collection(db, 'auditLogs'), {
+    event: 'login',
+    actorId,
+    email: email.trim().toLowerCase(),
+    role,
+    occurredAt: serverTimestamp(),
+    userAgent: navigator.userAgent.slice(0, 500),
+    platform: navigator.platform || '',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+  });
+}
+
+/** Owner-only login audit history. */
+export async function getAuditLogs(limitCount = 5000): Promise<AuditLog[]> {
+  const snap = await getDocs(query(collection(db, 'auditLogs'), orderBy('occurredAt', 'desc'), limit(limitCount)));
+  return snap.docs.map((item) => {
+    const data = item.data();
+    return {
+      id: item.id,
+      event: 'login',
+      actorId: data.actorId || '',
+      email: data.email || '',
+      role: data.role === 'owner' ? 'owner' : data.role === 'admin' ? 'admin' : 'volunteer',
+      occurredAt: firestoreTimestampToDate(data.occurredAt),
+      userAgent: data.userAgent || undefined,
+      platform: data.platform || undefined,
+      timezone: data.timezone || undefined,
+    };
+  });
+}
+
 /** Event feedback counts/text metadata used for aggregate comparisons. */
 export async function getEventFeedbackRecords(): Promise<EventFeedbackRecord[]> {
   const snap = await getDocs(collection(db, 'eventFeedback'));

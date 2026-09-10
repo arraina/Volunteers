@@ -8,8 +8,8 @@ import {
   updateProfile,
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
-import { isUserAdmin } from '../helpers/types';
-import { createVolunteerProfile, getVolunteer, updateVolunteer } from '../helpers/store';
+import { getUserAdminRole } from '../helpers/types';
+import { createVolunteerProfile, getVolunteer, recordLoginAudit, updateVolunteer } from '../helpers/store';
 import { normalizePhoneNumber, validatePhoneNumber } from '../helpers/phone';
 import './Auth.css';
 
@@ -57,7 +57,9 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
 
   async function routeByRole(uid: string) {
     const user = auth.currentUser;
-    if (user && (await isUserAdmin(user))) {
+    const role = user ? await getUserAdminRole(user) : null;
+    if (user) await recordLoginAudit(uid, user.email || '', role || 'volunteer').catch(() => undefined);
+    if (role) {
       navigate('/admin');
     } else {
       navigate('/dashboard');

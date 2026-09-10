@@ -30,6 +30,7 @@ import {
   createInvitedVolunteerProfile,
   createTask,
   AdminAccess,
+  AuditLog,
   subscribeEvents,
   permanentlyDeleteTaskBatch,
   deleteVolunteerProfile,
@@ -37,6 +38,7 @@ import {
   getEventFeedbackRecords,
   getPastTasks,
   getSentMessages,
+  getAuditLogs,
   grantAdminAccess,
   groupTasksBySeries,
   removeVolunteerFromTask,
@@ -65,7 +67,7 @@ import AICreateTab from './AICreate';
 import EventWorkspace from './EventWorkspace';
 import './AdminDashboard.css';
 
-type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'costs' | 'trash' | 'admins';
+type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'costs' | 'trash' | 'admins' | 'audit';
 
 const STATUS_OPTIONS: TaskStatus[] = ['open', 'filled', 'completed', 'cancelled'];
 
@@ -233,6 +235,9 @@ const AdminDashboard: React.FC = () => {
         {isOwner && <button className={tab === 'admins' ? 'active' : ''} onClick={() => setTab('admins')}>
           Admin Management
         </button>}
+        {isOwner && <button className={tab === 'audit' ? 'active' : ''} onClick={() => setTab('audit')}>
+          Audit
+        </button>}
         <button onClick={() => navigate('/help')}>Help</button>
       </nav>
 
@@ -267,6 +272,7 @@ const AdminDashboard: React.FC = () => {
         {tab === 'costs' && <CostTab />}
         {tab === 'trash' && <TrashTab tasks={deletedTasks} records={deletedRecords} isOwner={isOwner} setError={setError} />}
         {tab === 'admins' && isOwner && <AdminManagementTab ownerUid={user?.uid || ''} volunteers={volunteers} setError={setError} />}
+        {tab === 'audit' && isOwner && <AuditTab />}
       </div>
     </div>
   );
@@ -1572,6 +1578,82 @@ const HistoryTab: React.FC<{
       </div>
     </section>
   );
+};
+
+// ---------------------------------------------------------------------------
+// Owner-only login audit tab
+// ---------------------------------------------------------------------------
+
+const AuditTab: React.FC = () => {
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [search, setSearch] = useState('');
+  const [role, setRole] = useState<'all' | AuditLog['role']>('all');
+  const [period, setPeriod] = useState<'7' | '30' | '90' | 'all'>('30');
+
+  useEffect(() => {
+    getAuditLogs()
+      .then(setLogs)
+      .catch((error) => setLoadError(error instanceof Error ? error.message : 'Could not load the audit log.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    const cutoff = period === 'all' ? null : Date.now() - Number(period) * 86400_000;
+    return logs.filter((log) =>
+      (role === 'all' || log.role === role)
+      && (!cutoff || log.occurredAt.getTime() >= cutoff)
+      && (!needle || [log.email, log.actorId, log.role, log.event, log.userAgent, log.platform, log.timezone]
+        .some((value) => value?.toLowerCase().includes(needle)))
+    );
+  }, [logs, period, role, search]);
+
+  const uniqueUsers = new Set(filtered.map((log) => log.actorId)).size;
+  const adminLogins = filtered.filter((log) => log.role === 'admin' || log.role === 'owner').length;
+  const volunteerLogins = filtered.filter((log) => log.role === 'volunteer').length;
+
+  const exportCsv = () => {
+    const clean = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    const rows = ['Date and time,Role,Email,Event,User ID,Platform,Timezone,Device/browser', ...filtered.map((log) => [
+      log.occurredAt.toISOString(), log.role, log.email, log.event, log.actorId,
+      log.platform || '', log.timezone || '', log.userAgent || '',
+    ].map(clean).join(','))];
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }));
+    link.download = 'login-audit.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  return <div className="analytics-dashboard">
+    <div className="panel-head analytics-heading">
+      <div><h2>Login audit</h2><p className="muted small">Owner-only, read-only history of successful verified logins. Tracking begins with this feature’s deployment.</p></div>
+      <button className="secondary-btn" disabled={filtered.length === 0} onClick={exportCsv}>Export filtered CSV</button>
+    </div>
+    {loadError && <div className="error-message">{loadError}</div>}
+    <section className="panel analytics-filters">
+      <div className="filter-bar audit-filters">
+        <label className="search-field"><span>Search</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Email, user ID, browser, or timezone" /></label>
+        <label><span>Role</span><select value={role} onChange={(event) => setRole(event.target.value as typeof role)}><option value="all">All roles</option><option value="owner">Owner</option><option value="admin">Admin</option><option value="volunteer">Volunteer</option></select></label>
+        <label><span>Date range</span><select value={period} onChange={(event) => setPeriod(event.target.value as typeof period)}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All history</option></select></label>
+      </div>
+    </section>
+    <div className="stat-grid">
+      <div className="stat-card"><span className="stat-num">{filtered.length}</span><span className="stat-label">Successful logins</span></div>
+      <div className="stat-card"><span className="stat-num">{uniqueUsers}</span><span className="stat-label">Unique users</span></div>
+      <div className="stat-card"><span className="stat-num">{adminLogins}</span><span className="stat-label">Owner/Admin logins</span></div>
+      <div className="stat-card"><span className="stat-num">{volunteerLogins}</span><span className="stat-label">Volunteer logins</span></div>
+    </div>
+    <section className="panel">
+      <div className="panel-head"><h2>Login records</h2>{loading && <span className="muted small">Loading audit history…</span>}</div>
+      {!loading && filtered.length === 0 && <div className="empty-state"><strong>No matching login records</strong><span>New successful logins will appear here.</span></div>}
+      {filtered.length > 0 && <div className="table-scroll"><table className="report-table"><thead><tr><th>Date and time</th><th>Role</th><th>Email</th><th>Platform</th><th>Timezone</th><th>Device/browser</th></tr></thead>
+        <tbody>{filtered.map((log) => <tr key={log.id}><td>{log.occurredAt.toLocaleString()}</td><td><span className="admin-tag">{log.role}</span></td><td>{log.email}</td><td>{log.platform || 'Unknown'}</td><td>{log.timezone || 'Unknown'}</td><td className="audit-device" title={log.userAgent}>{log.userAgent || 'Unknown'}</td></tr>)}</tbody>
+      </table></div>}
+    </section>
+  </div>;
 };
 
 // ---------------------------------------------------------------------------
