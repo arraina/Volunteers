@@ -624,6 +624,7 @@ const OccurrenceRow: React.FC<{
   const [assigning, setAssigning] = useState(false);
   const [assignmentMessage, setAssignmentMessage] = useState('');
   const status = effectiveTaskStatus(task);
+  const assignmentClosed = status === 'filled' || status === 'completed' || status === 'cancelled' || openSlots(task) === 0;
   return (
     <div className="occurrence-row">
       <div className="occurrence-head">
@@ -651,7 +652,7 @@ const OccurrenceRow: React.FC<{
       <div className="task-actions">
         <select
           defaultValue=""
-          disabled={assigning || status === 'completed' || status === 'cancelled'}
+          disabled={assigning || assignmentClosed}
           onChange={async (e) => {
             const volunteerId = e.target.value;
             if (!volunteerId) return;
@@ -668,14 +669,19 @@ const OccurrenceRow: React.FC<{
             }
           }}
         >
-          <option value="">Assign volunteer…</option>
+          <option value="">{assignmentClosed ? 'Task filled' : assigning ? 'Assigning…' : 'Assign volunteer…'}</option>
           {volunteers
             .filter((v) => !task.assignedVolunteers.includes(v.uid))
-            .map((v) => (
-              <option key={v.uid} value={v.uid}>
-                {v.name}
-              </option>
-            ))}
+            .map((v) => {
+              const assignable = v.whatsappOptIn === true
+                && v.participationStatus !== 'inactive'
+                && Boolean(v.phoneNumber);
+              return (
+                <option key={v.uid} value={v.uid} disabled={!assignable}>
+                  {v.name}{assignable ? '' : ' — inactive or missing WhatsApp phone'}
+                </option>
+              );
+            })}
         </select>
         {assignmentMessage && <span className="success-text small">{assignmentMessage}</span>}
         {status !== 'completed' && <button className="link-btn danger" onClick={async () => {
