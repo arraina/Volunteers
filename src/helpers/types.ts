@@ -200,14 +200,21 @@ export type FirestoreTimestampLike = Date | string | number | { toDate: () => Da
  * Check if a user is an admin. Admin status is granted ONLY by an
  * `admins/{uid}` document with `isAdmin: true` — there are no hardcoded admins.
  */
-export async function isUserAdmin(user: User): Promise<boolean> {
+export type AdminRole = 'owner' | 'admin';
+
+export async function getUserAdminRole(user: User): Promise<AdminRole | null> {
   try {
     const adminDoc = await getDoc(doc(db, 'admins', user.uid));
-    return adminDoc.exists() && adminDoc.data()?.isAdmin === true;
+    if (!adminDoc.exists() || adminDoc.data()?.isAdmin !== true) return null;
+    return adminDoc.data()?.role === 'owner' || adminDoc.data()?.bootstrap === true ? 'owner' : 'admin';
   } catch (error) {
     console.error('Error checking admin status:', error);
-    return false;
+    return null;
   }
+}
+
+export async function isUserAdmin(user: User): Promise<boolean> {
+  return (await getUserAdminRole(user)) !== null;
 }
 
 /** Check if the admins collection has any admin yet (for first-admin bootstrap). */

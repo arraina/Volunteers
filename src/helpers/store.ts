@@ -896,6 +896,41 @@ export async function getEventFeedbackRecords(): Promise<EventFeedbackRecord[]> 
 // Admin bootstrap
 // ---------------------------------------------------------------------------
 
+export interface AdminAccess {
+  uid: string;
+  email: string;
+  role: 'owner' | 'admin';
+  createdAt?: Date;
+}
+
+export function subscribeAdmins(cb: (admins: AdminAccess[]) => void) {
+  return onSnapshot(collection(db, 'admins'), (snap) => {
+    cb(snap.docs
+      .filter((item) => item.data().isAdmin === true)
+      .map((item) => ({
+        uid: item.id,
+        email: item.data().email || '',
+        role: (item.data().role === 'owner' || item.data().bootstrap === true ? 'owner' : 'admin') as AdminAccess['role'],
+        createdAt: item.data().createdAt ? firestoreTimestampToDate(item.data().createdAt) : undefined,
+      }))
+      .sort((a, b) => a.role === b.role ? a.email.localeCompare(b.email) : a.role === 'owner' ? -1 : 1));
+  });
+}
+
+export async function grantAdminAccess(volunteer: VolunteerProfile, grantedBy: string): Promise<void> {
+  await setDoc(doc(db, 'admins', volunteer.uid), {
+    isAdmin: true,
+    role: 'admin',
+    email: volunteer.email.trim().toLowerCase(),
+    createdAt: serverTimestamp(),
+    grantedBy,
+  });
+}
+
+export async function revokeAdminAccess(uid: string): Promise<void> {
+  await deleteDoc(doc(db, 'admins', uid));
+}
+
 /** True if no admin exists yet (allows first user to claim admin). */
 export async function noAdminsYet(): Promise<boolean> {
   const meta = await getDoc(doc(db, 'adminsMeta', 'count'));
@@ -907,6 +942,7 @@ export async function noAdminsYet(): Promise<boolean> {
 export async function claimFirstAdmin(uid: string, email: string): Promise<void> {
   await setDoc(doc(db, 'admins', uid), {
     isAdmin: true,
+    role: 'owner',
     email,
     bootstrap: true,
     createdAt: serverTimestamp(),

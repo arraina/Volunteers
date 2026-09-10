@@ -28,6 +28,7 @@ import {
   createAnnouncement,
   createInvitedVolunteerProfile,
   createTask,
+  AdminAccess,
   subscribeEvents,
   permanentlyDeleteTaskBatch,
   deleteVolunteer,
@@ -35,6 +36,7 @@ import {
   getEventFeedbackRecords,
   getPastTasks,
   getSentMessages,
+  grantAdminAccess,
   groupTasksBySeries,
   removeVolunteerFromTask,
   recordInvitationSent,
@@ -45,6 +47,8 @@ import {
   updateTaskStatusScoped,
   trashTaskScoped,
   restoreDeletedTaskBatch,
+  revokeAdminAccess,
+  subscribeAdmins,
   updateVolunteer,
   DEFAULT_HORIZON_WEEKS,
 } from '../helpers/store';
@@ -53,7 +57,7 @@ import AICreateTab from './AICreate';
 import EventWorkspace from './EventWorkspace';
 import './AdminDashboard.css';
 
-type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'trash';
+type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'trash' | 'admins';
 
 const STATUS_OPTIONS: TaskStatus[] = ['open', 'filled', 'completed', 'cancelled'];
 
@@ -123,7 +127,7 @@ async function createVolunteerInvitation(input: typeof emptyVolunteerForm): Prom
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isOwner } = useAuth();
   const [tab, setTab] = useState<Tab>('tasks');
   const [tasks, setTasks] = useState<VolunteerTask[]>([]);
   const [volunteers, setVolunteers] = useState<VolunteerProfile[]>([]);
@@ -154,7 +158,7 @@ const AdminDashboard: React.FC = () => {
       <header className="dashboard-header">
         <div>
           <h1>ISKCON Towaco Volunteer Management System</h1>
-          <p>Admin</p>
+          <p>{isOwner ? 'Owner' : 'Admin'}</p>
         </div>
         <div className="header-actions">
           <span className="user-info">{user?.email}</span>
@@ -195,6 +199,9 @@ const AdminDashboard: React.FC = () => {
         <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')}>
           Trash ({deletedTasks.length})
         </button>
+        {isOwner && <button className={tab === 'admins' ? 'active' : ''} onClick={() => setTab('admins')}>
+          Admin Management
+        </button>}
       </nav>
 
       <div className="dashboard-content">
@@ -206,6 +213,7 @@ const AdminDashboard: React.FC = () => {
             events={events}
             setError={setError}
             uid={user?.uid}
+            isOwner={isOwner}
           />
         )}
         {tab === 'ai' && (
@@ -224,7 +232,8 @@ const AdminDashboard: React.FC = () => {
         )}
         {tab === 'history' && <HistoryTab volunteers={volunteers} setError={setError} />}
         {tab === 'reports' && <ReportsTab volunteers={volunteers} tasks={tasks} events={events} />}
-        {tab === 'trash' && <TrashTab tasks={deletedTasks} setError={setError} />}
+        {tab === 'trash' && <TrashTab tasks={deletedTasks} isOwner={isOwner} setError={setError} />}
+        {tab === 'admins' && isOwner && <AdminManagementTab ownerUid={user?.uid || ''} volunteers={volunteers} setError={setError} />}
       </div>
     </div>
   );
@@ -240,7 +249,8 @@ const TasksTab: React.FC<{
   events: TempleEvent[];
   setError: (s: string) => void;
   uid?: string;
-}> = ({ tasks, volunteers, events, setError, uid }) => {
+  isOwner: boolean;
+}> = ({ tasks, volunteers, events, setError, uid, isOwner }) => {
   const [form, setForm] = useState(emptyTaskForm);
   const [saving, setSaving] = useState(false);
   const [taskSearch, setTaskSearch] = useState('');
@@ -487,14 +497,14 @@ const TasksTab: React.FC<{
           <div className="undo-banner" role="status">
             <span>Task moved to Trash. It can be restored for 30 days.</span>
             <div>
-              <button className="link-btn" onClick={async () => {
+              {isOwner && <button className="link-btn" onClick={async () => {
                 try {
                   await restoreDeletedTaskBatch(undoBatchId);
                   setUndoBatchId('');
                 } catch (err) {
                   setError(err instanceof Error ? err.message : 'Failed to restore task.');
                 }
-              }}>Undo</button>
+              }}>Undo</button>}
               <button className="link-btn" onClick={() => setUndoBatchId('')}>Dismiss</button>
             </div>
           </div>
@@ -757,13 +767,91 @@ const OccurrenceRow: React.FC<{
 };
 
 // ---------------------------------------------------------------------------
+// Owner-only admin management
+// ---------------------------------------------------------------------------
+
+const AdminManagementTab: React.FC<{
+  ownerUid: string;
+  volunteers: VolunteerProfile[];
+  setError: (s: string) => void;
+}> = ({ ownerUid, volunteers, setError }) => {
+  const [admins, setAdmins] = useState<AdminAccess[]>([]);
+  const [selectedUid, setSelectedUid] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => subscribeAdmins(setAdmins), []);
+
+  const adminIds = useMemo(() => new Set(admins.map((admin) => admin.uid)), [admins]);
+  const eligible = volunteers
+    .filter((volunteer) => !adminIds.has(volunteer.uid) && volunteer.email)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const promote = async () => {
+    const volunteer = volunteers.find((item) => item.uid === selectedUid);
+    if (!volunteer) return;
+    if (!window.confirm(`Give Admin access to ${volunteer.name} (${volunteer.email})?`)) return;
+    setBusy(true);
+    setError('');
+    try {
+      await grantAdminAccess(volunteer, ownerUid);
+      setSelectedUid('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to grant Admin access.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async (admin: AdminAccess) => {
+    if (!window.confirm(`Remove Admin access from ${admin.email}? Their volunteer profile and history will remain.`)) return;
+    setBusy(true);
+    setError('');
+    try {
+      await revokeAdminAccess(admin.uid);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove Admin access.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="two-col admin-management">
+      <section className="panel">
+        <h2>Add an Admin</h2>
+        <p className="muted small">Choose an existing registered volunteer. Admin access does not remove their volunteer profile or assignments.</p>
+        <div className="stacked-form">
+          <select value={selectedUid} onChange={(event) => setSelectedUid(event.target.value)}>
+            <option value="">Select a volunteer…</option>
+            {eligible.map((volunteer) => <option key={volunteer.uid} value={volunteer.uid}>{volunteer.name} — {volunteer.email}</option>)}
+          </select>
+          <button className="primary-btn" disabled={!selectedUid || busy} onClick={promote}>Give Admin Access</button>
+        </div>
+      </section>
+      <section className="panel">
+        <h2>Administrators</h2>
+        <div className="trash-list">
+          {admins.map((admin) => (
+            <div className="trash-card" key={admin.uid}>
+              <div><strong>{admin.email || admin.uid}</strong><p className="muted small">{admin.role === 'owner' ? 'Owner · protected account' : 'Admin'}</p></div>
+              {admin.role === 'admin' && <button className="danger-btn" disabled={busy} onClick={() => revoke(admin)}>Remove Admin Access</button>}
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Trash tab
 // ---------------------------------------------------------------------------
 
 const TrashTab: React.FC<{
   tasks: VolunteerTask[];
+  isOwner: boolean;
   setError: (s: string) => void;
-}> = ({ tasks, setError }) => {
+}> = ({ tasks, isOwner, setError }) => {
   const [busyBatch, setBusyBatch] = useState('');
   const batches = useMemo(() => {
     const grouped = new Map<string, VolunteerTask[]>();
@@ -793,7 +881,7 @@ const TrashTab: React.FC<{
       <div className="panel-head">
         <div>
           <h2>Task Trash</h2>
-          <p className="muted small">Deleted tasks can be restored for 30 days, then they are automatically removed.</p>
+          <p className="muted small">Deleted tasks remain recoverable for 30 days. Only the Owner can restore or permanently delete them.</p>
         </div>
       </div>
       {batches.length === 0 && (
@@ -812,8 +900,10 @@ const TrashTab: React.FC<{
                 </p>
               </div>
               <div className="task-actions">
-                <button disabled={busyBatch === batchId} className="primary-btn compact-btn" onClick={() => run(batchId, 'restore')}>Restore</button>
-                <button disabled={busyBatch === batchId} className="danger-btn" onClick={() => run(batchId, 'delete')}>Delete permanently</button>
+                {isOwner ? <>
+                  <button disabled={busyBatch === batchId} className="primary-btn compact-btn" onClick={() => run(batchId, 'restore')}>Restore</button>
+                  <button disabled={busyBatch === batchId} className="danger-btn" onClick={() => run(batchId, 'delete')}>Delete permanently</button>
+                </> : <span className="muted small">Owner approval required to restore or delete permanently.</span>}
               </div>
             </div>
           );
