@@ -1,0 +1,29 @@
+.help-page { min-height: 100vh; background: #f4faf5; color: #17251a; }
+.help-header { align-items: center; background: #fff; border-bottom: 1px solid #dce9df; display: flex; justify-content: space-between; padding: 1.25rem clamp(1rem, 4vw, 4rem); }
+.help-header h1, .help-header p { margin: 0; }
+.help-header h1 { font-size: clamp(1.55rem, 3vw, 2.25rem); }
+.help-eyebrow { color: #287b35; font-size: .75rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.help-back { background: #fff; border: 1px solid #399347; border-radius: 999px; color: #267633; cursor: pointer; padding: .65rem 1rem; }
+.help-content { display: grid; gap: 1.5rem; margin: 0 auto; max-width: 1250px; padding: 1.5rem; }
+.help-hero, .help-library { background: #fff; border: 1px solid #dce9df; border-radius: 16px; box-shadow: 0 10px 30px rgba(24, 70, 34, .06); padding: clamp(1rem, 3vw, 1.7rem); }
+.help-hero > h2, .help-library h2 { margin: 0 0 .25rem; }
+.help-hero > p, .help-library-head p { color: #637267; margin: 0 0 1rem; }
+.help-question-form { display: grid; gap: .75rem; }
+.help-question-form textarea, .help-search-controls input, .help-search-controls select { border: 1px solid #cbdccf; border-radius: 10px; box-sizing: border-box; font: inherit; padding: .75rem; width: 100%; }
+.help-question-form .primary-btn { justify-self: end; width: min(100%, 260px); }
+.help-answer { background: #eff9f1; border-left: 4px solid #399347; border-radius: 10px; margin-top: 1rem; padding: 1rem; white-space: pre-wrap; }
+.help-answer h3, .help-answer p { margin: 0 0 .55rem; }
+.help-assistant-note { color: #86660c; font-size: .85rem; }
+.help-source-links { align-items: center; display: flex; flex-wrap: wrap; gap: .55rem; font-size: .85rem; margin-top: .75rem; }
+.help-source-links a { color: #267633; font-weight: 700; }
+.help-library-head { align-items: end; display: flex; gap: 1rem; justify-content: space-between; }
+.help-search-controls { display: grid; gap: .6rem; grid-template-columns: minmax(220px, 1fr) minmax(150px, auto); width: min(100%, 560px); }
+.help-article-list { display: grid; gap: 1rem; }
+.help-article { border: 1px solid #dce9df; border-radius: 12px; display: grid; gap: 1.25rem; grid-template-columns: minmax(220px, .75fr) minmax(0, 1.75fr); padding: 1.15rem; scroll-margin-top: 1rem; }
+.help-article-title > span { color: #287b35; font-size: .72rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.help-article h3 { margin: .25rem 0 .4rem; }
+.help-article-title p, .help-sections p { color: #526158; line-height: 1.55; margin: 0; }
+.help-sections { display: grid; gap: 1rem; }
+.help-sections h4 { margin: 0 0 .25rem; }
+.help-empty { display: grid; gap: .25rem; padding: 2rem; text-align: center; }
+@media (max-width: 760px) { .help-header, .help-library-head { align-items: flex-start; flex-direction: column; } .help-search-controls, .help-article { grid-template-columns: 1fr; width: 100%; } .help-content { padding: .8rem; } }

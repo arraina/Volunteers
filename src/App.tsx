@@ -4,6 +4,7 @@ import AuthPage from './pages/Auth';
 import AdminDashboard from './pages/AdminDashboard';
 import VolunteerDashboard from './pages/VolunteerDashboard';
 import VerifyEmail from './pages/VerifyEmail';
+import HelpCenter from './pages/HelpCenter';
 import { AuthProvider, useAuth } from './helpers/useAuth';
 import { isFirebaseConfigured } from './config/firebase';
 import './App.css';
@@ -97,6 +98,7 @@ function App() {
               </Protected>
             }
           />
+          <Route path="/help" element={<Protected><HelpCenter /></Protected>} />
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

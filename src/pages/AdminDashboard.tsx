@@ -202,6 +202,7 @@ const AdminDashboard: React.FC = () => {
         {isOwner && <button className={tab === 'admins' ? 'active' : ''} onClick={() => setTab('admins')}>
           Admin Management
         </button>}
+        <button onClick={() => navigate('/help')}>Help</button>
       </nav>
 
       <div className="dashboard-content">

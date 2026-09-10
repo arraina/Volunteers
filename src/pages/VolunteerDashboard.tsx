@@ -173,6 +173,7 @@ const VolunteerDashboard: React.FC = () => {
         <button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>
           My Profile
         </button>
+        <button onClick={() => navigate('/help')}>Help</button>
       </nav>
 
       <div className="dashboard-content">

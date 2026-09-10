@@ -55,6 +55,21 @@ const GEMINI_MODEL = process.env.REACT_APP_GEMINI_MODEL || 'gemini-flash-latest'
 
 export const isAiConfigured = Boolean(PROXY_ENDPOINT || GEMINI_KEY);
 
+export async function askHelpQuestion(
+  question: string,
+  manual: string,
+  role: 'volunteer' | 'admin' | 'owner'
+): Promise<string> {
+  if (!isAiConfigured) throw new Error('AI help is not configured.');
+  const system = `You are the help assistant for a temple volunteer management application.
+Answer ONLY from the supplied application manual. Do not invent features, policies, settings, or troubleshooting steps.
+Tailor the explanation to the user's role: ${role}. If the manual does not contain the answer, say that the manual does not cover it and recommend contacting the Owner.
+Return valid minified JSON exactly as {"answer":string}. Keep the answer concise, practical, and step-by-step when appropriate.`;
+  const raw = extractJson(await generateWithResilience(`QUESTION:\n${question}\n\nAPPLICATION MANUAL:\n${manual}`, system));
+  if (!raw || typeof raw.answer !== 'string' || !raw.answer.trim()) throw new Error('AI did not return a help answer.');
+  return raw.answer.trim();
+}
+
 const SYSTEM_INSTRUCTION = `You convert a temple volunteer coordinator's plain-language request into structured JSON.
 Return ONLY valid minified JSON, no markdown, matching exactly:
 {"event":{"name":string,"dateHint":string?},"tasks":[{"title":string,"volunteersNeeded":number,"skills":string[],"timeHint":string?}]}
