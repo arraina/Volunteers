@@ -187,7 +187,7 @@ export async function parseEventRequest(text: string): Promise<ParsedEventPlan> 
 export async function parseTaskManagementRequest(
   text: string,
   tasks: Array<{ id: string; title: string; startDateTime: Date; eventName?: string }>,
-  volunteers: Array<{ uid: string; name: string }>
+  volunteers: Array<{ uid: string; name: string; email?: string }>
 ): Promise<TaskManagementPlan> {
   if (!isAiConfigured) throw new Error('AI task management is not configured.');
   const taskCatalog = tasks.map((t) => ({
@@ -196,16 +196,27 @@ export async function parseTaskManagementRequest(
     date: t.startDateTime.toISOString(),
     event: t.eventName || '',
   }));
-  const volunteerCatalog = volunteers.map((v) => ({ id: v.uid, name: v.name }));
+  const requestLower = text.toLowerCase();
+  // Email addresses are resolved locally. Only an email explicitly typed by the
+  // admin is echoed to the AI; the rest of the volunteer directory stays name-only.
+  const volunteerCatalog = volunteers.map((v) => ({
+    id: v.uid,
+    name: v.name,
+    ...(v.email && requestLower.includes(v.email.toLowerCase()) ? { email: v.email } : {}),
+  }));
+  const resolvedEmailMatches = volunteers
+    .filter((v) => v.email && requestLower.includes(v.email.toLowerCase()))
+    .map((v) => ({ email: v.email, id: v.uid, name: v.name }));
   const system = `You translate an administrator request into safe task-management actions.
 Return ONLY valid minified JSON matching {"summary":string,"actions":Action[]}.
 Action is one of:
 {"type":"update_task","taskId":string,"changes":{"title"?:string,"description"?:string,"startDateTime"?:ISO-8601 string,"endDateTime"?:ISO-8601 string|null,"location"?:string,"volunteersNeeded"?:positive integer,"openForSignup"?:boolean,"reminderHoursBefore"?:positive number[]}}
 {"type":"assign_volunteer"|"remove_volunteer","taskId":string,"volunteerId":string}
 {"type":"set_cancelled","taskId":string,"cancelled":boolean}
-Use only IDs present in the supplied catalogs. Match names, event, and dates carefully. Never invent IDs. If the request is ambiguous, return an empty actions array and explain what needs clarification in summary. Do not create or delete records.`;
+Use only IDs present in the supplied catalogs. Match names, email addresses, event, and dates carefully. Resolve relative dates such as "next Sunday" from CURRENT DATE/TIME in the administrator's time zone. Never invent IDs. If the request is ambiguous, return an empty actions array and explain what needs clarification in summary. Do not create or delete records.`;
+  const now = new Date();
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const prompt = `ADMIN TIME ZONE: ${timeZone}\nREQUEST:\n${text}\n\nTASKS:\n${JSON.stringify(taskCatalog)}\n\nVOLUNTEERS:\n${JSON.stringify(volunteerCatalog)}`;
+  const prompt = `CURRENT DATE/TIME: ${now.toISOString()} (${now.toLocaleString()} in ${timeZone})\nREQUEST:\n${text}\n\nEXACT EMAIL MATCHES:\n${JSON.stringify(resolvedEmailMatches)}\n\nTASKS:\n${JSON.stringify(taskCatalog)}\n\nVOLUNTEERS:\n${JSON.stringify(volunteerCatalog)}`;
   const raw = extractJson(await generateWithResilience(prompt, system));
   if (!raw || !Array.isArray(raw.actions)) throw new Error('AI response was not a management plan.');
   const taskIds = new Set(tasks.map((t) => t.id));
