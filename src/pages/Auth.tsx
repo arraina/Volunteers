@@ -10,7 +10,7 @@ import {
 import { auth } from '../config/firebase';
 import { isUserAdmin } from '../helpers/types';
 import { createVolunteerProfile, getVolunteer, updateVolunteer } from '../helpers/store';
-import { normalizePhoneNumber } from '../helpers/phone';
+import { normalizePhoneNumber, validatePhoneNumber } from '../helpers/phone';
 import './Auth.css';
 
 interface AuthProps {
@@ -47,11 +47,13 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const actionCodeSettings = {
     url: `${window.location.origin}${window.location.pathname.startsWith('/Volunteers') ? '/Volunteers' : ''}/login`,
   };
+  const phoneValidation = validatePhoneNumber(phoneNumber);
 
   async function routeByRole(uid: string) {
     const user = auth.currentUser;
@@ -242,11 +244,20 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
                 placeholder="+1 555 123 4567"
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
+                onBlur={() => setPhoneTouched(true)}
                 autoComplete="tel"
                 required
+                aria-invalid={phoneTouched && !phoneValidation.valid}
+                aria-describedby="phone-validation"
               />
-              <small className="field-hint">
-                Enter a valid phone number. Include the country code for non-US numbers.
+              <small
+                id="phone-validation"
+                className="field-hint"
+                style={{ color: phoneTouched ? (phoneValidation.valid ? '#15803d' : '#b91c1c') : undefined }}
+              >
+                {phoneTouched
+                  ? phoneValidation.message
+                  : 'Enter a valid phone number. Include the country code for non-US numbers.'}
               </small>
             </div>
           )}
@@ -282,7 +293,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
             </button>
           )}
 
-          <button type="submit" disabled={loading} className="submit-btn">
+          <button type="submit" disabled={loading || (!isLogin && !phoneValidation.valid)} className="submit-btn">
             {loading ? 'Please wait…' : isLogin ? 'Login' : 'Create Account'}
           </button>
         </form>

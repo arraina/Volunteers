@@ -27,3 +27,27 @@ export function normalizePhoneNumber(value: string, required = false): string {
 
   return normalized;
 }
+
+export interface PhoneValidation {
+  valid: boolean;
+  normalized: string;
+  message: string;
+}
+
+/** Non-throwing validation result for live form feedback. */
+export function validatePhoneNumber(value: string, required = true): PhoneValidation {
+  try {
+    const normalized = normalizePhoneNumber(value, required);
+    return {
+      valid: Boolean(normalized) || !required,
+      normalized,
+      message: normalized ? `Valid phone format: ${normalized}` : '',
+    };
+  } catch (error) {
+    return {
+      valid: false,
+      normalized: '',
+      message: error instanceof Error ? error.message : 'Enter a valid phone number.',
+    };
+  }
+}

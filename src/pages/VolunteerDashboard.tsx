@@ -23,7 +23,7 @@ import {
   updateVolunteer,
 } from '../helpers/store';
 import { enableWebPush } from '../helpers/notifications';
-import { normalizePhoneNumber } from '../helpers/phone';
+import { normalizePhoneNumber, validatePhoneNumber } from '../helpers/phone';
 import '../pages/AdminDashboard.css';
 import './VolunteerDashboard.css';
 import EventFeedback from './EventFeedback';
@@ -308,9 +308,11 @@ const ProfileTab: React.FC<{
   const [phoneNumber, setPhoneNumber] = useState(
     profile.phoneNumber || sessionStorage.getItem(`pendingPhone:${profile.uid}`) || ''
   );
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const [availability, setAvailability] = useState<string[]>(profile.availability);
   const [prefs, setPrefs] = useState(profile.notificationPrefs);
   const [pushBusy, setPushBusy] = useState(false);
+  const phoneValidation = validatePhoneNumber(phoneNumber);
   const toggle = (list: string[], value: string, setter: (v: string[]) => void) =>
     setter(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
 
@@ -362,10 +364,22 @@ const ProfileTab: React.FC<{
           type="tel"
           value={phoneNumber}
           onChange={(e) => setPhoneNumber(e.target.value)}
+          onBlur={() => setPhoneTouched(true)}
           placeholder="Phone (for WhatsApp reminders)"
           autoComplete="tel"
           required
+          aria-invalid={phoneTouched && !phoneValidation.valid}
+          aria-describedby="profile-phone-validation"
         />
+        <small
+          id="profile-phone-validation"
+          className="field-hint"
+          style={{ color: phoneValidation.valid ? '#15803d' : phoneTouched ? '#b91c1c' : undefined }}
+        >
+          {phoneValidation.valid
+            ? phoneValidation.message
+            : phoneTouched ? phoneValidation.message : 'Include the country code for non-US numbers.'}
+        </small>
 
         <label className="field-label">Days you're usually available</label>
         <div className="chip-group">
@@ -414,7 +428,7 @@ const ProfileTab: React.FC<{
           task and service notifications. Your service history is preserved.
         </p>
 
-        <button type="submit" className="primary-btn">
+        <button type="submit" className="primary-btn" disabled={!phoneValidation.valid}>
           Save Profile
         </button>
       </form>
