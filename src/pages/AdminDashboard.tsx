@@ -65,7 +65,7 @@ import AICreateTab from './AICreate';
 import EventWorkspace from './EventWorkspace';
 import './AdminDashboard.css';
 
-type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'trash' | 'admins';
+type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'costs' | 'trash' | 'admins';
 
 const STATUS_OPTIONS: TaskStatus[] = ['open', 'filled', 'completed', 'cancelled'];
 
@@ -224,6 +224,9 @@ const AdminDashboard: React.FC = () => {
         <button className={tab === 'reports' ? 'active' : ''} onClick={() => setTab('reports')}>
           Analytics
         </button>
+        <button className={tab === 'costs' ? 'active' : ''} onClick={() => setTab('costs')}>
+          Message Costs
+        </button>
         <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')}>
           Trash ({deletedTasks.length + deletedRecords.length})
         </button>
@@ -261,6 +264,7 @@ const AdminDashboard: React.FC = () => {
         )}
         {tab === 'history' && <HistoryTab volunteers={volunteers} setError={setError} />}
         {tab === 'reports' && <ReportsTab volunteers={volunteers} tasks={tasks} events={events} />}
+        {tab === 'costs' && <CostTab />}
         {tab === 'trash' && <TrashTab tasks={deletedTasks} records={deletedRecords} isOwner={isOwner} setError={setError} />}
         {tab === 'admins' && isOwner && <AdminManagementTab ownerUid={user?.uid || ''} volunteers={volunteers} setError={setError} />}
       </div>
@@ -1568,6 +1572,91 @@ const HistoryTab: React.FC<{
       </div>
     </section>
   );
+};
+
+// ---------------------------------------------------------------------------
+// Message cost tab
+// ---------------------------------------------------------------------------
+
+const NORTH_AMERICA_UTILITY_RATE_USD = 0.0034;
+
+const CostTab: React.FC = () => {
+  const [messages, setMessages] = useState<SentMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    getSentMessages(10_000)
+      .then(setMessages)
+      .catch((error) => setLoadError(error instanceof Error ? error.message : 'Could not load message costs.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const monthly = useMemo(() => {
+    const groups = new Map<string, { month: string; attempted: number; delivered: number; failed: number; cost: number }>();
+    messages.filter((message) => message.channel === 'whatsapp').forEach((message) => {
+      const key = `${message.sentAt.getFullYear()}-${String(message.sentAt.getMonth() + 1).padStart(2, '0')}`;
+      const row = groups.get(key) || { month: key, attempted: 0, delivered: 0, failed: 0, cost: 0 };
+      row.attempted += 1;
+      if (message.status === 'sent') {
+        row.delivered += 1;
+        row.cost += message.estimatedCostUsd ?? NORTH_AMERICA_UTILITY_RATE_USD;
+      } else {
+        row.failed += 1;
+      }
+      groups.set(key, row);
+    });
+    return Array.from(groups.values()).sort((a, b) => b.month.localeCompare(a.month));
+  }, [messages]);
+
+  const now = new Date();
+  const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const current = monthly.find((row) => row.month === currentKey)
+    || { month: currentKey, attempted: 0, delivered: 0, failed: 0, cost: 0 };
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const projectedCost = current.cost * daysInMonth / Math.max(1, now.getDate());
+  const money = (value: number) => value < 0.01 && value > 0
+    ? `$${value.toFixed(4)}`
+    : value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  const monthLabel = (key: string) => {
+    const [year, month] = key.split('-').map(Number);
+    return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+  const exportCsv = () => {
+    const lines = ['Month,Attempted,Delivered,Failed,Estimated cost USD', ...monthly.map((row) =>
+      `${row.month},${row.attempted},${row.delivered},${row.failed},${row.cost.toFixed(4)}`
+    )];
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
+    link.download = 'whatsapp-message-cost-history.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  return <div className="analytics-dashboard">
+    <div className="panel-head analytics-heading">
+      <div><h2>WhatsApp reminder costs</h2><p className="muted small">Monthly estimates based on successfully delivered reminder messages.</p></div>
+      <button className="secondary-btn" disabled={monthly.length === 0} onClick={exportCsv}>Export cost history</button>
+    </div>
+    {loadError && <div className="error-message">{loadError}</div>}
+    <div className="stat-grid">
+      <div className="stat-card"><span className="stat-num">{money(current.cost)}</span><span className="stat-label">Cost this month</span></div>
+      <div className="stat-card"><span className="stat-num">{current.delivered}</span><span className="stat-label">Delivered this month</span></div>
+      <div className="stat-card"><span className="stat-num">{current.failed}</span><span className="stat-label">Failed (not charged)</span></div>
+      <div className="stat-card"><span className="stat-num">{money(projectedCost)}</span><span className="stat-label">Projected month total</span></div>
+    </div>
+    <section className="panel">
+      <h2>How this estimate works</h2>
+      <p className="muted small">The current North America utility rate is estimated at ${NORTH_AMERICA_UTILITY_RATE_USD.toFixed(4)} per delivered WhatsApp reminder. Failed messages, email, and browser push are not included. Each month is calculated separately, so the current total automatically starts at zero on the first day of a new month. Future sender records preserve the rate applied at send time.</p>
+    </section>
+    <section className="panel">
+      <div className="panel-head"><h2>Monthly history</h2>{loading && <span className="muted small">Loading costs…</span>}</div>
+      {!loading && monthly.length === 0 && <div className="empty-state"><strong>No WhatsApp delivery costs yet</strong><span>Monthly totals will appear after reminders are delivered.</span></div>}
+      {monthly.length > 0 && <table className="report-table"><thead><tr><th>Month</th><th>Attempted</th><th>Delivered</th><th>Failed</th><th>Estimated cost</th></tr></thead>
+        <tbody>{monthly.map((row) => <tr key={row.month}><td>{monthLabel(row.month)}{row.month === currentKey ? ' (current)' : ''}</td><td>{row.attempted}</td><td>{row.delivered}</td><td>{row.failed}</td><td>{money(row.cost)}</td></tr>)}</tbody>
+      </table>}
+    </section>
+  </div>;
 };
 
 // ---------------------------------------------------------------------------

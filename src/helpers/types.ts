@@ -159,6 +159,8 @@ export interface SentMessage {
   status: 'sent' | 'failed';
   providerId?: string;
   failureReason?: string;
+  billingCategory?: 'utility' | 'marketing' | 'authentication' | 'service';
+  estimatedCostUsd?: number;
   sentAt: Date;
 }
 

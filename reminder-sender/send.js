@@ -127,6 +127,10 @@ async function main() {
             status: r.ok ? 'sent' : 'failed',
             providerId: r.id || null,
             failureReason: r.ok ? null : r.error || 'unknown',
+            // Current direct-Meta North America utility estimate. Storing the
+            // applied rate keeps historical monthly totals stable if rates change.
+            billingCategory: r.channel === 'whatsapp' ? 'utility' : null,
+            estimatedCostUsd: r.ok && r.channel === 'whatsapp' ? 0.0034 : 0,
             sentAt: admin.firestore.FieldValue.serverTimestamp(),
           });
           if (r.ok) sentCount += 1;

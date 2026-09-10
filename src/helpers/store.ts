@@ -1001,6 +1001,8 @@ export async function getSentMessages(limitCount = 1000): Promise<SentMessage[]>
       status: data.status,
       providerId: data.providerId || undefined,
       failureReason: data.failureReason || undefined,
+      billingCategory: data.billingCategory || undefined,
+      estimatedCostUsd: typeof data.estimatedCostUsd === 'number' ? data.estimatedCostUsd : undefined,
       sentAt: firestoreTimestampToDate(data.sentAt),
     } as SentMessage;
   });
