@@ -45,6 +45,7 @@ import {
   subscribeDeletedTasks,
   subscribeVolunteers,
   updateTaskStatusScoped,
+  updateTaskManagementFieldsScoped,
   trashTaskScoped,
   restoreDeletedTaskBatch,
   revokeAdminAccess,
@@ -92,6 +93,23 @@ const emptyVolunteerForm = {
   phoneNumber: '',
   whatsappOptIn: true,
 };
+
+const toDateTimeInput = (date?: Date) => {
+  if (!date) return '';
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+};
+
+const taskEditValues = (task: VolunteerTask) => ({
+  title: task.title,
+  description: task.description || '',
+  startDateTime: toDateTimeInput(task.startDateTime),
+  endDateTime: toDateTimeInput(task.endDateTime),
+  location: task.location || '',
+  volunteersNeeded: String(task.volunteersNeeded),
+  reminderHoursBefore: task.reminderHoursBefore.join(', '),
+  openForSignup: task.openForSignup,
+});
 
 const invitationSettings = () => ({
   url: `${window.location.origin}${window.location.pathname.startsWith('/Volunteers') ? '/Volunteers' : ''}/login`,
@@ -674,8 +692,59 @@ const OccurrenceRow: React.FC<{
 }> = ({ task, volunteers, volunteerById, onAssign, onRemove, onTrash, askScope, setError }) => {
   const [assigning, setAssigning] = useState(false);
   const [assignmentMessage, setAssignmentMessage] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editForm, setEditForm] = useState(() => taskEditValues(task));
   const status = effectiveTaskStatus(task);
   const assignmentClosed = status === 'filled' || status === 'completed' || status === 'cancelled' || openSlots(task) === 0;
+
+  const saveTaskEdit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    const start = new Date(editForm.startDateTime);
+    const end = editForm.endDateTime ? new Date(editForm.endDateTime) : null;
+    const needed = Number.parseInt(editForm.volunteersNeeded, 10);
+    const reminders = editForm.reminderHoursBefore.split(',')
+      .map((value) => Number.parseInt(value.trim(), 10))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    if (!editForm.title.trim() || Number.isNaN(start.getTime())) {
+      setError('Task title and a valid start date/time are required.');
+      return;
+    }
+    if (end && (Number.isNaN(end.getTime()) || end <= start)) {
+      setError('End date/time must be after the start date/time.');
+      return;
+    }
+    if (!Number.isFinite(needed) || needed < task.assignedVolunteers.length || needed < 1) {
+      setError(`Volunteers needed must be at least ${Math.max(1, task.assignedVolunteers.length)}.`);
+      return;
+    }
+    const scope = askScope('Edit task');
+    if (!scope) return;
+    const startChanged = editForm.startDateTime !== toDateTimeInput(task.startDateTime);
+    const endChanged = editForm.endDateTime !== toDateTimeInput(task.endDateTime);
+    const normalizedCurrentReminders = task.reminderHoursBefore.filter((value) => value > 0).join(',');
+    const normalizedNewReminders = reminders.join(',');
+    setSavingEdit(true);
+    try {
+      await updateTaskManagementFieldsScoped(task, {
+        title: editForm.title,
+        description: editForm.description,
+        ...(startChanged ? { startDateTime: start } : {}),
+        ...(startChanged || endChanged ? { endDateTime: end } : {}),
+        location: editForm.location,
+        volunteersNeeded: needed,
+        ...(normalizedNewReminders !== normalizedCurrentReminders ? { reminderHoursBefore: reminders } : {}),
+        openForSignup: editForm.openForSignup,
+      }, scope);
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update task.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   return (
     <div className="occurrence-row">
       <div className="occurrence-head">
@@ -700,6 +769,17 @@ const OccurrenceRow: React.FC<{
           ))}
         </ul>
       )}
+      {editing && <form className="task-edit-form" onSubmit={saveTaskEdit}>
+        <label><span>Task title</span><input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} required /></label>
+        <label className="task-edit-wide"><span>Description</span><textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} /></label>
+        <label><span>Start</span><input type="datetime-local" value={editForm.startDateTime} onChange={(e) => setEditForm({ ...editForm, startDateTime: e.target.value })} required /></label>
+        <label><span>End (optional)</span><input type="datetime-local" value={editForm.endDateTime} onChange={(e) => setEditForm({ ...editForm, endDateTime: e.target.value })} /></label>
+        <label><span>Location</span><input value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} /></label>
+        <label><span>Volunteers needed</span><input type="number" min={Math.max(1, task.assignedVolunteers.length)} value={editForm.volunteersNeeded} onChange={(e) => setEditForm({ ...editForm, volunteersNeeded: e.target.value })} required /></label>
+        <label className="task-edit-wide"><span>Reminder hours before (comma separated)</span><input value={editForm.reminderHoursBefore} onChange={(e) => setEditForm({ ...editForm, reminderHoursBefore: e.target.value })} placeholder="48, 24, 2" /></label>
+        <label className="checkbox-row task-edit-wide"><input type="checkbox" checked={editForm.openForSignup} onChange={(e) => setEditForm({ ...editForm, openForSignup: e.target.checked })} /> Allow volunteers to sign themselves up</label>
+        <div className="task-edit-actions task-edit-wide"><button className="primary-btn" disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</button><button type="button" className="secondary-btn" onClick={() => { setEditForm(taskEditValues(task)); setEditing(false); }}>Cancel edit</button></div>
+      </form>}
       <div className="task-actions">
         <select
           defaultValue=""
@@ -735,6 +815,7 @@ const OccurrenceRow: React.FC<{
             })}
         </select>
         {assignmentMessage && <span className="success-text small">{assignmentMessage}</span>}
+        <button className="secondary-btn" onClick={() => { setEditForm(taskEditValues(task)); setEditing((value) => !value); }}>{editing ? 'Close editor' : 'Edit Task'}</button>
         {status !== 'completed' && <button className="link-btn danger" onClick={async () => {
           const nextStatus: TaskStatus = status === 'cancelled' ? 'open' : 'cancelled';
           const scope = askScope(status === 'cancelled' ? 'Reopen task' : 'Cancel task');

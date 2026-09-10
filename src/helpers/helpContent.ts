@@ -68,7 +68,8 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: 'How to add one volunteer', text: 'Open Volunteers. Enter first name, last name, email, and international phone. Confirm WhatsApp consent, then choose Add Volunteer & Send Invitation. Tell the volunteer to check email and set a password.' },
       { heading: 'How to resend an invitation', text: 'Find the person under Volunteers and choose Resend Invitation. Confirm the email first. If the person already knows the login email, Forgot password gives the same password-setting outcome.' },
       { heading: 'How to assign a volunteer', text: 'Open Tasks, find and expand the correct dated occurrence, then select an eligible person under Assign volunteer. Wait for the success message and confirm the name appears. The selector disables when the task is full.' },
-      { heading: 'How to change capacity', text: 'Use the AI Task Assistant Manage tasks mode and request the exact task, date, and new volunteer count, then review and apply the proposal. Make sure the new count is not lower than the number already assigned.' },
+      { heading: 'How to edit a task manually', text: 'Open Tasks, expand the correct occurrence, and choose Edit Task. Change the title, description, start or end time, location, capacity, reminder hours, or self-signup setting. Choose whether the edit applies only to this date or to this and all future dates, then save.' },
+      { heading: 'How to change capacity', text: 'Choose Edit Task and change Volunteers needed. The number cannot be lower than the volunteers already assigned. Saving a larger number reopens assignment capacity.' },
       { heading: 'How to cancel and reopen', text: 'Find the dated task and choose Cancel task. For a recurring series, choose whether it applies once or to future dates. Choose Reopen on a cancelled task to reverse the action.' },
       { heading: 'How to delete safely', text: 'Choose Move to Trash, select one or future dates for a recurring task, and confirm. Regular Admins then ask the Owner if restoration is needed. Do not use cancellation merely to hide incorrect test data.' },
       { heading: 'How to send an announcement', text: 'Open Announcements, choose the intended audience and channels, write a clear message, verify recipients, and submit. Check delivery history afterward; external provider acceptance is separate from saving the announcement.' },
@@ -171,6 +172,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: 'Create a task', text: 'Provide a title and start date/time. Optionally add an event, description, end time, location, volunteer count, recurrence, signup permission, and comma-separated reminder hours such as 48, 24, 2.' },
       { heading: 'Recurring tasks', text: 'Daily, weekly, and monthly schedules generate dated occurrences ahead of time. Each occurrence can have different assigned volunteers. Choose whether an edit, cancellation, or Trash action affects one date or that date and future occurrences.' },
       { heading: 'Assignments', text: 'Select an eligible volunteer from the occurrence dropdown. Names appear immediately after a successful save. Remove someone to reopen capacity.' },
+      { heading: 'Manual editing', text: 'Choose Edit Task on a dated occurrence to update its details without AI. For a recurring series, apply the changes only to that occurrence or to that date and all future occurrences.' },
     ], keywords: ['create task', 'recurring', 'weekly', 'monthly', 'daily', 'reminder hours', 'assignment'],
   },
   {

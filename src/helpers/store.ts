@@ -473,6 +473,61 @@ export async function updateTaskManagementFields(
   await updateDoc(doc(db, 'tasks', taskId), patch);
 }
 
+/** Apply manual edits to one task or to this and all future occurrences. */
+export async function updateTaskManagementFieldsScoped(
+  task: VolunteerTask,
+  fields: TaskManagementFields,
+  scope: SeriesScope
+): Promise<void> {
+  if (!task.seriesId || scope === 'one') {
+    if (fields.volunteersNeeded !== undefined && fields.volunteersNeeded < task.assignedVolunteers.length) {
+      throw new Error(`Volunteers needed cannot be below the ${task.assignedVolunteers.length} already assigned.`);
+    }
+    await updateTaskManagementFields(task.id, fields);
+    return;
+  }
+
+  const occurrences = await seriesOccurrences(task.seriesId);
+  const cutoff = task.startDateTime.getTime();
+  const targets = occurrences.filter((item) => {
+    const data = item.data();
+    const start = data.startDateTime?.toDate?.()?.getTime?.() ?? 0;
+    return data.deleted !== true && start >= cutoff;
+  });
+  if (fields.volunteersNeeded !== undefined) {
+    const overCapacity = targets.find((item) => (item.data().assignedVolunteers || []).length > fields.volunteersNeeded!);
+    if (overCapacity) throw new Error('The new volunteer count is below the number already assigned on one or more future dates.');
+  }
+
+  const newSelectedStart = fields.startDateTime || task.startDateTime;
+  const startDelta = fields.startDateTime ? fields.startDateTime.getTime() - task.startDateTime.getTime() : 0;
+  const newDuration = fields.endDateTime instanceof Date
+    ? fields.endDateTime.getTime() - newSelectedStart.getTime()
+    : null;
+
+  for (let i = 0; i < targets.length; i += 400) {
+    const batch = writeBatch(db);
+    targets.slice(i, i + 400).forEach((item) => {
+      const data = item.data();
+      const originalStart: Date = data.startDateTime.toDate();
+      const shiftedStart = new Date(originalStart.getTime() + startDelta);
+      const patch: Record<string, any> = { updatedAt: serverTimestamp() };
+      if (typeof fields.title === 'string' && fields.title.trim()) patch.title = fields.title.trim();
+      if (typeof fields.description === 'string') patch.description = fields.description.trim();
+      if (typeof fields.location === 'string') patch.location = fields.location.trim();
+      if (typeof fields.volunteersNeeded === 'number') patch.volunteersNeeded = Math.max(1, Math.floor(fields.volunteersNeeded));
+      if (typeof fields.openForSignup === 'boolean') patch.openForSignup = fields.openForSignup;
+      if (Array.isArray(fields.reminderHoursBefore)) patch.reminderHoursBefore = fields.reminderHoursBefore.filter((n) => Number.isFinite(n) && n > 0);
+      if (fields.startDateTime) patch.startDateTime = Timestamp.fromDate(shiftedStart);
+      if (fields.endDateTime === null) patch.endDateTime = null;
+      else if (newDuration !== null) patch.endDateTime = Timestamp.fromDate(new Date(shiftedStart.getTime() + newDuration));
+      if (fields.startDateTime !== undefined || fields.reminderHoursBefore !== undefined) patch.reminderVersion = increment(1);
+      batch.update(item.ref, patch);
+    });
+    await batch.commit();
+  }
+}
+
 export async function deleteTask(taskId: string): Promise<void> {
   await deleteDoc(doc(db, 'tasks', taskId));
 }

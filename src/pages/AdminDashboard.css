@@ -480,6 +480,55 @@
   color: #64748b;
 }
 
+.task-edit-form {
+  background: #fff;
+  border: 1px solid #cfe3d3;
+  border-radius: 10px;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+}
+
+.task-edit-form label:not(.checkbox-row) {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.task-edit-form label > span {
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.task-edit-form input,
+.task-edit-form textarea {
+  background: #fbfefb;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  min-width: 0;
+  padding: 0.6rem 0.7rem;
+  width: 100%;
+}
+
+.task-edit-form textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.task-edit-wide {
+  grid-column: 1 / -1;
+}
+
+.task-edit-actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
 .analytics-heading {
   margin-bottom: 1rem;
 }
@@ -852,6 +901,22 @@
   .trash-card .task-actions,
   .volunteer-card .row,
   .volunteer-card .row button {
+    width: 100%;
+  }
+
+  .task-edit-form {
+    grid-template-columns: 1fr;
+  }
+
+  .task-edit-wide {
+    grid-column: auto;
+  }
+
+  .task-edit-actions {
+    flex-direction: column;
+  }
+
+  .task-edit-actions button {
     width: 100%;
   }
 
