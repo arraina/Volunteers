@@ -1,12 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  linkWithCredential,
-  PhoneAuthProvider,
-  RecaptchaVerifier,
-  signOut,
-  updatePhoneNumber,
-} from 'firebase/auth';
+import { signOut } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
 import {
@@ -309,23 +303,12 @@ const ProfileTab: React.FC<{
 }> = ({ profile, onSaved, setError, setMessage }) => {
   const [firstName, setFirstName] = useState(profile.firstName);
   const [lastName, setLastName] = useState(profile.lastName);
-  const pendingPhoneKey = `pendingPhone:${profile.uid}`;
   const [phoneNumber, setPhoneNumber] = useState(
-    profile.phoneNumber || sessionStorage.getItem(pendingPhoneKey) || ''
+    profile.phoneNumber || sessionStorage.getItem(`pendingPhone:${profile.uid}`) || ''
   );
   const [availability, setAvailability] = useState<string[]>(profile.availability);
   const [prefs, setPrefs] = useState(profile.notificationPrefs);
   const [pushBusy, setPushBusy] = useState(false);
-  const [verificationCode, setVerificationCode] = useState('');
-  const [verificationId, setVerificationId] = useState('');
-  const [phoneBusy, setPhoneBusy] = useState(false);
-  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
-
-  const verifiedPhone = auth.currentUser?.phoneNumber || '';
-  const phoneIsVerified = Boolean(verifiedPhone && verifiedPhone === profile.phoneNumber);
-
-  useEffect(() => () => recaptchaRef.current?.clear(), []);
-
   const toggle = (list: string[], value: string, setter: (v: string[]) => void) =>
     setter(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
 
@@ -334,65 +317,19 @@ const ProfileTab: React.FC<{
     setError('');
     try {
       if (!firstName.trim() || !lastName.trim()) throw new Error('Name is required.');
+      const normalizedPhone = normalizePhoneNumber(phoneNumber, true);
       await updateVolunteer(profile.uid, {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        phoneNumber: normalizedPhone,
         availability,
         notificationPrefs: prefs,
       });
+      sessionStorage.removeItem(`pendingPhone:${profile.uid}`);
       setMessage('Profile updated.');
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save profile.');
-    }
-  };
-
-  const sendPhoneCode = async () => {
-    setError('');
-    setMessage('');
-    setPhoneBusy(true);
-    try {
-      const normalizedPhone = normalizePhoneNumber(phoneNumber, true);
-      recaptchaRef.current?.clear();
-      const verifier = new RecaptchaVerifier(auth, 'phone-recaptcha', { size: 'invisible' });
-      recaptchaRef.current = verifier;
-      const provider = new PhoneAuthProvider(auth);
-      const id = await provider.verifyPhoneNumber(normalizedPhone, verifier);
-      setPhoneNumber(normalizedPhone);
-      setVerificationId(id);
-      setVerificationCode('');
-      setMessage(`Verification code sent to ${normalizedPhone}.`);
-    } catch (err) {
-      recaptchaRef.current?.clear();
-      recaptchaRef.current = null;
-      setError(phoneAuthError(err, 'Could not send the verification code.'));
-    } finally {
-      setPhoneBusy(false);
-    }
-  };
-
-  const verifyPhone = async () => {
-    setError('');
-    setMessage('');
-    setPhoneBusy(true);
-    try {
-      const user = auth.currentUser;
-      if (!user) throw new Error('Please sign in again.');
-      if (!/^\d{6}$/.test(verificationCode)) throw new Error('Enter the 6-digit verification code.');
-      const credential = PhoneAuthProvider.credential(verificationId, verificationCode);
-      if (user.phoneNumber) await updatePhoneNumber(user, credential);
-      else await linkWithCredential(user, credential);
-      await user.getIdToken(true);
-      await updateVolunteer(profile.uid, { phoneNumber: user.phoneNumber || phoneNumber });
-      sessionStorage.removeItem(pendingPhoneKey);
-      setVerificationId('');
-      setVerificationCode('');
-      setMessage('Phone number verified and saved.');
-      await onSaved();
-    } catch (err) {
-      setError(phoneAuthError(err, 'Could not verify the phone number.'));
-    } finally {
-      setPhoneBusy(false);
     }
   };
 
@@ -419,47 +356,14 @@ const ProfileTab: React.FC<{
           <input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name" />
         </div>
         <input value={profile.email} disabled />
-        <div className="phone-verification">
-          <p className="quota-notice">
-            Firebase currently allows this project 10 verification SMS messages per day.
-            Request a code only when you are ready to verify your number.
-          </p>
-          <div className="phone-input-row">
-            <input
-              type="tel"
-              value={phoneNumber}
-              onChange={(e) => {
-                setPhoneNumber(e.target.value);
-                setVerificationId('');
-              }}
-              placeholder="Phone (for reminders)"
-              autoComplete="tel"
-              required
-            />
-            <button type="button" className="secondary-btn" onClick={sendPhoneCode} disabled={phoneBusy}>
-              {phoneBusy ? 'Sending...' : phoneIsVerified ? 'Change number' : 'Send code'}
-            </button>
-          </div>
-          <p className={`phone-status ${phoneIsVerified ? 'verified' : ''}`}>
-            {phoneIsVerified ? 'Verified phone number' : 'SMS verification required for phone reminders'}
-          </p>
-          {verificationId && (
-            <div className="phone-input-row">
-              <input
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                value={verificationCode}
-                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="6-digit code"
-              />
-              <button type="button" className="primary-btn" onClick={verifyPhone} disabled={phoneBusy}>
-                {phoneBusy ? 'Verifying...' : 'Verify phone'}
-              </button>
-            </div>
-          )}
-          <div id="phone-recaptcha" />
-        </div>
+        <input
+          type="tel"
+          value={phoneNumber}
+          onChange={(e) => setPhoneNumber(e.target.value)}
+          placeholder="Phone (for WhatsApp reminders)"
+          autoComplete="tel"
+          required
+        />
 
         <label className="field-label">Days you're usually available</label>
         <div className="chip-group">
@@ -524,15 +428,3 @@ const ProfileTab: React.FC<{
 };
 
 export default VolunteerDashboard;
-
-function phoneAuthError(error: unknown, fallback: string): string {
-  const code = error && typeof error === 'object' && 'code' in error
-    ? String((error as { code?: string }).code || '')
-    : '';
-  if (code === 'auth/invalid-verification-code') return 'The verification code is incorrect.';
-  if (code === 'auth/code-expired') return 'The verification code expired. Send a new code.';
-  if (code === 'auth/credential-already-in-use') return 'That phone number is already linked to another account.';
-  if (code === 'auth/too-many-requests') return 'Too many attempts. Please try again later.';
-  if (code === 'auth/operation-not-allowed') return 'Phone verification is not enabled in Firebase yet.';
-  return error instanceof Error ? error.message : fallback;
-}

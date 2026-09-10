@@ -341,6 +341,7 @@ const TasksTab: React.FC<{
       await assignVolunteerToTask(task, volunteer);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to assign volunteer.');
+      throw err;
     }
   };
 
@@ -548,7 +549,7 @@ const SeriesCard: React.FC<{
   group: ReturnType<typeof groupTasksBySeries>[number];
   volunteers: VolunteerProfile[];
   volunteerById: Map<string, VolunteerProfile>;
-  onAssign: (task: VolunteerTask, volunteerId: string) => void;
+  onAssign: (task: VolunteerTask, volunteerId: string) => Promise<void>;
   onRemove: (task: VolunteerTask, volunteerId: string) => void;
   setError: (s: string) => void;
 }> = ({ group, volunteers, volunteerById, onAssign, onRemove, setError }) => {
@@ -612,11 +613,13 @@ const OccurrenceRow: React.FC<{
   task: VolunteerTask;
   volunteers: VolunteerProfile[];
   volunteerById: Map<string, VolunteerProfile>;
-  onAssign: (task: VolunteerTask, volunteerId: string) => void;
+  onAssign: (task: VolunteerTask, volunteerId: string) => Promise<void>;
   onRemove: (task: VolunteerTask, volunteerId: string) => void;
   askScope: (verb: string) => SeriesScope | null;
   setError: (s: string) => void;
 }> = ({ task, volunteers, volunteerById, onAssign, onRemove, askScope, setError }) => {
+  const [assigning, setAssigning] = useState(false);
+  const [assignmentMessage, setAssignmentMessage] = useState('');
   return (
     <div className="occurrence-row">
       <div className="occurrence-head">
@@ -644,9 +647,21 @@ const OccurrenceRow: React.FC<{
       <div className="task-actions">
         <select
           defaultValue=""
-          onChange={(e) => {
-            if (e.target.value) onAssign(task, e.target.value);
-            e.target.value = '';
+          disabled={assigning}
+          onChange={async (e) => {
+            const volunteerId = e.target.value;
+            if (!volunteerId) return;
+            setAssigning(true);
+            setAssignmentMessage('');
+            try {
+              await onAssign(task, volunteerId);
+              setAssignmentMessage(`${volunteerById.get(volunteerId)?.name || 'Volunteer'} assigned.`);
+            } catch {
+              // The parent displays the assignment error.
+            } finally {
+              e.target.value = '';
+              setAssigning(false);
+            }
           }}
         >
           <option value="">Assign volunteer…</option>
@@ -658,6 +673,7 @@ const OccurrenceRow: React.FC<{
               </option>
             ))}
         </select>
+        {assignmentMessage && <span className="success-text small">{assignmentMessage}</span>}
         <select
           value={task.status}
           onChange={async (e) => {
@@ -762,6 +778,7 @@ const VolunteersTab: React.FC<{
       await updateVolunteer(uid, {
         firstName: editForm.firstName,
         lastName: editForm.lastName,
+        email: editForm.email,
         phoneNumber: editForm.phoneNumber,
       });
       setEditing(null);
@@ -952,6 +969,13 @@ const VolunteersTab: React.FC<{
                   <input
                     value={editForm.lastName}
                     onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                  />
+                  <input
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    placeholder="Notification email"
+                    required
                   />
                   <input
                     value={editForm.phoneNumber}

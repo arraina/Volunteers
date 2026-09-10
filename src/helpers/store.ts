@@ -183,6 +183,7 @@ export async function updateVolunteer(
   const payload: Record<string, unknown> = { updatedAt: serverTimestamp() };
   if (data.firstName !== undefined) payload.firstName = data.firstName;
   if (data.lastName !== undefined) payload.lastName = data.lastName;
+  if (data.email !== undefined) payload.email = data.email.trim().toLowerCase();
   if (data.phoneNumber !== undefined) {
     payload.phoneNumber = normalizePhoneNumber(data.phoneNumber);
   }

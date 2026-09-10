@@ -43,12 +43,6 @@ service cloud.firestore {
       return request.resource.data.phoneNumber == '';
     }
 
-    function phoneChangeIsVerified() {
-      return request.resource.data.phoneNumber == resource.data.phoneNumber
-        || (request.auth.token.phone_number is string
-            && request.resource.data.phoneNumber == request.auth.token.phone_number);
-    }
-
     function isSelfSignup() {
       return resource.data.openForSignup == true
         && resource.data.status == 'open'
@@ -119,8 +113,7 @@ service cloud.firestore {
         || (verifiedUser()
             && request.auth.uid == volunteerId
             && volunteerSelfEditableFields()
-            && (hasNoPhoneNumber() || hasValidPhoneNumber())
-            && phoneChangeIsVerified());
+            && (hasNoPhoneNumber() || hasValidPhoneNumber()));
       allow delete: if isAdmin();
     }
 
