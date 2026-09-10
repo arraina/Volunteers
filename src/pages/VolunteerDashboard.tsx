@@ -407,6 +407,9 @@ const ProfileTab: React.FC<{
           ))}
         </div>
         <p className="muted small">
+          Optional and informational only. If no days are selected, you can still sign up or be assigned to any task.
+        </p>
+        <p className="muted small">
           Turning off WhatsApp deactivates your profile, prevents new task assignments, and stops
           task and service notifications. Your service history is preserved.
         </p>

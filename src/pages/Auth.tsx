@@ -116,6 +116,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
           lastName: parts.slice(1).join(' ') || '',
           email: normalizedEmail,
           phoneNumber: '',
+          whatsappOptIn: true,
         });
       } else if (profile.invitationStatus === 'invited') {
         await updateVolunteer(profile.uid, { invitationStatus: 'active' });

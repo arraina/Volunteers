@@ -79,7 +79,7 @@ const emptyVolunteerForm = {
   lastName: '',
   email: '',
   phoneNumber: '',
-  whatsappOptIn: false,
+  whatsappOptIn: true,
 };
 
 const invitationSettings = () => ({
@@ -810,7 +810,7 @@ const VolunteersTab: React.FC<{
           lastName,
           email,
           phoneNumber,
-          whatsappOptIn: /^(true|yes|y|1)$/i.test(consent),
+          whatsappOptIn: !/^(false|no|n|0)$/i.test(consent),
         };
       });
       let added = 0;
@@ -940,7 +940,7 @@ const VolunteersTab: React.FC<{
           </div>
         </div>
         <p className="muted small">
-          CSV columns: first name, last name, email, phone, WhatsApp consent (yes/true).
+          CSV columns: first name, last name, email, phone, WhatsApp consent (defaults to yes; use no to skip).
           Each valid row receives a login invitation.
         </p>
         <p className="results-count">{filtered.length} of {volunteers.length} volunteers shown</p>

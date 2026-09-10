@@ -115,12 +115,14 @@ export async function createVolunteer(input: VolunteerInput): Promise<string> {
 
 /** Self-registered volunteer whose doc id equals their auth uid. */
 export async function createVolunteerProfile(uid: string, input: VolunteerInput): Promise<void> {
+  const whatsappOptIn = input.whatsappOptIn !== false;
   await setDoc(doc(db, 'volunteers', uid), {
-    ...buildVolunteerDoc(input),
-    whatsappOptIn: input.whatsappOptIn === true,
-    whatsappOptInAt: input.whatsappOptIn ? serverTimestamp() : null,
-    whatsappOptInSource: input.whatsappOptIn ? 'self' : null,
-    participationStatus: input.whatsappOptIn ? 'active' : 'inactive',
+    ...buildVolunteerDoc({ ...input, whatsappOptIn }),
+    whatsappOptIn,
+    whatsappOptInAt: whatsappOptIn ? serverTimestamp() : null,
+    whatsappOptOutAt: null,
+    whatsappOptInSource: whatsappOptIn ? 'self' : null,
+    participationStatus: whatsappOptIn && Boolean(input.phoneNumber) ? 'active' : 'inactive',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     joinedDate: serverTimestamp(),
@@ -139,6 +141,7 @@ export async function createInvitedVolunteerProfile(
     notificationPrefs: { whatsapp: whatsappOptIn, email: true, push: false },
     whatsappOptIn,
     whatsappOptInAt: whatsappOptIn ? serverTimestamp() : null,
+    whatsappOptOutAt: whatsappOptIn ? null : serverTimestamp(),
     whatsappOptInSource: whatsappOptIn ? 'admin-confirmed' : null,
     invitationStatus: 'invited',
     participationStatus: 'active',
@@ -171,7 +174,7 @@ function buildVolunteerDoc(input: VolunteerInput) {
     phoneNumber: normalizePhoneNumber(input.phoneNumber),
     skills: input.skills || [],
     availability: input.availability || [],
-    notificationPrefs: { whatsapp: input.whatsappOptIn === true, email: true, push: false },
+    notificationPrefs: { whatsapp: input.whatsappOptIn !== false, email: true, push: false },
     pushTokens: [],
     totalHours: 0,
   };
@@ -194,6 +197,7 @@ export async function updateVolunteer(
     payload.notificationPrefs = data.notificationPrefs;
     payload.whatsappOptIn = data.notificationPrefs.whatsapp;
     payload.whatsappOptInAt = data.notificationPrefs.whatsapp ? serverTimestamp() : null;
+    payload.whatsappOptOutAt = data.notificationPrefs.whatsapp ? null : serverTimestamp();
     payload.whatsappOptInSource = data.notificationPrefs.whatsapp ? 'self' : null;
     payload.participationStatus = data.notificationPrefs.whatsapp ? 'active' : 'inactive';
   }

@@ -60,6 +60,8 @@ export interface VolunteerProfile {
   /** Whether this person explicitly agreed to receive WhatsApp messages. */
   whatsappOptIn?: boolean;
   whatsappOptInAt?: Date;
+  /** Present only when the volunteer deliberately turns WhatsApp off. */
+  whatsappOptOutAt?: Date;
   whatsappOptInSource?: 'self' | 'admin-confirmed';
   /** Invitations do not restrict assignment or reminder delivery. */
   invitationStatus?: 'invited' | 'active';
@@ -222,6 +224,9 @@ export const defaultNotificationPrefs = (): NotificationPreferences => ({
 export function normalizeVolunteer(uid: string, data: Record<string, any>): VolunteerProfile {
   const firstName = data.firstName || '';
   const lastName = data.lastName || '';
+  // Older creation paths wrote false when no choice was supplied. Only the
+  // explicit opt-out marker represents a deliberate opt-out.
+  const whatsappEnabled = !data.whatsappOptOutAt;
   return {
     uid,
     firstName,
@@ -231,16 +236,21 @@ export function normalizeVolunteer(uid: string, data: Record<string, any>): Volu
     phoneNumber: data.phoneNumber || '',
     skills: Array.isArray(data.skills) ? data.skills : [],
     availability: Array.isArray(data.availability) ? data.availability : [],
-    notificationPrefs: { ...defaultNotificationPrefs(), ...(data.notificationPrefs || {}) },
-    whatsappOptIn: data.whatsappOptIn === true,
+    notificationPrefs: {
+      ...defaultNotificationPrefs(),
+      ...(data.notificationPrefs || {}),
+      whatsapp: whatsappEnabled,
+    },
+    whatsappOptIn: whatsappEnabled,
     whatsappOptInAt: data.whatsappOptInAt?.toDate?.(),
+    whatsappOptOutAt: data.whatsappOptOutAt?.toDate?.(),
     whatsappOptInSource: data.whatsappOptInSource,
     invitationStatus: data.invitationStatus,
     invitationLastSentAt: data.invitationLastSentAt?.toDate?.(),
     invitationSendCount:
       typeof data.invitationSendCount === 'number' ? data.invitationSendCount : 0,
     participationStatus:
-      data.participationStatus === 'inactive' || data.whatsappOptIn !== true ? 'inactive' : 'active',
+      whatsappEnabled && Boolean(data.phoneNumber) ? 'active' : 'inactive',
     pushTokens: Array.isArray(data.pushTokens) ? data.pushTokens : [],
     totalHours: typeof data.totalHours === 'number' ? data.totalHours : 0,
     isAdmin: data.isAdmin === true,
