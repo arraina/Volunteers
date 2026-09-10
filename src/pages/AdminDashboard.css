@@ -490,6 +490,27 @@
   min-width: 0;
 }
 
+.analytics-filters .filter-bar {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin: 0;
+}
+
+.analytics-scope {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.analytics-scope span {
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: #eef6ef;
+  color: #35633b;
+  font-size: 0.78rem;
+}
+
 .staffing-meter {
   height: 12px;
   overflow: hidden;

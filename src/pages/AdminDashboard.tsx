@@ -1232,6 +1232,12 @@ const ReportsTab: React.FC<{
   const [feedback, setFeedback] = useState<EventFeedbackRecord[]>([]);
   const [pastTasks, setPastTasks] = useState<VolunteerTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState<'7' | '30' | '90' | 'custom'>('30');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [analyticsEvent, setAnalyticsEvent] = useState('all');
+  const [channelFilter, setChannelFilter] = useState<'all' | NotificationChannel>('all');
+  const [volunteerSearch, setVolunteerSearch] = useState('');
 
   useEffect(() => {
     Promise.allSettled([getHourLogs(), getSentMessages(), getEventFeedbackRecords(), getPastTasks()])
@@ -1250,46 +1256,72 @@ const ReportsTab: React.FC<{
     return Array.from(byId.values());
   }, [pastTasks, tasks]);
   const now = new Date();
-  const thirtyDays = new Date(now.getTime() + 30 * 86400_000);
-  const upcoming = tasks.filter((task) =>
-    task.startDateTime > now && task.startDateTime <= thirtyDays && effectiveTaskStatus(task) !== 'cancelled'
+  const periodStart = dateRange === 'custom' && customFrom ? new Date(`${customFrom}T00:00:00`) : now;
+  const periodEnd = dateRange === 'custom' && customTo
+    ? new Date(`${customTo}T23:59:59.999`)
+    : new Date(now.getTime() + Number(dateRange === 'custom' ? 30 : dateRange) * 86400_000);
+  const periodTasks = allTasks.filter((task) =>
+    task.startDateTime >= periodStart &&
+    task.startDateTime <= periodEnd &&
+    (analyticsEvent === 'all' || task.eventId === analyticsEvent) &&
+    effectiveTaskStatus(task) !== 'cancelled'
   );
-  const required = upcoming.reduce((sum, task) => sum + task.volunteersNeeded, 0);
-  const assigned = upcoming.reduce((sum, task) => sum + task.assignedVolunteers.length, 0);
+  const periodTaskIds = new Set(periodTasks.map((task) => task.id));
+  const volunteerNeedle = volunteerSearch.trim().toLowerCase();
+  const scopedVolunteers = volunteers.filter((volunteer) =>
+    !volunteerNeedle || [volunteer.name, volunteer.email, volunteer.phoneNumber]
+      .some((value) => value.toLowerCase().includes(volunteerNeedle))
+  );
+  const scopedVolunteerIds = new Set(scopedVolunteers.map((volunteer) => volunteer.uid));
+  const scopedLogs = logs.filter((log) =>
+    periodTaskIds.has(log.taskId) && (!volunteerNeedle || scopedVolunteerIds.has(log.volunteerId))
+  );
+  const scopedMessages = messages.filter((message) =>
+    Boolean(message.taskId && periodTaskIds.has(message.taskId)) &&
+    (channelFilter === 'all' || message.channel === channelFilter) &&
+    (!volunteerNeedle || scopedVolunteerIds.has(message.volunteerId))
+  );
+  const upcoming = periodTasks.filter((task) => task.startDateTime > now);
+  const required = periodTasks.reduce((sum, task) => sum + task.volunteersNeeded, 0);
+  const assigned = periodTasks.reduce((sum, task) => sum + task.assignedVolunteers.length, 0);
   const staffingRate = required ? Math.min(100, Math.round((assigned / required) * 100)) : 0;
   const urgent = upcoming
     .filter((task) => openSlots(task) > 0)
     .sort((a, b) => a.startDateTime.getTime() - b.startDateTime.getTime());
-  const contactIssues = volunteers.filter((volunteer) =>
+  const contactIssues = scopedVolunteers.filter((volunteer) =>
     !volunteer.phoneNumber || volunteer.whatsappOptIn !== true || volunteer.participationStatus === 'inactive'
   );
-  const failedMessages = messages.filter((message) => message.status === 'failed');
-  const activeVolunteers = volunteers.filter((volunteer) => volunteer.participationStatus !== 'inactive');
-  const totalHours = volunteers.reduce((sum, volunteer) => sum + (volunteer.totalHours || 0), 0);
+  const failedMessages = scopedMessages.filter((message) => message.status === 'failed');
+  const activeVolunteers = scopedVolunteers.filter((volunteer) => volunteer.participationStatus !== 'inactive');
+  const totalHours = scopedLogs.reduce((sum, log) => sum + (log.hours || 0), 0);
 
   const channelRows = (['whatsapp', 'email', 'push'] as NotificationChannel[]).map((channel) => {
-    const records = messages.filter((message) => message.channel === channel);
+    const records = scopedMessages.filter((message) => message.channel === channel);
     const sent = records.filter((message) => message.status === 'sent').length;
     return { channel, attempted: records.length, sent, failed: records.length - sent };
-  });
+  }).filter((row) => channelFilter === 'all' || row.channel === channelFilter);
 
   const assignmentCount = new Map<string, number>();
-  allTasks.forEach((task) => task.assignedVolunteers.forEach((uid) =>
+  periodTasks.forEach((task) => task.assignedVolunteers.forEach((uid) =>
     assignmentCount.set(uid, (assignmentCount.get(uid) || 0) + 1)
   ));
-  const engagementRows = [...volunteers]
-    .sort((a, b) => b.totalHours - a.totalHours || (assignmentCount.get(b.uid) || 0) - (assignmentCount.get(a.uid) || 0))
+  const engagementRows = [...scopedVolunteers]
+    .sort((a, b) => (assignmentCount.get(b.uid) || 0) - (assignmentCount.get(a.uid) || 0))
     .slice(0, 10);
 
-  const completedTasks = allTasks.filter((task) => effectiveTaskStatus(task) === 'completed');
-  const expectedAttendance = completedTasks.reduce((sum, task) => sum + task.assignedVolunteers.length, 0);
-  const attendedKeys = new Set(logs.map((log) => `${log.taskId}:${log.volunteerId}`));
+  const completedTasks = periodTasks.filter((task) => effectiveTaskStatus(task) === 'completed');
+  const expectedAttendance = completedTasks.reduce((sum, task) =>
+    sum + task.assignedVolunteers.filter((uid) => !volunteerNeedle || scopedVolunteerIds.has(uid)).length, 0
+  );
+  const attendedKeys = new Set(scopedLogs.map((log) => `${log.taskId}:${log.volunteerId}`));
   const attended = completedTasks.reduce((sum, task) =>
-    sum + task.assignedVolunteers.filter((uid) => attendedKeys.has(`${task.id}:${uid}`)).length, 0
+    sum + task.assignedVolunteers.filter((uid) =>
+      (!volunteerNeedle || scopedVolunteerIds.has(uid)) && attendedKeys.has(`${task.id}:${uid}`)
+    ).length, 0
   );
 
   const eventRows = events.map((event) => {
-    const eventTasks = allTasks.filter((task) => task.eventId === event.id);
+    const eventTasks = periodTasks.filter((task) => task.eventId === event.id);
     const taskIds = new Set(eventTasks.map((task) => task.id));
     const eventRequired = eventTasks.reduce((sum, task) => sum + task.volunteersNeeded, 0);
     const eventAssigned = eventTasks.reduce((sum, task) => sum + task.assignedVolunteers.length, 0);
@@ -1297,8 +1329,10 @@ const ReportsTab: React.FC<{
       event,
       tasks: eventTasks.length,
       staffing: eventRequired ? Math.min(100, Math.round((eventAssigned / eventRequired) * 100)) : 0,
-      hours: logs.filter((log) => taskIds.has(log.taskId)).reduce((sum, log) => sum + (log.hours || 0), 0),
-      feedback: feedback.filter((item) => item.eventId === event.id).length,
+      hours: scopedLogs.filter((log) => taskIds.has(log.taskId)).reduce((sum, log) => sum + (log.hours || 0), 0),
+      feedback: feedback.filter((item) =>
+        item.eventId === event.id && (!volunteerNeedle || scopedVolunteerIds.has(item.volunteerId))
+      ).length,
     };
   }).filter((row) => row.tasks > 0).sort((a, b) =>
     (b.event.date?.getTime() || b.event.createdAt.getTime()) - (a.event.date?.getTime() || a.event.createdAt.getTime())
@@ -1311,8 +1345,31 @@ const ReportsTab: React.FC<{
         {loading && <span className="muted small">Loading analytics…</span>}
       </div>
 
+      <section className="panel analytics-filters">
+        <div className="filter-bar">
+          <label><span>Task dates</span><select value={dateRange} onChange={(e) => setDateRange(e.target.value as typeof dateRange)}>
+            <option value="7">Next 7 days</option><option value="30">Next 30 days</option><option value="90">Next 90 days</option><option value="custom">Custom dates</option>
+          </select></label>
+          {dateRange === 'custom' && <><label><span>From</span><input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} /></label><label><span>To</span><input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} /></label></>}
+          <label><span>Event</span><select value={analyticsEvent} onChange={(e) => setAnalyticsEvent(e.target.value)}>
+            <option value="all">All events</option>{events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
+          </select></label>
+          <label><span>Reminder channel</span><select value={channelFilter} onChange={(e) => setChannelFilter(e.target.value as typeof channelFilter)}>
+            <option value="all">All channels</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="push">Browser push</option>
+          </select></label>
+          <label className="search-field"><span>Volunteer</span><input value={volunteerSearch} onChange={(e) => setVolunteerSearch(e.target.value)} placeholder="Name, email, or phone" /></label>
+        </div>
+        <div className="analytics-scope">
+          <span>Scope: {periodStart.toLocaleDateString()}–{periodEnd.toLocaleDateString()}</span>
+          <span>{analyticsEvent === 'all' ? 'All events' : events.find((event) => event.id === analyticsEvent)?.name}</span>
+          <span>{channelFilter === 'all' ? 'All reminder channels' : channelFilter}</span>
+          {volunteerNeedle && <span>{scopedVolunteers.length} matching volunteer(s)</span>}
+          {(dateRange !== '30' || analyticsEvent !== 'all' || channelFilter !== 'all' || volunteerSearch) && <button className="link-btn" onClick={() => { setDateRange('30'); setCustomFrom(''); setCustomTo(''); setAnalyticsEvent('all'); setChannelFilter('all'); setVolunteerSearch(''); }}>Clear filters</button>}
+        </div>
+      </section>
+
       <div className="stat-grid">
-        <div className="stat-card"><span className="stat-num">{staffingRate}%</span><span className="stat-label">30-day staffing</span></div>
+        <div className="stat-card"><span className="stat-num">{staffingRate}%</span><span className="stat-label">Period staffing</span></div>
         <div className="stat-card"><span className="stat-num">{urgent.length}</span><span className="stat-label">Tasks need people</span></div>
         <div className="stat-card"><span className="stat-num">{activeVolunteers.length}</span><span className="stat-label">Active volunteers</span></div>
         <div className="stat-card"><span className="stat-num">{totalHours.toFixed(1)}</span><span className="stat-label">Hours recorded</span></div>
@@ -1327,35 +1384,35 @@ const ReportsTab: React.FC<{
             : <ul className="attention-list">
                 {urgent.slice(0, 6).map((task) => <li key={task.id}><strong>{openSlots(task)} open:</strong> {task.title} — {formatDate(task.startDateTime)}</li>)}
                 {contactIssues.length > 0 && <li><strong>{contactIssues.length} volunteer(s)</strong> inactive or missing WhatsApp-ready phone details.</li>}
-                {failedMessages.length > 0 && <li><strong>{failedMessages.length} reminder delivery failure(s)</strong> in the latest {messages.length} delivery records.</li>}
+                {failedMessages.length > 0 && <li><strong>{failedMessages.length} reminder delivery failure(s)</strong> in the selected scope.</li>}
               </ul>}
         </section>
 
         <section className="panel">
-          <h2>Upcoming staffing · next 30 days</h2>
+          <h2>Staffing in selected period</h2>
           <div className="staffing-meter" aria-label={`${staffingRate}% staffed`}><span style={{ width: `${staffingRate}%` }} /></div>
-          <p className="muted small">{assigned} of {required} positions assigned across {upcoming.length} tasks.</p>
+          <p className="muted small">{assigned} of {required} positions assigned across {periodTasks.length} tasks.</p>
           <table className="report-table"><thead><tr><th>Task</th><th>Date</th><th>Assigned</th><th>Open</th></tr></thead>
-            <tbody>{upcoming.slice(0, 10).map((task) => <tr key={task.id}><td>{task.title}</td><td>{formatDate(task.startDateTime)}</td><td>{task.assignedVolunteers.length}/{task.volunteersNeeded}</td><td>{openSlots(task)}</td></tr>)}</tbody>
+            <tbody>{periodTasks.slice(0, 10).map((task) => <tr key={task.id}><td>{task.title}</td><td>{formatDate(task.startDateTime)}</td><td>{task.assignedVolunteers.length}/{task.volunteersNeeded}</td><td>{openSlots(task)}</td></tr>)}</tbody>
           </table>
-          {upcoming.length === 0 && <p className="muted">No tasks scheduled in the next 30 days.</p>}
+          {periodTasks.length === 0 && <p className="muted">No tasks in the selected period.</p>}
         </section>
 
         <section className="panel">
           <h2>Volunteer engagement</h2>
           <p className="muted small">Attendance is based on check-in records: {expectedAttendance ? `${attended}/${expectedAttendance} (${Math.round(attended / expectedAttendance * 100)}%)` : 'not enough completed-task data yet'}.</p>
           <table className="report-table"><thead><tr><th>Volunteer</th><th>Assignments</th><th>Sessions</th><th>Hours</th></tr></thead>
-            <tbody>{engagementRows.map((volunteer) => <tr key={volunteer.uid}><td>{volunteer.name}</td><td>{assignmentCount.get(volunteer.uid) || 0}</td><td>{logs.filter((log) => log.volunteerId === volunteer.uid).length}</td><td>{volunteer.totalHours}</td></tr>)}</tbody>
+            <tbody>{engagementRows.map((volunteer) => <tr key={volunteer.uid}><td>{volunteer.name}</td><td>{assignmentCount.get(volunteer.uid) || 0}</td><td>{scopedLogs.filter((log) => log.volunteerId === volunteer.uid).length}</td><td>{scopedLogs.filter((log) => log.volunteerId === volunteer.uid).reduce((sum, log) => sum + (log.hours || 0), 0).toFixed(1)}</td></tr>)}</tbody>
           </table>
         </section>
 
         <section className="panel">
           <h2>Reminder health</h2>
-          {messages.length === 0 && <p className="muted">No delivery records yet. Rates will appear after the reminder sender runs successfully.</p>}
+          {scopedMessages.length === 0 && <p className="muted">No reminder delivery records match the selected scope.</p>}
           <table className="report-table"><thead><tr><th>Channel</th><th>Attempted</th><th>Sent</th><th>Failed</th><th>Success</th></tr></thead>
             <tbody>{channelRows.map((row) => <tr key={row.channel}><td>{row.channel}</td><td>{row.attempted}</td><td>{row.sent}</td><td>{row.failed}</td><td>{row.attempted ? `${Math.round(row.sent / row.attempted * 100)}%` : '—'}</td></tr>)}</tbody>
           </table>
-          <p className="muted small">Readiness: {volunteers.filter((v) => v.whatsappOptIn && v.phoneNumber).length} WhatsApp · {volunteers.filter((v) => v.email).length} email · {volunteers.filter((v) => v.pushTokens?.length).length} browser push.</p>
+          <p className="muted small">Readiness: {scopedVolunteers.filter((v) => v.whatsappOptIn && v.phoneNumber).length} WhatsApp · {scopedVolunteers.filter((v) => v.email).length} email · {scopedVolunteers.filter((v) => v.pushTokens?.length).length} browser push.</p>
         </section>
       </div>
 
