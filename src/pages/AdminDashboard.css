@@ -1018,6 +1018,41 @@
   }
 }
 
+.meeting-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.meeting-card summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  list-style: none;
+}
+
+.meeting-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.meeting-card summary::after {
+  content: '▾';
+  color: var(--green);
+}
+
+.meeting-card:not([open]) summary::after {
+  transform: rotate(-90deg);
+}
+
+.meeting-content {
+  border-top: 1px solid var(--line);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 380px) {
   .summary-strip,
   .stat-grid {

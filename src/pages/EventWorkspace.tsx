@@ -29,6 +29,7 @@ interface Meeting {
   notes: string;
   decisions: string;
   actionItems: string;
+  createdAt?: Date;
 }
 
 interface Feedback {
@@ -63,12 +64,20 @@ const emptyMeeting = {
   actionItems: '',
 };
 
+const toDateTimeInput = (date?: Date) => {
+  if (!date) return '';
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+};
+
 const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
   const [eventId, setEventId] = useState(events[0]?.id || '');
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
   const [templates, setTemplates] = useState<EventTemplate[]>([]);
   const [meeting, setMeeting] = useState(emptyMeeting);
+  const [editingMeetingId, setEditingMeetingId] = useState('');
+  const [meetingSearch, setMeetingSearch] = useState('');
   const [lessons, setLessons] = useState('');
   const [templateDate, setTemplateDate] = useState('');
 
@@ -85,7 +94,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
       query(collection(db, 'eventMeetings'), where('eventId', '==', eventId)),
       (snap) => setMeetings(snap.docs.filter((item) => item.data().deleted !== true).map((item) => {
         const data = item.data();
-        return { id: item.id, ...data, meetingDate: data.meetingDate?.toDate?.() } as Meeting;
+        return { id: item.id, ...data, meetingDate: data.meetingDate?.toDate?.(), createdAt: data.createdAt?.toDate?.() } as Meeting;
       }))
     );
     const unsubFeedback = onSnapshot(
@@ -101,18 +110,54 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
 
   useEffect(() => setLessons(event?.lessonsLearned || ''), [event]);
 
+  useEffect(() => {
+    setMeeting(emptyMeeting);
+    setEditingMeetingId('');
+    setMeetingSearch('');
+  }, [eventId]);
+
+  const visibleMeetings = useMemo(() => {
+    const term = meetingSearch.trim().toLowerCase();
+    return meetings.filter((item) => !term || [item.title, item.attendees, item.notes, item.decisions, item.actionItems]
+      .some((value) => value?.toLowerCase().includes(term)))
+      .sort((a, b) => (b.meetingDate || b.createdAt || new Date(0)).getTime()
+        - (a.meetingDate || a.createdAt || new Date(0)).getTime());
+  }, [meetings, meetingSearch]);
+
+  const startNewMeeting = () => {
+    setEditingMeetingId('');
+    setMeeting(emptyMeeting);
+  };
+
+  const startEditingMeeting = (item: Meeting) => {
+    setEditingMeetingId(item.id);
+    setMeeting({
+      title: item.title || '',
+      meetingDate: toDateTimeInput(item.meetingDate),
+      attendees: item.attendees || '',
+      notes: item.notes || '',
+      decisions: item.decisions || '',
+      actionItems: item.actionItems || '',
+    });
+    window.scrollTo({ top: 300, behavior: 'smooth' });
+  };
+
   const addMeeting = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eventId || !meeting.title.trim()) return;
     try {
-      await addDoc(collection(db, 'eventMeetings'), {
+      const payload = {
         eventId,
         ...meeting,
         meetingDate: meeting.meetingDate ? Timestamp.fromDate(new Date(meeting.meetingDate)) : null,
-        createdBy: uid || null,
-        createdAt: serverTimestamp(),
-      });
-      setMeeting(emptyMeeting);
+        updatedAt: serverTimestamp(),
+      };
+      if (editingMeetingId) {
+        await updateDoc(doc(db, 'eventMeetings', editingMeetingId), payload);
+      } else {
+        await addDoc(collection(db, 'eventMeetings'), { ...payload, createdBy: uid || null, createdAt: serverTimestamp() });
+      }
+      startNewMeeting();
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not save meeting notes.');
     }
@@ -206,24 +251,38 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
 
     {event && <>
       <section className="panel">
-        <h2>Planning meetings</h2>
+        <div className="panel-head">
+          <div><h2>Planning meetings ({meetings.length})</h2><p className="muted small">Save as many meetings as needed for this event.</p></div>
+          <button className="secondary-btn" type="button" onClick={startNewMeeting}>Add another meeting</button>
+        </div>
         <form className="stacked-form" onSubmit={addMeeting}>
+          <h3>{editingMeetingId ? 'Edit meeting' : 'New meeting'}</h3>
           <input aria-label="Meeting title" placeholder="Meeting title" value={meeting.title} onChange={(e) => setMeeting({ ...meeting, title: e.target.value })} required />
           <input type="datetime-local" value={meeting.meetingDate} onChange={(e) => setMeeting({ ...meeting, meetingDate: e.target.value })} />
           <input aria-label="Meeting attendees" placeholder="Attendees" value={meeting.attendees} onChange={(e) => setMeeting({ ...meeting, attendees: e.target.value })} />
           <textarea aria-label="Discussion notes" placeholder="Discussion notes" value={meeting.notes} onChange={(e) => setMeeting({ ...meeting, notes: e.target.value })} />
           <textarea aria-label="Decisions made" placeholder="Decisions made" value={meeting.decisions} onChange={(e) => setMeeting({ ...meeting, decisions: e.target.value })} />
           <textarea aria-label="Action items" placeholder="Action items — include owner and due date" value={meeting.actionItems} onChange={(e) => setMeeting({ ...meeting, actionItems: e.target.value })} />
-          <button className="primary-btn" type="submit">Save meeting notes</button>
+          <div className="row">
+            <button className="primary-btn" type="submit">{editingMeetingId ? 'Save meeting changes' : 'Save meeting notes'}</button>
+            {editingMeetingId && <button className="secondary-btn" type="button" onClick={startNewMeeting}>Cancel editing</button>}
+          </div>
         </form>
-        {meetings.map((item) => <div className="task-card" key={item.id}>
-          <strong>{item.title}</strong>{item.meetingDate && <p className="muted">{formatDate(item.meetingDate)}</p>}
-          {item.attendees && <p><strong>Attendees:</strong> {item.attendees}</p>}
-          {item.notes && <p><strong>Notes:</strong> {item.notes}</p>}
-          {item.decisions && <p><strong>Decisions:</strong> {item.decisions}</p>}
-          {item.actionItems && <p><strong>Actions:</strong> {item.actionItems}</p>}
-          <button className="link-btn danger" onClick={() => moveToTrash('eventMeetings', item.id, `meeting “${item.title}”`)}>Move to Trash</button>
-        </div>)}
+        {meetings.length > 0 && <input className="search" aria-label="Search meetings" placeholder="Search meetings, attendees, notes, decisions, or actions…" value={meetingSearch} onChange={(e) => setMeetingSearch(e.target.value)} />}
+        {meetings.length > 0 && visibleMeetings.length === 0 && <div className="empty-state"><strong>No matching meetings</strong><span>Try a different search.</span></div>}
+        <div className="meeting-list">{visibleMeetings.map((item, index) => <details className="task-card meeting-card" key={item.id} open={index === 0}>
+          <summary><span><strong>{item.title}</strong>{item.meetingDate && <span className="muted small"> · {formatDate(item.meetingDate)}</span>}</span><span className="muted small">View notes</span></summary>
+          <div className="meeting-content">
+            {item.attendees && <p><strong>Attendees:</strong> {item.attendees}</p>}
+            {item.notes && <p><strong>Notes:</strong> {item.notes}</p>}
+            {item.decisions && <p><strong>Decisions:</strong> {item.decisions}</p>}
+            {item.actionItems && <p><strong>Actions:</strong> {item.actionItems}</p>}
+            <div className="row">
+              <button className="secondary-btn" onClick={() => startEditingMeeting(item)}>Edit meeting</button>
+              <button className="link-btn danger" onClick={() => moveToTrash('eventMeetings', item.id, `meeting “${item.title}”`)}>Move to Trash</button>
+            </div>
+          </div>
+        </details>)}</div>
       </section>
 
       <section className="panel">
