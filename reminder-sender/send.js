@@ -27,10 +27,12 @@ async function main() {
   const messaging = admin.messaging();
   const now = new Date();
 
-  const [tasksSnap, volunteersSnap] = await Promise.all([
+  const [tasksSnap, volunteersSnap, stoppedSeriesSnap] = await Promise.all([
     db.collection('tasks').get(),
     db.collection('volunteers').get(),
+    db.collection('taskSeries').get(),
   ]);
+  const stoppedSeries = new Set(stoppedSeriesSnap.docs.map((d) => d.id));
 
   const volunteers = new Map();
   volunteersSnap.forEach((d) => volunteers.set(d.id, { id: d.id, ...d.data() }));
@@ -40,6 +42,7 @@ async function main() {
 
   for (const taskDoc of tasksSnap.docs) {
     const task = { id: taskDoc.id, ...taskDoc.data() };
+    if (task.deleted === true) continue;
     const start = toDate(task.startDateTime);
     if (!start) continue;
     // Cancellation is explicit; completion is derived from the task time.
@@ -144,10 +147,11 @@ async function main() {
   }
 
   await sendPendingAnnouncements(db, messaging, volunteers);
-  const created = await topUpSeries(db, tasksSnap, now);
+  const created = await topUpSeries(db, tasksSnap, now, stoppedSeries);
+  const purged = await purgeExpiredTrash(db, tasksSnap, now);
 
   console.log(
-    `Done. Sent ${sentCount}, failed ${failCount}, generated ${created} new occurrence(s).`
+    `Done. Sent ${sentCount}, failed ${failCount}, generated ${created} new occurrence(s), purged ${purged} expired trash item(s).`
   );
 }
 
@@ -172,11 +176,12 @@ const MAX_NEW_PER_RUN = 400;
  * New occurrences are added with fresh (empty) assignments. Deterministic ids
  * (`seriesId_<startMillis>`) make this idempotent across overlapping runs.
  */
-async function topUpSeries(db, tasksSnap, now) {
+async function topUpSeries(db, tasksSnap, now, stoppedSeries) {
   // Find the latest occurrence per series and a template to clone from.
   const latestBySeries = new Map();
   for (const d of tasksSnap.docs) {
     const t = d.data();
+    if (t.deleted === true) continue;
     if (!t.recurrence || t.recurrence === 'none' || !t.seriesId) continue;
     const start = toDate(t.startDateTime);
     if (!start) continue;
@@ -190,7 +195,7 @@ async function topUpSeries(db, tasksSnap, now) {
   let created = 0;
 
   for (const [seriesId, { start: latestStart, data: t }] of latestBySeries) {
-    if (t.status === 'cancelled') continue;
+    if (t.status === 'cancelled' || stoppedSeries.has(seriesId)) continue;
     let cursor = advance(latestStart, t.recurrence);
     const durationMs = t.endDateTime
       ? toDate(t.endDateTime).getTime() - latestStart.getTime()
@@ -229,6 +234,21 @@ async function topUpSeries(db, tasksSnap, now) {
     }
   }
   return created;
+}
+
+async function purgeExpiredTrash(db, tasksSnap, now) {
+  const cutoff = now.getTime() - 30 * 86400_000;
+  const expired = tasksSnap.docs.filter((item) => {
+    const data = item.data();
+    const deletedAt = toDate(data.deletedAt);
+    return data.deleted === true && deletedAt && deletedAt.getTime() <= cutoff;
+  });
+  for (let i = 0; i < expired.length; i += 400) {
+    const batch = db.batch();
+    expired.slice(i, i + 400).forEach((item) => batch.delete(item.ref));
+    await batch.commit();
+  }
+  return expired.length;
 }
 
 async function sendPendingAnnouncements(db, messaging, volunteers) {

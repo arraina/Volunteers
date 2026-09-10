@@ -289,13 +289,22 @@ export function subscribeTasks(
     orderBy('startDateTime', 'asc')
   );
   return onSnapshot(q, (snap) => {
-    cb(snap.docs.map((d) => normalizeTask(d.id, d.data())));
+    cb(snap.docs.filter((d) => d.data().deleted !== true).map((d) => normalizeTask(d.id, d.data())));
+  });
+}
+
+export function subscribeDeletedTasks(cb: (tasks: VolunteerTask[]) => void) {
+  const q = query(collection(db, 'tasks'), where('deleted', '==', true));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => normalizeTask(d.id, d.data())).sort((a, b) =>
+      (b.deletedAt?.getTime() || 0) - (a.deletedAt?.getTime() || 0)
+    ));
   });
 }
 
 export async function getTasks(): Promise<VolunteerTask[]> {
   const snap = await getDocs(query(collection(db, 'tasks'), orderBy('startDateTime', 'asc')));
-  return snap.docs.map((d) => normalizeTask(d.id, d.data()));
+  return snap.docs.filter((d) => d.data().deleted !== true).map((d) => normalizeTask(d.id, d.data()));
 }
 
 /**
@@ -312,7 +321,7 @@ export async function getPastTasks(limitCount = 300): Promise<VolunteerTask[]> {
       limit(limitCount)
     )
   );
-  return snap.docs.map((d) => normalizeTask(d.id, d.data()));
+  return snap.docs.filter((d) => d.data().deleted !== true).map((d) => normalizeTask(d.id, d.data()));
 }
 
 export interface TaskInput {
@@ -480,13 +489,23 @@ async function seriesOccurrences(seriesId: string) {
  * Delete a recurring occurrence. scope 'one' deletes just this date; 'future'
  * deletes this date and all later occurrences in the series.
  */
-export async function deleteTaskScoped(
+export async function trashTaskScoped(
   task: VolunteerTask,
-  scope: SeriesScope
-): Promise<void> {
+  scope: SeriesScope,
+  deletedBy?: string
+): Promise<string> {
+  const batchId = `${Date.now()}_${task.id}`;
+  const deletedFields = {
+    deleted: true,
+    deletedAt: serverTimestamp(),
+    deletedBy: deletedBy || null,
+    deletedBatchId: batchId,
+    deletedScope: scope,
+    updatedAt: serverTimestamp(),
+  };
   if (!task.seriesId || scope === 'one') {
-    await deleteDoc(doc(db, 'tasks', task.id));
-    return;
+    await updateDoc(doc(db, 'tasks', task.id), deletedFields);
+    return batchId;
   }
   const docs = await seriesOccurrences(task.seriesId);
   const cutoff = task.startDateTime.getTime();
@@ -494,9 +513,43 @@ export async function deleteTaskScoped(
     const start = d.data().startDateTime?.toDate?.()?.getTime?.() ?? 0;
     return start >= cutoff;
   });
+  await setDoc(doc(db, 'taskSeries', task.seriesId), {
+    stoppedAt: serverTimestamp(),
+    deletedBatchId: batchId,
+    cutoff: Timestamp.fromDate(task.startDateTime),
+  });
   for (let i = 0; i < targets.length; i += 450) {
     const batch = writeBatch(db);
-    targets.slice(i, i + 450).forEach((d) => batch.delete(d.ref));
+    targets.slice(i, i + 450).forEach((d) => batch.update(d.ref, deletedFields));
+    await batch.commit();
+  }
+  return batchId;
+}
+
+export async function restoreDeletedTaskBatch(batchId: string): Promise<void> {
+  const snap = await getDocs(query(collection(db, 'tasks'), where('deletedBatchId', '==', batchId)));
+  const seriesIds = new Set<string>();
+  snap.docs.forEach((item) => { if (item.data().seriesId) seriesIds.add(item.data().seriesId); });
+  for (let i = 0; i < snap.docs.length; i += 450) {
+    const batch = writeBatch(db);
+    snap.docs.slice(i, i + 450).forEach((item) => batch.update(item.ref, {
+      deleted: false, deletedAt: null, deletedBy: null, deletedBatchId: null, deletedScope: null,
+      updatedAt: serverTimestamp(),
+    }));
+    await batch.commit();
+  }
+  for (const seriesId of Array.from(seriesIds)) {
+    const marker = doc(db, 'taskSeries', seriesId);
+    const markerSnap = await getDoc(marker);
+    if (markerSnap.data()?.deletedBatchId === batchId) await deleteDoc(marker);
+  }
+}
+
+export async function permanentlyDeleteTaskBatch(batchId: string): Promise<void> {
+  const snap = await getDocs(query(collection(db, 'tasks'), where('deletedBatchId', '==', batchId)));
+  for (let i = 0; i < snap.docs.length; i += 450) {
+    const batch = writeBatch(db);
+    snap.docs.slice(i, i + 450).forEach((item) => batch.delete(item.ref));
     await batch.commit();
   }
 }

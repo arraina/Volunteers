@@ -108,6 +108,11 @@ export interface VolunteerTask {
   /** Whether volunteers may sign themselves up (vs admin-assign only). */
   openForSignup: boolean;
   status: TaskStatus;
+  deleted?: boolean;
+  deletedAt?: Date;
+  deletedBy?: string;
+  deletedBatchId?: string;
+  deletedScope?: 'one' | 'future';
   recurrence: RecurrenceFrequency;
   /** For recurring series: id shared by all occurrences (the first occurrence's id). */
   seriesId?: string;
@@ -296,6 +301,11 @@ export function normalizeTask(id: string, data: Record<string, any>): VolunteerT
     assignedVolunteers: Array.isArray(data.assignedVolunteers) ? data.assignedVolunteers : [],
     openForSignup: data.openForSignup !== false,
     status: data.status === 'cancelled' ? 'cancelled' : 'open',
+    deleted: data.deleted === true,
+    deletedAt: data.deletedAt ? firestoreTimestampToDate(data.deletedAt) : undefined,
+    deletedBy: data.deletedBy || undefined,
+    deletedBatchId: data.deletedBatchId || undefined,
+    deletedScope: data.deletedScope === 'future' ? 'future' : data.deletedScope === 'one' ? 'one' : undefined,
     recurrence: (data.recurrence as RecurrenceFrequency) || 'none',
     seriesId: data.seriesId || undefined,
     occurrenceIndex: typeof data.occurrenceIndex === 'number' ? data.occurrenceIndex : undefined,

@@ -668,6 +668,46 @@
   margin: 0.25rem 0 0;
 }
 
+.undo-banner {
+  align-items: center;
+  background: #ecfdf3;
+  border: 1px solid #86d39a;
+  border-radius: 10px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding: 0.7rem 0.9rem;
+}
+
+.undo-banner > div,
+.trash-card .task-actions {
+  display: flex;
+  gap: 0.65rem;
+}
+
+.trash-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.trash-card {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0.9rem;
+}
+
+.trash-card p {
+  margin: 0.25rem 0 0;
+}
+
+.compact-btn {
+  width: auto;
+}
+
 @media (max-width: 860px) {
   .two-col > .panel:first-child {
     position: static;
@@ -717,5 +757,12 @@
 
   .summary-strip > div:nth-child(-n + 2) {
     border-bottom: 1px solid var(--line);
+  }
+
+  .undo-banner,
+  .trash-card {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.75rem;
   }
 }

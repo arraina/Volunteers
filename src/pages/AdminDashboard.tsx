@@ -29,7 +29,7 @@ import {
   createInvitedVolunteerProfile,
   createTask,
   subscribeEvents,
-  deleteTaskScoped,
+  permanentlyDeleteTaskBatch,
   deleteVolunteer,
   getHourLogs,
   getEventFeedbackRecords,
@@ -40,8 +40,11 @@ import {
   recordInvitationSent,
   SeriesScope,
   subscribeTasks,
+  subscribeDeletedTasks,
   subscribeVolunteers,
   updateTaskStatusScoped,
+  trashTaskScoped,
+  restoreDeletedTaskBatch,
   updateVolunteer,
   DEFAULT_HORIZON_WEEKS,
 } from '../helpers/store';
@@ -50,7 +53,7 @@ import AICreateTab from './AICreate';
 import EventWorkspace from './EventWorkspace';
 import './AdminDashboard.css';
 
-type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports';
+type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'trash';
 
 const STATUS_OPTIONS: TaskStatus[] = ['open', 'filled', 'completed', 'cancelled'];
 
@@ -125,16 +128,19 @@ const AdminDashboard: React.FC = () => {
   const [tasks, setTasks] = useState<VolunteerTask[]>([]);
   const [volunteers, setVolunteers] = useState<VolunteerProfile[]>([]);
   const [events, setEvents] = useState<TempleEvent[]>([]);
+  const [deletedTasks, setDeletedTasks] = useState<VolunteerTask[]>([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const unsubTasks = subscribeTasks(setTasks);
     const unsubVols = subscribeVolunteers(setVolunteers);
     const unsubEvents = subscribeEvents(setEvents);
+    const unsubTrash = subscribeDeletedTasks(setDeletedTasks);
     return () => {
       unsubTasks();
       unsubVols();
       unsubEvents();
+      unsubTrash();
     };
   }, []);
 
@@ -186,6 +192,9 @@ const AdminDashboard: React.FC = () => {
         <button className={tab === 'reports' ? 'active' : ''} onClick={() => setTab('reports')}>
           Analytics
         </button>
+        <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')}>
+          Trash ({deletedTasks.length})
+        </button>
       </nav>
 
       <div className="dashboard-content">
@@ -215,6 +224,7 @@ const AdminDashboard: React.FC = () => {
         )}
         {tab === 'history' && <HistoryTab volunteers={volunteers} setError={setError} />}
         {tab === 'reports' && <ReportsTab volunteers={volunteers} tasks={tasks} events={events} />}
+        {tab === 'trash' && <TrashTab tasks={deletedTasks} setError={setError} />}
       </div>
     </div>
   );
@@ -237,6 +247,7 @@ const TasksTab: React.FC<{
   const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
   const [eventFilter, setEventFilter] = useState('all');
   const [taskSort, setTaskSort] = useState<'soonest' | 'latest' | 'title'>('soonest');
+  const [undoBatchId, setUndoBatchId] = useState('');
 
   const volunteerById = useMemo(() => {
     const map = new Map<string, VolunteerProfile>();
@@ -350,6 +361,11 @@ const TasksTab: React.FC<{
       setError(err instanceof Error ? err.message : 'Failed to assign volunteer.');
       throw err;
     }
+  };
+
+  const handleTrash = async (task: VolunteerTask, scope: SeriesScope) => {
+    const batchId = await trashTaskScoped(task, scope, uid);
+    setUndoBatchId(batchId);
   };
 
   return (
@@ -467,6 +483,22 @@ const TasksTab: React.FC<{
       </section>
 
       <section className="panel results-panel">
+        {undoBatchId && (
+          <div className="undo-banner" role="status">
+            <span>Task moved to Trash. It can be restored for 30 days.</span>
+            <div>
+              <button className="link-btn" onClick={async () => {
+                try {
+                  await restoreDeletedTaskBatch(undoBatchId);
+                  setUndoBatchId('');
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Failed to restore task.');
+                }
+              }}>Undo</button>
+              <button className="link-btn" onClick={() => setUndoBatchId('')}>Dismiss</button>
+            </div>
+          </div>
+        )}
         <div className="summary-strip" aria-label="Task summary">
           <div><strong>{taskStats.total}</strong><span>Upcoming</span></div>
           <div><strong>{taskStats.open}</strong><span>Open</span></div>
@@ -540,6 +572,7 @@ const TasksTab: React.FC<{
                   volunteerById={volunteerById}
                   onAssign={handleAssign}
                   onRemove={removeVolunteerFromTask}
+                  onTrash={handleTrash}
                   setError={setError}
                 />
               ))}
@@ -558,8 +591,9 @@ const SeriesCard: React.FC<{
   volunteerById: Map<string, VolunteerProfile>;
   onAssign: (task: VolunteerTask, volunteerId: string) => Promise<void>;
   onRemove: (task: VolunteerTask, volunteerId: string) => void;
+  onTrash: (task: VolunteerTask, scope: SeriesScope) => Promise<void>;
   setError: (s: string) => void;
-}> = ({ group, volunteers, volunteerById, onAssign, onRemove, setError }) => {
+}> = ({ group, volunteers, volunteerById, onAssign, onRemove, onTrash, setError }) => {
   const isSeries = group.recurrence !== 'none' && !!group.seriesId;
   const [expanded, setExpanded] = useState(!isSeries);
   const upcoming = group.occurrences.filter((o) => o.startDateTime >= new Date());
@@ -606,6 +640,7 @@ const SeriesCard: React.FC<{
               volunteerById={volunteerById}
               onAssign={onAssign}
               onRemove={onRemove}
+              onTrash={onTrash}
               askScope={askScope}
               setError={setError}
             />
@@ -622,9 +657,10 @@ const OccurrenceRow: React.FC<{
   volunteerById: Map<string, VolunteerProfile>;
   onAssign: (task: VolunteerTask, volunteerId: string) => Promise<void>;
   onRemove: (task: VolunteerTask, volunteerId: string) => void;
+  onTrash: (task: VolunteerTask, scope: SeriesScope) => Promise<void>;
   askScope: (verb: string) => SeriesScope | null;
   setError: (s: string) => void;
-}> = ({ task, volunteers, volunteerById, onAssign, onRemove, askScope, setError }) => {
+}> = ({ task, volunteers, volunteerById, onAssign, onRemove, onTrash, askScope, setError }) => {
   const [assigning, setAssigning] = useState(false);
   const [assignmentMessage, setAssignmentMessage] = useState('');
   const status = effectiveTaskStatus(task);
@@ -705,18 +741,85 @@ const OccurrenceRow: React.FC<{
           onClick={async () => {
             const scope = askScope('Delete');
             if (!scope) return;
-            if (!window.confirm('Confirm delete?')) return;
+            if (!window.confirm('Move this task to Trash? It can be restored for 30 days.')) return;
             try {
-              await deleteTaskScoped(task, scope);
+              await onTrash(task, scope);
             } catch (err) {
               setError(err instanceof Error ? err.message : 'Failed to delete.');
             }
           }}
         >
-          Delete
+          Move to Trash
         </button>
       </div>
     </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Trash tab
+// ---------------------------------------------------------------------------
+
+const TrashTab: React.FC<{
+  tasks: VolunteerTask[];
+  setError: (s: string) => void;
+}> = ({ tasks, setError }) => {
+  const [busyBatch, setBusyBatch] = useState('');
+  const batches = useMemo(() => {
+    const grouped = new Map<string, VolunteerTask[]>();
+    tasks.forEach((task) => {
+      const key = task.deletedBatchId || task.id;
+      grouped.set(key, [...(grouped.get(key) || []), task]);
+    });
+    return Array.from(grouped.entries());
+  }, [tasks]);
+
+  const run = async (batchId: string, action: 'restore' | 'delete') => {
+    if (action === 'delete' && !window.confirm('Delete permanently? This cannot be undone.')) return;
+    setBusyBatch(batchId);
+    setError('');
+    try {
+      if (action === 'restore') await restoreDeletedTaskBatch(batchId);
+      else await permanentlyDeleteTaskBatch(batchId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to ${action} task.`);
+    } finally {
+      setBusyBatch('');
+    }
+  };
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>Task Trash</h2>
+          <p className="muted small">Deleted tasks can be restored for 30 days, then they are automatically removed.</p>
+        </div>
+      </div>
+      {batches.length === 0 && (
+        <div className="empty-state"><strong>Trash is empty</strong><span>Tasks moved here will remain recoverable for 30 days.</span></div>
+      )}
+      <div className="trash-list">
+        {batches.map(([batchId, batch]) => {
+          const task = batch[0];
+          const deletedLabel = task.deletedAt ? task.deletedAt.toLocaleString() : 'Recently';
+          return (
+            <div className="trash-card" key={batchId}>
+              <div>
+                <strong>{task.title}</strong>
+                <p className="muted small">
+                  {batch.length > 1 ? `${batch.length} future occurrences` : formatDate(task.startDateTime)} · Deleted {deletedLabel}
+                </p>
+              </div>
+              <div className="task-actions">
+                <button disabled={busyBatch === batchId} className="primary-btn compact-btn" onClick={() => run(batchId, 'restore')}>Restore</button>
+                <button disabled={busyBatch === batchId} className="danger-btn" onClick={() => run(batchId, 'delete')}>Delete permanently</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 };
 
