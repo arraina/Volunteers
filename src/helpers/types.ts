@@ -6,7 +6,7 @@ import { doc, getDoc } from 'firebase/firestore';
 // Shared enums / small types
 // ---------------------------------------------------------------------------
 
-export type TaskStatus = 'open' | 'filled' | 'in_progress' | 'completed' | 'cancelled';
+export type TaskStatus = 'open' | 'filled' | 'completed' | 'cancelled';
 
 export type NotificationChannel = 'whatsapp' | 'email' | 'push';
 
@@ -263,7 +263,7 @@ export function normalizeEvent(id: string, data: Record<string, any>): TempleEve
 }
 
 export function normalizeTask(id: string, data: Record<string, any>): VolunteerTask {
-  return {
+  const task: VolunteerTask = {
     id,
     title: data.title || '',
     description: data.description || '',
@@ -276,7 +276,7 @@ export function normalizeTask(id: string, data: Record<string, any>): VolunteerT
     volunteersNeeded: typeof data.volunteersNeeded === 'number' ? data.volunteersNeeded : 1,
     assignedVolunteers: Array.isArray(data.assignedVolunteers) ? data.assignedVolunteers : [],
     openForSignup: data.openForSignup !== false,
-    status: (data.status as TaskStatus) || 'open',
+    status: data.status === 'cancelled' ? 'cancelled' : 'open',
     recurrence: (data.recurrence as RecurrenceFrequency) || 'none',
     seriesId: data.seriesId || undefined,
     occurrenceIndex: typeof data.occurrenceIndex === 'number' ? data.occurrenceIndex : undefined,
@@ -285,6 +285,8 @@ export function normalizeTask(id: string, data: Record<string, any>): VolunteerT
     createdAt: firestoreTimestampToDate(data.createdAt),
     updatedAt: firestoreTimestampToDate(data.updatedAt),
   };
+  task.status = effectiveTaskStatus(task);
+  return task;
 }
 
 // ---------------------------------------------------------------------------
@@ -326,4 +328,12 @@ export function isTaskFull(task: VolunteerTask): boolean {
 /** Remaining open slots on a task (never negative). */
 export function openSlots(task: VolunteerTask): number {
   return Math.max(0, task.volunteersNeeded - task.assignedVolunteers.length);
+}
+
+/** Derive status from cancellation, timing, and capacity. */
+export function effectiveTaskStatus(task: VolunteerTask, now = new Date()): TaskStatus {
+  if (task.status === 'cancelled') return 'cancelled';
+  const completionTime = task.endDateTime || task.startDateTime;
+  if (completionTime.getTime() <= now.getTime()) return 'completed';
+  return isTaskFull(task) ? 'filled' : 'open';
 }

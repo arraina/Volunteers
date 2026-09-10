@@ -1,7 +1,21 @@
 import React, { useState } from 'react';
-import { TempleEvent } from '../helpers/types';
-import { isAiConfigured, parseEventRequest, ParsedTask } from '../helpers/ai';
-import { createEvent, createTask } from '../helpers/store';
+import { TempleEvent, VolunteerProfile, VolunteerTask } from '../helpers/types';
+import {
+  isAiConfigured,
+  parseEventRequest,
+  parseTaskManagementRequest,
+  ParsedTask,
+  TaskManagementAction,
+  TaskManagementPlan,
+} from '../helpers/ai';
+import {
+  assignVolunteerToTask,
+  createEvent,
+  createTask,
+  removeVolunteerFromTask,
+  updateTaskManagementFields,
+  updateTaskStatus,
+} from '../helpers/store';
 
 interface EditableTask extends ParsedTask {
   startDateTime: string; // datetime-local value
@@ -12,12 +26,14 @@ interface EditableTask extends ParsedTask {
 interface Props {
   uid?: string;
   events: TempleEvent[];
+  tasks: VolunteerTask[];
+  volunteers: VolunteerProfile[];
   setError: (s: string) => void;
 }
 
-type Mode = 'new' | 'existing';
+type Mode = 'new' | 'existing' | 'manage';
 
-const AICreateTab: React.FC<Props> = ({ uid, events, setError }) => {
+const AICreateTab: React.FC<Props> = ({ uid, events, tasks: existingTasks, volunteers, setError }) => {
   const [mode, setMode] = useState<Mode>('new');
   const [existingEventId, setExistingEventId] = useState('');
   const [text, setText] = useState('');
@@ -26,6 +42,7 @@ const AICreateTab: React.FC<Props> = ({ uid, events, setError }) => {
   const [eventName, setEventName] = useState('');
   const [eventDate, setEventDate] = useState(''); // date value
   const [tasks, setTasks] = useState<EditableTask[] | null>(null);
+  const [managementPlan, setManagementPlan] = useState<TaskManagementPlan | null>(null);
   const [done, setDone] = useState('');
 
   const example =
@@ -37,6 +54,12 @@ const AICreateTab: React.FC<Props> = ({ uid, events, setError }) => {
     setDone('');
     setParsing(true);
     try {
+      if (mode === 'manage') {
+        const plan = await parseTaskManagementRequest(text, existingTasks, volunteers);
+        setManagementPlan(plan);
+        setTasks(null);
+        return;
+      }
       if (mode === 'existing' && !existingEventId) {
         throw new Error('Pick an event to add tasks to.');
       }
@@ -57,6 +80,65 @@ const AICreateTab: React.FC<Props> = ({ uid, events, setError }) => {
       setError(err instanceof Error ? err.message : 'Could not understand that request.');
     } finally {
       setParsing(false);
+    }
+  };
+
+  const actionLabel = (action: TaskManagementAction) => {
+    const task = existingTasks.find((t) => t.id === action.taskId);
+    const taskName = task ? `${task.title} (${task.startDateTime.toLocaleString()})` : action.taskId;
+    if (action.type === 'update_task') {
+      return `Update ${taskName}: ${Object.entries(action.changes).map(([key, value]) => `${key} = ${value ?? 'none'}`).join(', ')}`;
+    }
+    if (action.type === 'set_cancelled') return `${action.cancelled ? 'Cancel' : 'Reopen'} ${taskName}`;
+    const volunteer = volunteers.find((v) => v.uid === action.volunteerId);
+    return `${action.type === 'assign_volunteer' ? 'Assign' : 'Remove'} ${volunteer?.name || action.volunteerId} ${action.type === 'assign_volunteer' ? 'to' : 'from'} ${taskName}`;
+  };
+
+  const handleApplyManagement = async () => {
+    if (!managementPlan?.actions.length) return;
+    setError('');
+    setCreating(true);
+    try {
+      for (const action of managementPlan.actions) {
+        const task = existingTasks.find((t) => t.id === action.taskId);
+        if (!task) throw new Error('A selected task no longer exists. Please generate the plan again.');
+        if (action.type === 'assign_volunteer' || action.type === 'remove_volunteer') {
+          const volunteer = volunteers.find((v) => v.uid === action.volunteerId);
+          if (!volunteer) throw new Error('A selected volunteer no longer exists.');
+          if (action.type === 'assign_volunteer') await assignVolunteerToTask(task, volunteer);
+          else await removeVolunteerFromTask(task, volunteer.uid);
+        } else if (action.type === 'set_cancelled') {
+          await updateTaskStatus(task.id, action.cancelled ? 'cancelled' : 'open');
+        } else {
+          const changes = action.changes;
+          const newStart = changes.startDateTime ? new Date(changes.startDateTime) : undefined;
+          let newEnd = changes.endDateTime === null
+            ? null
+            : changes.endDateTime ? new Date(changes.endDateTime) : undefined;
+          if (newStart && changes.endDateTime === undefined && task.endDateTime) {
+            newEnd = new Date(newStart.getTime() + task.endDateTime.getTime() - task.startDateTime.getTime());
+          }
+          await updateTaskManagementFields(task.id, {
+            title: changes.title,
+            description: changes.description,
+            startDateTime: newStart,
+            endDateTime: newEnd,
+            location: changes.location,
+            volunteersNeeded: changes.volunteersNeeded === undefined
+              ? undefined
+              : Math.max(changes.volunteersNeeded, task.assignedVolunteers.length, 1),
+            openForSignup: changes.openForSignup,
+            reminderHoursBefore: changes.reminderHoursBefore,
+          });
+        }
+      }
+      setDone(`Applied ${managementPlan.actions.length} approved change(s).`);
+      setManagementPlan(null);
+      setText('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not apply the proposed changes.');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -146,7 +228,8 @@ const AICreateTab: React.FC<Props> = ({ uid, events, setError }) => {
 
   return (
     <section className="panel">
-      <h2>AI Create — describe an event and its tasks</h2>
+      <h2>AI Task Assistant</h2>
+      <p className="muted">Create events and tasks, or safely update dates, details, and volunteer assignments.</p>
       {done && <div className="success-message">{done}</div>}
 
       <form onSubmit={handleParse} className="stacked-form">
@@ -166,6 +249,14 @@ const AICreateTab: React.FC<Props> = ({ uid, events, setError }) => {
           >
             Add to existing event
           </button>
+          <button
+            type="button"
+            className={`chip ${mode === 'manage' ? 'chip-on' : ''}`}
+            onClick={() => setMode('manage')}
+            disabled={existingTasks.length === 0}
+          >
+            Manage tasks &amp; assignments
+          </button>
         </div>
         {mode === 'existing' && (
           <select
@@ -182,7 +273,9 @@ const AICreateTab: React.FC<Props> = ({ uid, events, setError }) => {
         )}
         <textarea
           placeholder={
-            mode === 'existing'
+            mode === 'manage'
+              ? 'e.g. move kitchen prep on September 14 to 3 PM and assign Priya; remove John from parking'
+              : mode === 'existing'
               ? 'e.g. add tasks: flower garlands 2 people, sound check 1 person'
               : example
           }
@@ -191,12 +284,42 @@ const AICreateTab: React.FC<Props> = ({ uid, events, setError }) => {
           rows={3}
         />
         <button type="submit" className="primary-btn" disabled={parsing || !text.trim()}>
-          {parsing ? 'Thinking…' : 'Generate tasks'}
+          {parsing ? 'Thinking…' : mode === 'manage' ? 'Review proposed changes' : 'Generate tasks'}
         </button>
-        <small className="field-hint">Example: {example}</small>
+        <small className="field-hint">
+          {mode === 'manage'
+            ? 'Include the task name, date, and volunteer name when possible. Nothing changes until you approve the preview.'
+            : `Example: ${example}`}
+        </small>
       </form>
 
-      {tasks && (
+      {mode === 'manage' && managementPlan && (
+        <div className="ai-preview">
+          <h3>Review before applying</h3>
+          <p>{managementPlan.summary}</p>
+          {managementPlan.actions.length === 0 ? (
+            <div className="error-message">No safe changes were proposed. Add the exact task, date, or volunteer name and try again.</div>
+          ) : (
+            <ol className="occurrence-list">
+              {managementPlan.actions.map((action, index) => (
+                <li key={`${action.type}-${action.taskId}-${index}`} className="occurrence-row">
+                  {actionLabel(action)}
+                </li>
+              ))}
+            </ol>
+          )}
+          <div className="row" style={{ marginTop: '0.75rem' }}>
+            <button type="button" className="primary-btn" disabled={creating || managementPlan.actions.length === 0} onClick={handleApplyManagement}>
+              {creating ? 'Applying…' : `Apply ${managementPlan.actions.length} change(s)`}
+            </button>
+            <button type="button" className="secondary-btn" onClick={() => setManagementPlan(null)}>
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode !== 'manage' && tasks && (
         <div className="ai-preview">
           <h3>Review before creating</h3>
           {mode === 'existing' ? (

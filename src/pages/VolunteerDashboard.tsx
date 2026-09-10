@@ -8,6 +8,7 @@ import {
   VolunteerProfile,
   VolunteerTask,
   WEEKDAYS,
+  effectiveTaskStatus,
   formatDate,
   isTaskFull,
   openSlots,
@@ -72,8 +73,8 @@ const VolunteerDashboard: React.FC = () => {
             (t) =>
               t.openForSignup &&
               !t.assignedVolunteers.includes(profile.uid) &&
-              t.status !== 'cancelled' &&
-              t.status !== 'completed' &&
+              effectiveTaskStatus(t) !== 'cancelled' &&
+              effectiveTaskStatus(t) !== 'completed' &&
               t.startDateTime > new Date()
           )
         : [],
@@ -228,6 +229,7 @@ const VolunteerDashboard: React.FC = () => {
             <div className="task-list">
               {visibleMyTasks.map((task) => {
                 const checkedIn = Boolean(activeCheckins[task.id]);
+                const status = effectiveTaskStatus(task);
                 const isToday =
                   Math.abs(task.startDateTime.getTime() - Date.now()) < 24 * 3600 * 1000;
                 return (
@@ -241,7 +243,7 @@ const VolunteerDashboard: React.FC = () => {
                           {task.location ? ` · ${task.location}` : ''}
                         </p>
                       </div>
-                      <span className={`status-badge status-${task.status}`}>{task.status}</span>
+                      <span className={`status-badge status-${status}`}>{status}</span>
                     </div>
                     {task.description && <p>{task.description}</p>}
                     <div className="task-actions">
@@ -255,7 +257,7 @@ const VolunteerDashboard: React.FC = () => {
                           Check out
                         </button>
                       )}
-                      {task.openForSignup && task.status !== 'completed' && (
+                      {task.openForSignup && status !== 'completed' && status !== 'cancelled' && (
                         <button className="link-btn danger" onClick={() => withdraw(task)}>
                           Withdraw
                         </button>

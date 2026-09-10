@@ -23,6 +23,30 @@ export interface ParsedEventPlan {
   tasks: ParsedTask[];
 }
 
+export type TaskManagementAction =
+  | {
+      type: 'update_task';
+      taskId: string;
+      changes: {
+        title?: string;
+        description?: string;
+        startDateTime?: string;
+        endDateTime?: string | null;
+        location?: string;
+        volunteersNeeded?: number;
+        openForSignup?: boolean;
+        reminderHoursBefore?: number[];
+      };
+    }
+  | { type: 'assign_volunteer'; taskId: string; volunteerId: string }
+  | { type: 'remove_volunteer'; taskId: string; volunteerId: string }
+  | { type: 'set_cancelled'; taskId: string; cancelled: boolean };
+
+export interface TaskManagementPlan {
+  summary: string;
+  actions: TaskManagementAction[];
+}
+
 const PROXY_ENDPOINT = process.env.REACT_APP_AI_ENDPOINT || '';
 const GEMINI_KEY = process.env.REACT_APP_GEMINI_API_KEY || '';
 // `gemini-flash-latest` always resolves to the current fast Flash model, so the
@@ -77,11 +101,11 @@ function validatePlan(raw: any): ParsedEventPlan {
   };
 }
 
-async function callProxy(prompt: string): Promise<string> {
+async function callProxy(prompt: string, system = SYSTEM_INSTRUCTION): Promise<string> {
   const res = await fetch(PROXY_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, system: SYSTEM_INSTRUCTION }),
+    body: JSON.stringify({ prompt, system }),
   });
   if (!res.ok) throw new Error(`AI proxy error (HTTP ${res.status}).`);
   const data = await res.json();
@@ -95,13 +119,13 @@ class RetryableAiError extends Error {}
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function callGeminiDirect(prompt: string, model: string): Promise<string> {
+async function callGeminiDirect(prompt: string, model: string, system = SYSTEM_INSTRUCTION): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+      systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
     }),
@@ -120,8 +144,8 @@ async function callGeminiDirect(prompt: string, model: string): Promise<string> 
 // Try the primary model with a couple of retries, then fall back to a lighter
 // model, both of which are on the free tier. Handles Gemini's "high demand"
 // (503) and rate-limit (429) responses gracefully.
-async function generateWithResilience(prompt: string): Promise<string> {
-  if (PROXY_ENDPOINT) return callProxy(prompt);
+async function generateWithResilience(prompt: string, system = SYSTEM_INSTRUCTION): Promise<string> {
+  if (PROXY_ENDPOINT) return callProxy(prompt, system);
 
   const models = [GEMINI_MODEL, 'gemini-flash-lite-latest'].filter(
     (m, i, arr) => arr.indexOf(m) === i
@@ -131,7 +155,7 @@ async function generateWithResilience(prompt: string): Promise<string> {
   for (const model of models) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        return await callGeminiDirect(prompt, model);
+        return await callGeminiDirect(prompt, model, system);
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
         if (err instanceof RetryableAiError && attempt < 2) {
@@ -157,4 +181,43 @@ export async function parseEventRequest(text: string): Promise<ParsedEventPlan> 
   }
   const raw = await generateWithResilience(text);
   return validatePlan(extractJson(raw));
+}
+
+/** Convert a management request into validated actions against known record IDs. */
+export async function parseTaskManagementRequest(
+  text: string,
+  tasks: Array<{ id: string; title: string; startDateTime: Date; eventName?: string }>,
+  volunteers: Array<{ uid: string; name: string }>
+): Promise<TaskManagementPlan> {
+  if (!isAiConfigured) throw new Error('AI task management is not configured.');
+  const taskCatalog = tasks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    date: t.startDateTime.toISOString(),
+    event: t.eventName || '',
+  }));
+  const volunteerCatalog = volunteers.map((v) => ({ id: v.uid, name: v.name }));
+  const system = `You translate an administrator request into safe task-management actions.
+Return ONLY valid minified JSON matching {"summary":string,"actions":Action[]}.
+Action is one of:
+{"type":"update_task","taskId":string,"changes":{"title"?:string,"description"?:string,"startDateTime"?:ISO-8601 string,"endDateTime"?:ISO-8601 string|null,"location"?:string,"volunteersNeeded"?:positive integer,"openForSignup"?:boolean,"reminderHoursBefore"?:positive number[]}}
+{"type":"assign_volunteer"|"remove_volunteer","taskId":string,"volunteerId":string}
+{"type":"set_cancelled","taskId":string,"cancelled":boolean}
+Use only IDs present in the supplied catalogs. Match names, event, and dates carefully. Never invent IDs. If the request is ambiguous, return an empty actions array and explain what needs clarification in summary. Do not create or delete records.`;
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const prompt = `ADMIN TIME ZONE: ${timeZone}\nREQUEST:\n${text}\n\nTASKS:\n${JSON.stringify(taskCatalog)}\n\nVOLUNTEERS:\n${JSON.stringify(volunteerCatalog)}`;
+  const raw = extractJson(await generateWithResilience(prompt, system));
+  if (!raw || !Array.isArray(raw.actions)) throw new Error('AI response was not a management plan.');
+  const taskIds = new Set(tasks.map((t) => t.id));
+  const volunteerIds = new Set(volunteers.map((v) => v.uid));
+  const actions = raw.actions.filter((action: any) => {
+    if (!action || !taskIds.has(action.taskId)) return false;
+    if (action.type === 'update_task') return action.changes && typeof action.changes === 'object';
+    if (action.type === 'set_cancelled') return typeof action.cancelled === 'boolean';
+    if (action.type === 'assign_volunteer' || action.type === 'remove_volunteer') {
+      return volunteerIds.has(action.volunteerId);
+    }
+    return false;
+  }) as TaskManagementAction[];
+  return { summary: String(raw.summary || 'Review the proposed changes.'), actions };
 }

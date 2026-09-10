@@ -42,7 +42,10 @@ async function main() {
     const task = { id: taskDoc.id, ...taskDoc.data() };
     const start = toDate(task.startDateTime);
     if (!start) continue;
-    if (task.status === 'cancelled' || task.status === 'completed') continue;
+    // Cancellation is explicit; completion is derived from the task time.
+    if (task.status === 'cancelled') continue;
+    const completionTime = toDate(task.endDateTime) || start;
+    if (now >= completionTime) continue;
 
     const reminderHours = Array.isArray(task.reminderHoursBefore)
       ? task.reminderHoursBefore
@@ -60,7 +63,8 @@ async function main() {
         const volunteer = volunteers.get(volunteerId);
         if (!volunteer) continue;
 
-        const markerId = `${task.id}_${volunteerId}_${hours}`;
+      const reminderVersion = Number(task.reminderVersion) || 0;
+      const markerId = `${task.id}_${volunteerId}_${hours}${reminderVersion ? `_v${reminderVersion}` : ''}`;
         const markerRef = db.collection('remindersSent').doc(markerId);
         const marker = await markerRef.get();
         if (marker.exists) continue; // already sent this reminder

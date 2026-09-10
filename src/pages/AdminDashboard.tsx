@@ -17,6 +17,7 @@ import {
   TempleEvent,
   VolunteerProfile,
   VolunteerTask,
+  effectiveTaskStatus,
   formatDate,
   openSlots,
 } from '../helpers/types';
@@ -47,13 +48,7 @@ import './AdminDashboard.css';
 
 type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports';
 
-const STATUS_OPTIONS: TaskStatus[] = [
-  'open',
-  'filled',
-  'in_progress',
-  'completed',
-  'cancelled',
-];
+const STATUS_OPTIONS: TaskStatus[] = ['open', 'filled', 'completed', 'cancelled'];
 
 const emptyTaskForm = {
   title: '',
@@ -200,7 +195,15 @@ const AdminDashboard: React.FC = () => {
             uid={user?.uid}
           />
         )}
-        {tab === 'ai' && <AICreateTab uid={user?.uid} events={events} setError={setError} />}
+        {tab === 'ai' && (
+          <AICreateTab
+            uid={user?.uid}
+            events={events}
+            tasks={tasks}
+            volunteers={volunteers}
+            setError={setError}
+          />
+        )}
         {tab === 'events' && <EventWorkspace uid={user?.uid} events={events} tasks={tasks} setError={setError} />}
         {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} setError={setError} />}
         {tab === 'announcements' && (
@@ -242,7 +245,7 @@ const TasksTab: React.FC<{
     const result = tasks.filter((task) => {
       const matchesSearch = !q || [task.title, task.description, task.location, task.eventName]
         .some((value) => value?.toLowerCase().includes(q));
-      const matchesStatus = statusFilter === 'all' || task.status === statusFilter;
+      const matchesStatus = statusFilter === 'all' || effectiveTaskStatus(task) === statusFilter;
       const matchesEvent = eventFilter === 'all'
         || (eventFilter === '__none__' ? !task.eventId : task.eventId === eventFilter);
       return matchesSearch && matchesStatus && matchesEvent;
@@ -256,9 +259,9 @@ const TasksTab: React.FC<{
 
   const taskStats = useMemo(() => ({
     total: tasks.length,
-    open: tasks.filter((task) => task.status === 'open').length,
+    open: tasks.filter((task) => effectiveTaskStatus(task) === 'open').length,
     needsPeople: tasks.filter((task) =>
-      task.status !== 'cancelled' && task.status !== 'completed' && openSlots(task) > 0
+      !['cancelled', 'completed'].includes(effectiveTaskStatus(task)) && openSlots(task) > 0
     ).length,
     assigned: tasks.reduce((sum, task) => sum + task.assignedVolunteers.length, 0),
   }), [tasks]);
@@ -620,6 +623,7 @@ const OccurrenceRow: React.FC<{
 }> = ({ task, volunteers, volunteerById, onAssign, onRemove, askScope, setError }) => {
   const [assigning, setAssigning] = useState(false);
   const [assignmentMessage, setAssignmentMessage] = useState('');
+  const status = effectiveTaskStatus(task);
   return (
     <div className="occurrence-row">
       <div className="occurrence-head">
@@ -627,7 +631,7 @@ const OccurrenceRow: React.FC<{
           {formatDate(task.startDateTime)}
           {task.location ? ` · ${task.location}` : ''}
         </span>
-        <span className={`status-badge status-${task.status}`}>{task.status}</span>
+        <span className={`status-badge status-${status}`}>{status}</span>
       </div>
       <p className="small muted">
         {task.assignedVolunteers.length}/{task.volunteersNeeded} filled · {openSlots(task)} open
@@ -647,7 +651,7 @@ const OccurrenceRow: React.FC<{
       <div className="task-actions">
         <select
           defaultValue=""
-          disabled={assigning}
+          disabled={assigning || status === 'completed' || status === 'cancelled'}
           onChange={async (e) => {
             const volunteerId = e.target.value;
             if (!volunteerId) return;
@@ -674,24 +678,18 @@ const OccurrenceRow: React.FC<{
             ))}
         </select>
         {assignmentMessage && <span className="success-text small">{assignmentMessage}</span>}
-        <select
-          value={task.status}
-          onChange={async (e) => {
-            const scope = askScope('Change status');
-            if (!scope) return;
-            try {
-              await updateTaskStatusScoped(task, e.target.value as TaskStatus, scope);
-            } catch (err) {
-              setError(err instanceof Error ? err.message : 'Failed to update status.');
-            }
-          }}
-        >
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        {status !== 'completed' && <button className="link-btn danger" onClick={async () => {
+          const nextStatus: TaskStatus = status === 'cancelled' ? 'open' : 'cancelled';
+          const scope = askScope(status === 'cancelled' ? 'Reopen task' : 'Cancel task');
+          if (!scope) return;
+          try {
+            await updateTaskStatusScoped(task, nextStatus, scope);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to update task.');
+          }
+        }}>
+          {status === 'cancelled' ? 'Reopen' : 'Cancel task'}
+        </button>}
         <button
           className="danger-btn"
           onClick={async () => {
@@ -1186,7 +1184,9 @@ const HistoryTab: React.FC<{
                     <span>
                       {task.title} · {formatDate(task.startDateTime)}
                     </span>
-                    <span className={`status-badge status-${task.status}`}>{task.status}</span>
+                    <span className={`status-badge status-${effectiveTaskStatus(task)}`}>
+                      {effectiveTaskStatus(task)}
+                    </span>
                   </div>
                   {task.assignedVolunteers.length > 0 ? (
                     <p className="small muted">
@@ -1224,10 +1224,10 @@ const ReportsTab: React.FC<{ volunteers: VolunteerProfile[]; tasks: VolunteerTas
 
   const totalHours = volunteers.reduce((sum, v) => sum + (v.totalHours || 0), 0);
   const upcoming = tasks.filter(
-    (t) => t.startDateTime > new Date() && t.status !== 'cancelled'
+    (t) => t.startDateTime > new Date() && effectiveTaskStatus(t) !== 'cancelled'
   ).length;
   const understaffed = tasks.filter(
-    (t) => t.status === 'open' && openSlots(t) > 0 && t.startDateTime > new Date()
+    (t) => effectiveTaskStatus(t) === 'open' && openSlots(t) > 0 && t.startDateTime > new Date()
   );
 
   return (

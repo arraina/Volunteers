@@ -32,6 +32,7 @@ import {
   TempleEvent,
   VolunteerProfile,
   VolunteerTask,
+  effectiveTaskStatus,
   normalizeEvent,
   normalizeTask,
   normalizeVolunteer,
@@ -417,6 +418,46 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus): Prom
   await updateDoc(doc(db, 'tasks', taskId), { status, updatedAt: serverTimestamp() });
 }
 
+export interface TaskManagementFields {
+  title?: string;
+  description?: string;
+  startDateTime?: Date;
+  endDateTime?: Date | null;
+  location?: string;
+  volunteersNeeded?: number;
+  openForSignup?: boolean;
+  reminderHoursBefore?: number[];
+}
+
+/** Update the allow-listed fields proposed by the AI management preview. */
+export async function updateTaskManagementFields(
+  taskId: string,
+  fields: TaskManagementFields
+): Promise<void> {
+  const patch: Record<string, any> = { updatedAt: serverTimestamp() };
+  if (typeof fields.title === 'string' && fields.title.trim()) patch.title = fields.title.trim();
+  if (typeof fields.description === 'string') patch.description = fields.description.trim();
+  if (fields.startDateTime instanceof Date && !Number.isNaN(fields.startDateTime.getTime())) {
+    patch.startDateTime = Timestamp.fromDate(fields.startDateTime);
+  }
+  if (fields.endDateTime === null) patch.endDateTime = null;
+  else if (fields.endDateTime instanceof Date && !Number.isNaN(fields.endDateTime.getTime())) {
+    patch.endDateTime = Timestamp.fromDate(fields.endDateTime);
+  }
+  if (typeof fields.location === 'string') patch.location = fields.location.trim();
+  if (typeof fields.volunteersNeeded === 'number' && Number.isFinite(fields.volunteersNeeded)) {
+    patch.volunteersNeeded = Math.max(1, Math.floor(fields.volunteersNeeded));
+  }
+  if (typeof fields.openForSignup === 'boolean') patch.openForSignup = fields.openForSignup;
+  if (Array.isArray(fields.reminderHoursBefore)) {
+    patch.reminderHoursBefore = fields.reminderHoursBefore.filter((n) => Number.isFinite(n) && n > 0);
+  }
+  if (fields.startDateTime !== undefined || fields.reminderHoursBefore !== undefined) {
+    patch.reminderVersion = increment(1);
+  }
+  await updateDoc(doc(db, 'tasks', taskId), patch);
+}
+
 export async function deleteTask(taskId: string): Promise<void> {
   await deleteDoc(doc(db, 'tasks', taskId));
 }
@@ -563,6 +604,10 @@ export async function assignVolunteerToTask(
   task: VolunteerTask,
   volunteer: VolunteerProfile
 ): Promise<void> {
+  const taskStatus = effectiveTaskStatus(task);
+  if (taskStatus === 'cancelled' || taskStatus === 'completed') {
+    throw new Error(`Volunteers cannot be assigned to a ${taskStatus} task.`);
+  }
   if (
     volunteer.whatsappOptIn !== true ||
     volunteer.participationStatus === 'inactive' ||
@@ -583,12 +628,8 @@ export async function assignVolunteerToTask(
     if (assigned.length >= (data.volunteersNeeded || 1)) {
       throw new Error('This task is already full.');
     }
-    const nextAssigned = [...assigned, volunteer.uid];
-    const nextStatus: TaskStatus =
-      nextAssigned.length >= (data.volunteersNeeded || 1) ? 'filled' : (data.status as TaskStatus);
     tx.update(taskRef, {
       assignedVolunteers: arrayUnion(volunteer.uid),
-      status: nextStatus === 'cancelled' ? 'cancelled' : nextStatus,
       updatedAt: serverTimestamp(),
     });
   });
@@ -608,11 +649,8 @@ export async function removeVolunteerFromTask(
     const assigned: string[] = Array.isArray(data.assignedVolunteers)
       ? data.assignedVolunteers
       : [];
-    const nextAssigned = assigned.filter((id) => id !== volunteerId);
-    const wasFilled = data.status === 'filled';
     tx.update(taskRef, {
       assignedVolunteers: arrayRemove(volunteerId),
-      status: wasFilled && nextAssigned.length < (data.volunteersNeeded || 1) ? 'open' : data.status,
       updatedAt: serverTimestamp(),
     });
   });
