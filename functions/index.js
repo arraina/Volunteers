@@ -6,7 +6,7 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 const db = admin.firestore();
 
-exports.deleteVolunteerAccount = onCall({ region: 'us-central1' }, async (request) => {
+exports.deleteVolunteerAccount = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
   if (!request.auth || request.auth.token.email_verified !== true) {
     throw new HttpsError('unauthenticated', 'A verified administrator account is required.');
   }
@@ -126,7 +126,7 @@ function describeActivity(collectionId, before, after) {
 }
 
 exports.auditApplicationActivity = onDocumentWrittenWithAuthContext(
-  { document: '{collectionId}/{documentId}', region: 'us-central1' },
+  { document: '{collectionId}/{documentId}', region: 'us-central1', maxInstances: 2 },
   async (event) => {
     const { collectionId, documentId } = event.params;
     if (!AUDITED_COLLECTIONS.has(collectionId)) return;
