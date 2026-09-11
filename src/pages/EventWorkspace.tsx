@@ -55,6 +55,28 @@ interface EventTemplate {
   }>;
 }
 
+type ActionStatus = 'open' | 'blocked' | 'done';
+
+interface EventActionItem {
+  id: string;
+  title: string;
+  owner: string;
+  dueDate?: Date;
+  status: ActionStatus;
+  notes: string;
+  createdAt?: Date;
+}
+
+const emptyPlanningDoc = {
+  purpose: '',
+  masterNotes: '',
+  nextAgenda: '',
+  logistics: '',
+  risks: '',
+};
+
+const emptyAction = { title: '', owner: '', dueDate: '', notes: '' };
+
 const emptyMeeting = {
   title: '',
   meetingDate: '',
@@ -75,11 +97,18 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
   const [templates, setTemplates] = useState<EventTemplate[]>([]);
+  const [actions, setActions] = useState<EventActionItem[]>([]);
   const [meeting, setMeeting] = useState(emptyMeeting);
   const [editingMeetingId, setEditingMeetingId] = useState('');
   const [meetingSearch, setMeetingSearch] = useState('');
   const [lessons, setLessons] = useState('');
   const [templateDate, setTemplateDate] = useState('');
+  const [planningDoc, setPlanningDoc] = useState(emptyPlanningDoc);
+  const [planningSaving, setPlanningSaving] = useState(false);
+  const [planningSaved, setPlanningSaved] = useState('');
+  const [action, setAction] = useState(emptyAction);
+  const [actionFilter, setActionFilter] = useState<'active' | 'all' | ActionStatus>('active');
+  const [actionSearch, setActionSearch] = useState('');
 
   useEffect(() => {
     if (!eventId && events[0]) setEventId(events[0].id);
@@ -101,7 +130,19 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
       query(collection(db, 'eventFeedback'), where('eventId', '==', eventId)),
       (snap) => setFeedback(snap.docs.filter((item) => item.data().deleted !== true).map((item) => ({ id: item.id, ...item.data() } as Feedback)))
     );
-    return () => { unsubMeetings(); unsubFeedback(); };
+    const unsubActions = onSnapshot(
+      query(collection(db, 'eventActionItems'), where('eventId', '==', eventId)),
+      (snap) => setActions(snap.docs.filter((item) => item.data().deleted !== true).map((item) => {
+        const data = item.data();
+        return {
+          id: item.id,
+          ...data,
+          dueDate: data.dueDate?.toDate?.(),
+          createdAt: data.createdAt?.toDate?.(),
+        } as EventActionItem;
+      }))
+    );
+    return () => { unsubMeetings(); unsubFeedback(); unsubActions(); };
   }, [eventId]);
 
   useEffect(() => onSnapshot(collection(db, 'eventTemplates'), (snap) => {
@@ -111,10 +152,33 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
   useEffect(() => setLessons(event?.lessonsLearned || ''), [event]);
 
   useEffect(() => {
+    setPlanningDoc({ ...emptyPlanningDoc, ...(event?.planningDoc || {}) });
+    setPlanningSaved('');
+  }, [eventId]); // Load the selected event's living document without replacing in-progress typing.
+
+  useEffect(() => {
     setMeeting(emptyMeeting);
     setEditingMeetingId('');
     setMeetingSearch('');
+    setAction(emptyAction);
+    setActionSearch('');
+    setActionFilter('active');
   }, [eventId]);
+
+  const visibleActions = useMemo(() => {
+    const term = actionSearch.trim().toLowerCase();
+    return actions.filter((item) => {
+      const matchesStatus = actionFilter === 'all'
+        || (actionFilter === 'active' ? item.status !== 'done' : item.status === actionFilter);
+      const matchesTerm = !term || [item.title, item.owner, item.notes]
+        .some((value) => value?.toLowerCase().includes(term));
+      return matchesStatus && matchesTerm;
+    }).sort((a, b) => {
+      if (a.status === 'done' && b.status !== 'done') return 1;
+      if (b.status === 'done' && a.status !== 'done') return -1;
+      return (a.dueDate?.getTime() || Number.MAX_SAFE_INTEGER) - (b.dueDate?.getTime() || Number.MAX_SAFE_INTEGER);
+    });
+  }, [actions, actionFilter, actionSearch]);
 
   const visibleMeetings = useMemo(() => {
     const term = meetingSearch.trim().toLowerCase();
@@ -169,7 +233,60 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
     window.alert('Lessons saved.');
   };
 
-  const moveToTrash = async (collectionName: 'events' | 'eventMeetings' | 'eventTemplates' | 'eventFeedback', id: string, label: string) => {
+  const savePlanningDocument = async () => {
+    if (!eventId) return;
+    setPlanningSaving(true);
+    setPlanningSaved('');
+    try {
+      await updateDoc(doc(db, 'events', eventId), {
+        planningDoc,
+        planningUpdatedAt: serverTimestamp(),
+        planningUpdatedBy: uid || null,
+        updatedAt: serverTimestamp(),
+      });
+      setPlanningSaved(`Saved ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not save the planning document.');
+    } finally {
+      setPlanningSaving(false);
+    }
+  };
+
+  const addActionItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!eventId || !action.title.trim()) return;
+    try {
+      await addDoc(collection(db, 'eventActionItems'), {
+        eventId,
+        title: action.title.trim(),
+        owner: action.owner.trim(),
+        notes: action.notes.trim(),
+        dueDate: action.dueDate ? Timestamp.fromDate(new Date(`${action.dueDate}T12:00:00`)) : null,
+        status: 'open',
+        createdBy: uid || null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setAction(emptyAction);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not add the action item.');
+    }
+  };
+
+  const updateActionStatus = async (item: EventActionItem, status: ActionStatus) => {
+    try {
+      await updateDoc(doc(db, 'eventActionItems', item.id), {
+        status,
+        completedAt: status === 'done' ? serverTimestamp() : null,
+        updatedAt: serverTimestamp(),
+        updatedBy: uid || null,
+      });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not update the action item.');
+    }
+  };
+
+  const moveToTrash = async (collectionName: 'events' | 'eventMeetings' | 'eventTemplates' | 'eventFeedback' | 'eventActionItems', id: string, label: string) => {
     if (!window.confirm(`Move ${label} to Trash? The Owner can restore it for 30 days.`)) return;
     try {
       await trashRecord(collectionName, id, uid);
@@ -250,6 +367,91 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
     </section>
 
     {event && <>
+      <section className="panel planning-overview">
+        <div className="panel-head">
+          <div>
+            <h2>Living event plan</h2>
+            <p className="muted small">Your shared working document. Update it throughout weekly planning calls.</p>
+          </div>
+          <span className="save-state" aria-live="polite">{planningSaved}</span>
+        </div>
+        <div className="planning-stats" aria-label="Event planning summary">
+          <div><strong>{eventTasks.length}</strong><span>event tasks</span></div>
+          <div><strong>{actions.filter((item) => item.status !== 'done').length}</strong><span>open actions</span></div>
+          <div><strong>{actions.filter((item) => item.status === 'blocked').length}</strong><span>blocked</span></div>
+          <div><strong>{meetings.length}</strong><span>meetings saved</span></div>
+        </div>
+        <div className="planning-document">
+          <label>
+            <span>Purpose and success measures</span>
+            <textarea value={planningDoc.purpose} onChange={(e) => setPlanningDoc({ ...planningDoc, purpose: e.target.value })} placeholder="Why are we holding this event? What would make it successful?" />
+          </label>
+          <label className="planning-wide">
+            <span>Master planning notes</span>
+            <textarea className="document-editor" value={planningDoc.masterNotes} onChange={(e) => setPlanningDoc({ ...planningDoc, masterNotes: e.target.value })} placeholder="Keep the evolving event plan here—program, schedule, responsibilities, dependencies, links, and anything the team needs in one place." />
+          </label>
+          <label>
+            <span>Agenda for the next planning call</span>
+            <textarea value={planningDoc.nextAgenda} onChange={(e) => setPlanningDoc({ ...planningDoc, nextAgenda: e.target.value })} placeholder="Items to discuss next week" />
+          </label>
+          <label>
+            <span>Logistics, supplies and contacts</span>
+            <textarea value={planningDoc.logistics} onChange={(e) => setPlanningDoc({ ...planningDoc, logistics: e.target.value })} placeholder="Rooms, food, equipment, vendors, contacts, permits…" />
+          </label>
+          <label className="planning-wide">
+            <span>Open questions, risks and blockers</span>
+            <textarea value={planningDoc.risks} onChange={(e) => setPlanningDoc({ ...planningDoc, risks: e.target.value })} placeholder="What still needs an answer? What could prevent success?" />
+          </label>
+        </div>
+        <div className="row planning-save-row">
+          <button className="primary-btn" type="button" onClick={savePlanningDocument} disabled={planningSaving}>{planningSaving ? 'Saving…' : 'Save planning document'}</button>
+          <span className="muted small">Saved content is immediately available to every Admin and Owner.</span>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div><h2>Action tracker</h2><p className="muted small">Keep commitments from every weekly call in one accountable list.</p></div>
+          <span className="status-pill">{actions.filter((item) => item.status !== 'done').length} active</span>
+        </div>
+        <form className="action-entry" onSubmit={addActionItem}>
+          <input aria-label="Action item" placeholder="Action item" value={action.title} onChange={(e) => setAction({ ...action, title: e.target.value })} required />
+          <input aria-label="Action owner" placeholder="Owner" value={action.owner} onChange={(e) => setAction({ ...action, owner: e.target.value })} />
+          <input aria-label="Action due date" type="date" value={action.dueDate} onChange={(e) => setAction({ ...action, dueDate: e.target.value })} />
+          <input aria-label="Action notes" placeholder="Notes or link (optional)" value={action.notes} onChange={(e) => setAction({ ...action, notes: e.target.value })} />
+          <button className="primary-btn" type="submit">Add action</button>
+        </form>
+        <div className="action-toolbar">
+          <input className="search" aria-label="Search action items" placeholder="Search actions or owners…" value={actionSearch} onChange={(e) => setActionSearch(e.target.value)} />
+          <select aria-label="Filter action items" value={actionFilter} onChange={(e) => setActionFilter(e.target.value as typeof actionFilter)}>
+            <option value="active">Active actions</option>
+            <option value="open">Open</option>
+            <option value="blocked">Blocked</option>
+            <option value="done">Completed</option>
+            <option value="all">All actions</option>
+          </select>
+        </div>
+        {visibleActions.length === 0 ? <div className="empty-state"><strong>No matching actions</strong><span>Add the next commitment from your planning call.</span></div> :
+          <div className="action-list">{visibleActions.map((item) => {
+            const overdue = item.status !== 'done' && item.dueDate && item.dueDate.getTime() < new Date().setHours(0, 0, 0, 0);
+            return <article className={`action-card ${item.status}`} key={item.id}>
+              <button className={`action-check ${item.status === 'done' ? 'checked' : ''}`} type="button" onClick={() => updateActionStatus(item, item.status === 'done' ? 'open' : 'done')} aria-label={item.status === 'done' ? 'Reopen action' : 'Complete action'}>{item.status === 'done' ? '✓' : ''}</button>
+              <div className="action-body">
+                <strong>{item.title}</strong>
+                <div className="action-meta">
+                  <span>{item.owner || 'Unassigned'}</span>
+                  {item.dueDate && <span className={overdue ? 'overdue' : ''}>{overdue ? 'Overdue · ' : 'Due · '}{item.dueDate.toLocaleDateString()}</span>}
+                  {item.notes && <span>{item.notes}</span>}
+                </div>
+              </div>
+              <select aria-label={`Status for ${item.title}`} value={item.status} onChange={(e) => updateActionStatus(item, e.target.value as ActionStatus)}>
+                <option value="open">Open</option><option value="blocked">Blocked</option><option value="done">Done</option>
+              </select>
+              <button className="link-btn danger" type="button" onClick={() => moveToTrash('eventActionItems', item.id, `action “${item.title}”`)}>Remove</button>
+            </article>;
+          })}</div>}
+      </section>
+
       <section className="panel">
         <div className="panel-head">
           <div><h2>Planning meetings ({meetings.length})</h2><p className="muted small">Save as many meetings as needed for this event.</p></div>

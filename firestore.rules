@@ -193,6 +193,11 @@ service cloud.firestore {
       allow update: if adminMayUpdateWithTrash();
       allow delete: if isOwner();
     }
+    match /eventActionItems/{id} {
+      allow read, create: if isAdmin();
+      allow update: if adminMayUpdateWithTrash();
+      allow delete: if isOwner();
+    }
     match /eventTemplates/{id} {
       allow read, create: if isAdmin();
       allow update: if adminMayUpdateWithTrash();

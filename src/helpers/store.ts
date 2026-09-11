@@ -253,7 +253,7 @@ export async function deleteVolunteerProfile(uid: string): Promise<void> {
 
 export type TrashCollection =
   | 'volunteers' | 'events' | 'eventMeetings' | 'eventTemplates'
-  | 'eventFeedback' | 'hourLogs' | 'announcements' | 'admins';
+  | 'eventFeedback' | 'eventActionItems' | 'hourLogs' | 'announcements' | 'admins';
 
 export interface TrashRecord {
   id: string;
@@ -265,7 +265,7 @@ export interface TrashRecord {
 
 const trashCollections: TrashCollection[] = [
   'volunteers', 'events', 'eventMeetings', 'eventTemplates',
-  'eventFeedback', 'hourLogs', 'announcements', 'admins',
+  'eventFeedback', 'eventActionItems', 'hourLogs', 'announcements', 'admins',
 ];
 
 function trashLabel(collectionName: TrashCollection, id: string, data: Record<string, any>) {
