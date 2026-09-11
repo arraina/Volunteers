@@ -106,8 +106,10 @@ service cloud.firestore {
           && request.resource.data.role == 'owner');
       allow update, delete: if isOwner()
         && adminId != request.auth.uid
-        && resource.data.role != 'owner'
-        && resource.data.bootstrap != true;
+        // Legacy Admin records may not contain role/bootstrap. Use safe
+        // defaults so an Owner can revoke those records without a rules error.
+        && resource.data.get('role', 'admin') != 'owner'
+        && resource.data.get('bootstrap', false) != true;
     }
 
     // adminsMeta/count tracks how many admins exist (for bootstrap check).
