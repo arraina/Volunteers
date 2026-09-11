@@ -32,7 +32,12 @@ import {
   AdminAccess,
   AuditLog,
   AppValueReport,
+  CostCategory,
+  CostEntry,
+  confirmCostEntry,
+  createCostEntry,
   subscribeEvents,
+  subscribeCostEntries,
   permanentlyDeleteTaskBatch,
   deleteVolunteerProfile,
   getHourLogs,
@@ -231,7 +236,7 @@ const AdminDashboard: React.FC = () => {
           Analytics
         </button>
         <button className={tab === 'costs' ? 'active' : ''} onClick={() => setTab('costs')}>
-          Message Costs
+          Costs
         </button>
         <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')}>
           Trash ({deletedTasks.length + deletedRecords.length})
@@ -276,7 +281,7 @@ const AdminDashboard: React.FC = () => {
         )}
         {tab === 'history' && <HistoryTab volunteers={volunteers} setError={setError} />}
         {tab === 'reports' && <ReportsTab volunteers={volunteers} tasks={tasks} events={events} />}
-        {tab === 'costs' && <CostTab />}
+        {tab === 'costs' && <CostTab events={events} uid={user?.uid} />}
         {tab === 'trash' && <TrashTab tasks={deletedTasks} records={deletedRecords} isOwner={isOwner} setError={setError} />}
         {tab === 'admins' && isOwner && <AdminManagementTab ownerUid={user?.uid || ''} volunteers={volunteers} setError={setError} />}
         {tab === 'audit' && isOwner && <AuditTab />}
@@ -1820,46 +1825,82 @@ const AuditTab: React.FC = () => {
 };
 
 // ---------------------------------------------------------------------------
-// Message cost tab
+// Operating cost tab
 // ---------------------------------------------------------------------------
 
 const NORTH_AMERICA_UTILITY_RATE_USD = 0.0034;
+const COST_CATEGORIES: { value: CostCategory; label: string }[] = [
+  { value: 'whatsapp', label: 'WhatsApp' }, { value: 'sms', label: 'SMS / verification' },
+  { value: 'firebase', label: 'Firebase / Google Cloud' }, { value: 'email', label: 'Email service' },
+  { value: 'ai_api', label: 'AI / API' }, { value: 'software', label: 'Software subscription' },
+  { value: 'food_supplies', label: 'Food / supplies' }, { value: 'rental_printing', label: 'Rental / printing' },
+  { value: 'transport_reimbursement', label: 'Transportation / reimbursement' }, { value: 'other', label: 'Other' },
+];
+const categoryLabel = (value: string) => COST_CATEGORIES.find((item) => item.value === value)?.label || value;
+const costDateTimeNow = () => {
+  const value = new Date();
+  return new Date(value.getTime() - value.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+};
+type DisplayCost = CostEntry & { automatic?: boolean };
 
-const CostTab: React.FC = () => {
+const CostTab: React.FC<{ events: TempleEvent[]; uid?: string }> = ({ events, uid }) => {
   const [messages, setMessages] = useState<SentMessage[]>([]);
+  const [entries, setEntries] = useState<CostEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState<'all' | CostCategory>('all');
+  const [period, setPeriod] = useState<'today' | '7' | '30' | 'month' | 'all'>('month');
+  const [costStatus, setCostStatus] = useState<'all' | 'estimated' | 'confirmed'>('all');
+  const [form, setForm] = useState({ category: 'other' as CostCategory, description: '', amount: '', incurredAt: costDateTimeNow(), eventId: '', vendor: '', notes: '', status: 'confirmed' as 'estimated' | 'confirmed', recurring: false });
 
   useEffect(() => {
+    const unsubscribe = subscribeCostEntries(setEntries);
     getSentMessages(10_000)
       .then(setMessages)
-      .catch((error) => setLoadError(error instanceof Error ? error.message : 'Could not load message costs.'))
+      .catch((error) => setLoadError(error instanceof Error ? error.message : 'Could not load costs.'))
       .finally(() => setLoading(false));
+    return unsubscribe;
   }, []);
 
+  const costs = useMemo<DisplayCost[]>(() => [...entries, ...messages
+    .filter((message) => message.channel === 'whatsapp' && message.status === 'sent')
+    .map((message) => ({ id: `message-${message.id}`, category: 'whatsapp' as CostCategory,
+      description: 'WhatsApp reminder', amountUsd: message.estimatedCostUsd ?? NORTH_AMERICA_UTILITY_RATE_USD,
+      incurredAt: message.sentAt, vendor: 'Meta', status: 'estimated' as const, recurring: false,
+      source: 'imported' as const, automatic: true }))]
+    .sort((a, b) => b.incurredAt.getTime() - a.incurredAt.getTime()), [entries, messages]);
+
+  const filtered = useMemo(() => {
+    const start = new Date();
+    if (period === 'today') start.setHours(0, 0, 0, 0);
+    else if (period === '7' || period === '30') start.setDate(start.getDate() - Number(period));
+    else if (period === 'month') { start.setDate(1); start.setHours(0, 0, 0, 0); }
+    const term = search.trim().toLowerCase();
+    return costs.filter((item) => (period === 'all' || item.incurredAt >= start)
+      && (category === 'all' || item.category === category)
+      && (costStatus === 'all' || item.status === costStatus)
+      && (!term || [item.description, item.vendor, item.notes, categoryLabel(item.category), events.find((event) => event.id === item.eventId)?.name]
+        .some((value) => value?.toLowerCase().includes(term))));
+  }, [costs, period, category, costStatus, search, events]);
+
   const monthly = useMemo(() => {
-    const groups = new Map<string, { month: string; attempted: number; delivered: number; failed: number; cost: number }>();
-    messages.filter((message) => message.channel === 'whatsapp').forEach((message) => {
-      const key = `${message.sentAt.getFullYear()}-${String(message.sentAt.getMonth() + 1).padStart(2, '0')}`;
-      const row = groups.get(key) || { month: key, attempted: 0, delivered: 0, failed: 0, cost: 0 };
-      row.attempted += 1;
-      if (message.status === 'sent') {
-        row.delivered += 1;
-        row.cost += message.estimatedCostUsd ?? NORTH_AMERICA_UTILITY_RATE_USD;
-      } else {
-        row.failed += 1;
-      }
-      groups.set(key, row);
+    const groups = new Map<string, { month: string; total: number; confirmed: number; estimated: number; count: number }>();
+    costs.forEach((item) => {
+      const key = `${item.incurredAt.getFullYear()}-${String(item.incurredAt.getMonth() + 1).padStart(2, '0')}`;
+      const row = groups.get(key) || { month: key, total: 0, confirmed: 0, estimated: 0, count: 0 };
+      row.total += item.amountUsd; row[item.status] += item.amountUsd; row.count += 1; groups.set(key, row);
     });
     return Array.from(groups.values()).sort((a, b) => b.month.localeCompare(a.month));
-  }, [messages]);
+  }, [costs]);
 
   const now = new Date();
   const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const current = monthly.find((row) => row.month === currentKey)
-    || { month: currentKey, attempted: 0, delivered: 0, failed: 0, cost: 0 };
+  const current = monthly.find((row) => row.month === currentKey) || { month: currentKey, total: 0, confirmed: 0, estimated: 0, count: 0 };
+  const todayTotal = costs.filter((item) => item.incurredAt.toDateString() === now.toDateString()).reduce((sum, item) => sum + item.amountUsd, 0);
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const projectedCost = current.cost * daysInMonth / Math.max(1, now.getDate());
+  const projectedCost = current.total * daysInMonth / Math.max(1, now.getDate());
   const money = (value: number) => value < 0.01 && value > 0
     ? `$${value.toFixed(4)}`
     : value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -1868,38 +1909,72 @@ const CostTab: React.FC = () => {
     return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   };
   const exportCsv = () => {
-    const lines = ['Month,Attempted,Delivered,Failed,Estimated cost USD', ...monthly.map((row) =>
-      `${row.month},${row.attempted},${row.delivered},${row.failed},${row.cost.toFixed(4)}`
-    )];
+    const quote = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const lines = ['Date/time,Category,Description,Vendor,Event,Status,Source,Amount USD', ...filtered.map((item) =>
+      [item.incurredAt.toISOString(), categoryLabel(item.category), item.description, item.vendor,
+        events.find((event) => event.id === item.eventId)?.name || '', item.status, item.source, item.amountUsd.toFixed(4)].map(quote).join(','))];
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
-    link.download = 'whatsapp-message-cost-history.csv';
+    link.download = 'operating-costs.csv';
     link.click();
     URL.revokeObjectURL(link.href);
+  };
+  const saveCost = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const amount = Number(form.amount);
+    if (!form.description.trim() || !Number.isFinite(amount) || amount < 0 || !form.incurredAt) return setLoadError('Enter a description, date/time, and valid amount.');
+    setSaving(true); setLoadError('');
+    try {
+      await createCostEntry({ category: form.category, description: form.description, amountUsd: amount,
+        incurredAt: new Date(form.incurredAt), eventId: form.eventId || undefined, vendor: form.vendor,
+        notes: form.notes, status: form.status, recurring: form.recurring, createdBy: uid });
+      setForm({ category: 'other', description: '', amount: '', incurredAt: costDateTimeNow(), eventId: '', vendor: '', notes: '', status: 'confirmed', recurring: false });
+    } catch (error) { setLoadError(error instanceof Error ? error.message : 'Could not save the cost.'); }
+    finally { setSaving(false); }
   };
 
   return <div className="analytics-dashboard">
     <div className="panel-head analytics-heading">
-      <div><h2>WhatsApp reminder costs</h2><p className="muted small">Monthly estimates based on successfully delivered reminder messages.</p></div>
-      <button className="secondary-btn" disabled={monthly.length === 0} onClick={exportCsv}>Export cost history</button>
+      <div><h2>Operating costs</h2><p className="muted small">Track communication, technology, event, supply, and reimbursement costs when incurred.</p></div>
+      <button className="secondary-btn" disabled={filtered.length === 0} onClick={exportCsv}>Export filtered CSV</button>
     </div>
     {loadError && <div className="error-message">{loadError}</div>}
     <div className="stat-grid">
-      <div className="stat-card"><span className="stat-num">{money(current.cost)}</span><span className="stat-label">Cost this month</span></div>
-      <div className="stat-card"><span className="stat-num">{current.delivered}</span><span className="stat-label">Delivered this month</span></div>
-      <div className="stat-card"><span className="stat-num">{current.failed}</span><span className="stat-label">Failed (not charged)</span></div>
+      <div className="stat-card"><span className="stat-num">{money(todayTotal)}</span><span className="stat-label">Cost today</span></div>
+      <div className="stat-card"><span className="stat-num">{money(current.total)}</span><span className="stat-label">Month to date</span></div>
+      <div className="stat-card"><span className="stat-num">{money(current.confirmed)}</span><span className="stat-label">Confirmed this month</span></div>
       <div className="stat-card"><span className="stat-num">{money(projectedCost)}</span><span className="stat-label">Projected month total</span></div>
     </div>
     <section className="panel">
-      <h2>How this estimate works</h2>
-      <p className="muted small">The current North America utility rate is estimated at ${NORTH_AMERICA_UTILITY_RATE_USD.toFixed(4)} per delivered WhatsApp reminder. Failed messages, email, and browser push are not included. Each month is calculated separately, so the current total automatically starts at zero on the first day of a new month. Future sender records preserve the rate applied at send time.</p>
+      <h2>Add cost as it is incurred</h2>
+      <form className="cost-entry-form" onSubmit={saveCost}>
+        <label><span>Category</span><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as CostCategory })}>{COST_CATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+        <label><span>Description</span><input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What was purchased or billed?" /></label>
+        <label><span>Amount (USD)</span><input required type="number" min="0" step="0.0001" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></label>
+        <label><span>Date and time</span><input required type="datetime-local" value={form.incurredAt} onChange={(e) => setForm({ ...form, incurredAt: e.target.value })} /></label>
+        <label><span>Event (optional)</span><select value={form.eventId} onChange={(e) => setForm({ ...form, eventId: e.target.value })}><option value="">Organization-wide</option>{events.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label><span>Vendor/provider</span><input value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} placeholder="Meta, Google, store…" /></label>
+        <label><span>Status</span><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as 'estimated' | 'confirmed' })}><option value="confirmed">Confirmed</option><option value="estimated">Estimated</option></select></label>
+        <label className="cost-check"><input type="checkbox" checked={form.recurring} onChange={(e) => setForm({ ...form, recurring: e.target.checked })} /> Recurring expense</label>
+        <label className="cost-notes"><span>Notes/reference</span><textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Receipt, invoice, billing period, or details" /></label>
+        <button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : 'Add cost'}</button>
+      </form>
+      <p className="muted small">Delivered WhatsApp reminders are included automatically. Other charges can be entered immediately as estimated and recorded as confirmed when known.</p>
     </section>
     <section className="panel">
-      <div className="panel-head"><h2>Monthly history</h2>{loading && <span className="muted small">Loading costs…</span>}</div>
-      {!loading && monthly.length === 0 && <div className="empty-state"><strong>No WhatsApp delivery costs yet</strong><span>Monthly totals will appear after reminders are delivered.</span></div>}
-      {monthly.length > 0 && <table className="report-table"><thead><tr><th>Month</th><th>Attempted</th><th>Delivered</th><th>Failed</th><th>Estimated cost</th></tr></thead>
-        <tbody>{monthly.map((row) => <tr key={row.month}><td>{monthLabel(row.month)}{row.month === currentKey ? ' (current)' : ''}</td><td>{row.attempted}</td><td>{row.delivered}</td><td>{row.failed}</td><td>{money(row.cost)}</td></tr>)}</tbody>
-      </table>}
+      <div className="filter-bar cost-filters">
+        <label><span>Search</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Description, vendor, event, notes" /></label>
+        <label><span>Period</span><select value={period} onChange={(e) => setPeriod(e.target.value as typeof period)}><option value="today">Today</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="month">This month</option><option value="all">All history</option></select></label>
+        <label><span>Category</span><select value={category} onChange={(e) => setCategory(e.target.value as typeof category)}><option value="all">All categories</option>{COST_CATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+        <label><span>Status</span><select value={costStatus} onChange={(e) => setCostStatus(e.target.value as typeof costStatus)}><option value="all">All statuses</option><option value="confirmed">Confirmed</option><option value="estimated">Estimated</option></select></label>
+      </div>
+      <div className="panel-head"><h2>Transactions ({filtered.length})</h2>{loading && <span className="muted small">Loading costs…</span>}</div>
+      {!loading && filtered.length === 0 && <div className="empty-state"><strong>No matching costs</strong><span>Add an expense or change the filters.</span></div>}
+      {filtered.length > 0 && <div className="table-scroll"><table className="report-table"><thead><tr><th>Date/time</th><th>Category</th><th>Description</th><th>Event/vendor</th><th>Status</th><th>Amount</th><th></th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id}><td>{item.incurredAt.toLocaleString()}</td><td>{categoryLabel(item.category)}</td><td><strong>{item.description}</strong>{item.recurring && <div className="muted small">Recurring</div>}{item.notes && <div className="muted small">{item.notes}</div>}</td><td>{events.find((event) => event.id === item.eventId)?.name || 'Organization-wide'}<div className="muted small">{item.vendor || '—'}</div></td><td><span className="admin-tag">{item.status}</span><div className="muted small">{item.automatic ? 'Automatic' : 'Manual'}</div>{!item.automatic && item.status === 'estimated' && <button className="link-btn" onClick={() => confirmCostEntry(item.id).catch((error) => setLoadError(error.message))}>Mark confirmed</button>}</td><td>{money(item.amountUsd)}</td><td>{!item.automatic && <button className="danger-link" onClick={() => uid && trashRecord('costEntries', item.id, uid).catch((error) => setLoadError(error.message))}>Move to Trash</button>}</td></tr>)}</tbody></table></div>}
+    </section>
+    <section className="panel">
+      <h2>Monthly history</h2>
+      {monthly.length > 0 && <div className="table-scroll"><table className="report-table"><thead><tr><th>Month</th><th>Transactions</th><th>Confirmed</th><th>Estimated</th><th>Total</th></tr></thead><tbody>{monthly.map((row) => <tr key={row.month}><td>{monthLabel(row.month)}{row.month === currentKey ? ' (current)' : ''}</td><td>{row.count}</td><td>{money(row.confirmed)}</td><td>{money(row.estimated)}</td><td><strong>{money(row.total)}</strong></td></tr>)}</tbody></table></div>}
     </section>
   </div>;
 };

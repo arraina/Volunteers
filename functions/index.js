@@ -72,12 +72,12 @@ exports.deleteVolunteerAccount = onCall({ region: 'us-central1', maxInstances: 2
 // principal that performed each Firestore write, including future UI paths.
 const AUDITED_COLLECTIONS = new Set([
   'admins', 'announcements', 'appValueReports', 'eventActionItems',
-  'eventFeedback', 'eventMeetings', 'events', 'eventTemplates', 'hourLogs',
+  'costEntries', 'eventFeedback', 'eventMeetings', 'events', 'eventTemplates', 'hourLogs',
   'reminders', 'sentMessages', 'tasks', 'taskSeries', 'volunteers',
 ]);
 
 const CATEGORY_BY_COLLECTION = {
-  admins: 'Administration', announcements: 'Communications', appValueReports: 'Reporting',
+  admins: 'Administration', announcements: 'Communications', appValueReports: 'Reporting', costEntries: 'Costs',
   eventActionItems: 'Event planning', eventFeedback: 'Feedback', eventMeetings: 'Event planning',
   events: 'Events', eventTemplates: 'Event planning', hourLogs: 'Service hours',
   reminders: 'Notifications', sentMessages: 'Notifications', tasks: 'Tasks',
@@ -85,7 +85,7 @@ const CATEGORY_BY_COLLECTION = {
 };
 
 const TYPE_BY_COLLECTION = {
-  admins: 'administrator', announcements: 'announcement', appValueReports: 'value report',
+  admins: 'administrator', announcements: 'announcement', appValueReports: 'value report', costEntries: 'cost entry',
   eventActionItems: 'action item', eventFeedback: 'feedback', eventMeetings: 'meeting',
   events: 'event', eventTemplates: 'event template', hourLogs: 'hour log',
   reminders: 'reminder', sentMessages: 'message', tasks: 'task',

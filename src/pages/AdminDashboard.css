@@ -573,6 +573,42 @@
   margin: 0;
 }
 
+.cost-entry-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin: 1rem 0;
+}
+
+.cost-entry-form label,
+.cost-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.cost-entry-form label > span,
+.cost-filters label > span {
+  color: #516078;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.cost-entry-form .cost-check {
+  align-items: center;
+  flex-direction: row;
+  padding-top: 1.65rem;
+}
+
+.cost-entry-form .cost-notes { grid-column: span 3; }
+.cost-entry-form .primary-btn { align-self: end; }
+.cost-filters {
+  display: grid;
+  grid-template-columns: 2fr repeat(3, 1fr);
+  margin-bottom: 1.25rem;
+}
+
 .analytics-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -632,6 +668,11 @@
   .analytics-grid {
     grid-template-columns: 1fr;
   }
+
+  .cost-entry-form,
+  .cost-filters { grid-template-columns: 1fr 1fr; }
+
+  .cost-entry-form .cost-notes { grid-column: 1 / -1; }
 }
 
 /* Dense list controls shared by admin and volunteer workspaces. */
@@ -1164,6 +1205,9 @@
 }
 
 @media (max-width: 650px) {
+  .cost-entry-form, .cost-filters { grid-template-columns: 1fr; }
+  .cost-entry-form .cost-notes { grid-column: auto; }
+  .cost-entry-form .cost-check { padding-top: 0; }
   .planning-document, .planning-stats { grid-template-columns: 1fr; }
   .planning-document .planning-wide { grid-column: auto; }
   .action-entry, .action-toolbar { grid-template-columns: 1fr; }

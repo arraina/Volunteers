@@ -253,7 +253,7 @@ export async function deleteVolunteerProfile(uid: string): Promise<void> {
 
 export type TrashCollection =
   | 'volunteers' | 'events' | 'eventMeetings' | 'eventTemplates'
-  | 'eventFeedback' | 'eventActionItems' | 'hourLogs' | 'announcements' | 'admins';
+  | 'eventFeedback' | 'eventActionItems' | 'hourLogs' | 'announcements' | 'admins' | 'costEntries';
 
 export interface TrashRecord {
   id: string;
@@ -265,7 +265,7 @@ export interface TrashRecord {
 
 const trashCollections: TrashCollection[] = [
   'volunteers', 'events', 'eventMeetings', 'eventTemplates',
-  'eventFeedback', 'eventActionItems', 'hourLogs', 'announcements', 'admins',
+  'eventFeedback', 'eventActionItems', 'hourLogs', 'announcements', 'admins', 'costEntries',
 ];
 
 function trashLabel(collectionName: TrashCollection, id: string, data: Record<string, any>) {
@@ -273,6 +273,7 @@ function trashLabel(collectionName: TrashCollection, id: string, data: Record<st
   if (collectionName === 'admins') return data.email || id;
   if (collectionName === 'eventFeedback') return `Feedback for ${data.eventName || data.eventId || 'event'}`;
   if (collectionName === 'hourLogs') return `${data.volunteerName || 'Volunteer'} hours`;
+  if (collectionName === 'costEntries') return data.description || `${data.category || 'Other'} cost`;
   return data.title || data.name || id;
 }
 
@@ -1012,6 +1013,54 @@ export async function getSentMessages(limitCount = 1000): Promise<SentMessage[]>
       sentAt: firestoreTimestampToDate(data.sentAt),
     } as SentMessage;
   });
+}
+
+export type CostCategory = 'whatsapp' | 'sms' | 'firebase' | 'email' | 'ai_api'
+  | 'software' | 'food_supplies' | 'rental_printing' | 'transport_reimbursement' | 'other';
+
+export interface CostEntry {
+  id: string;
+  category: CostCategory;
+  description: string;
+  amountUsd: number;
+  incurredAt: Date;
+  eventId?: string;
+  vendor?: string;
+  notes?: string;
+  status: 'estimated' | 'confirmed';
+  recurring: boolean;
+  source: 'manual' | 'imported';
+  createdBy?: string;
+}
+
+export function subscribeCostEntries(cb: (entries: CostEntry[]) => void) {
+  return onSnapshot(query(collection(db, 'costEntries'), orderBy('incurredAt', 'desc')), (snap) => {
+    cb(snap.docs.filter((item) => item.data().deleted !== true).map((item) => {
+      const data = item.data();
+      return {
+        id: item.id, category: data.category, description: data.description || '',
+        amountUsd: typeof data.amountUsd === 'number' ? data.amountUsd : 0,
+        incurredAt: firestoreTimestampToDate(data.incurredAt), eventId: data.eventId || undefined,
+        vendor: data.vendor || undefined, notes: data.notes || undefined,
+        status: data.status === 'confirmed' ? 'confirmed' : 'estimated',
+        recurring: data.recurring === true, source: data.source === 'imported' ? 'imported' : 'manual',
+        createdBy: data.createdBy || undefined,
+      } as CostEntry;
+    }));
+  });
+}
+
+export async function createCostEntry(input: Omit<CostEntry, 'id' | 'source'>) {
+  await addDoc(collection(db, 'costEntries'), {
+    ...input, description: input.description.trim(), vendor: (input.vendor || '').trim(),
+    notes: (input.notes || '').trim(), eventId: input.eventId || null,
+    incurredAt: Timestamp.fromDate(input.incurredAt), source: 'manual',
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  });
+}
+
+export async function confirmCostEntry(id: string) {
+  await updateDoc(doc(db, 'costEntries', id), { status: 'confirmed', updatedAt: serverTimestamp() });
 }
 
 export interface AuditLog {

@@ -233,6 +233,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Itemized operating expenses. Admins may record/edit/soft-delete costs;
+    // restoration and permanent deletion follow the Owner-only Trash workflow.
+    match /costEntries/{id} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.description is string
+        && request.resource.data.description.size() > 0
+        && request.resource.data.amountUsd is number
+        && request.resource.data.amountUsd >= 0
+        && request.resource.data.incurredAt is timestamp;
+      allow update: if adminMayUpdateWithTrash();
+      allow delete: if isOwner();
+    }
+
     // Successful-login audit records are append-only. A user can record only
     // their own verified login; only the Owner can view the audit history.
     match /auditLogs/{id} {
