@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { sendEmailVerification, signOut } from 'firebase/auth';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { auth } from '../config/firebase';
-import { isUserAdmin } from '../helpers/types';
+import { getUserAdminRole } from '../helpers/types';
+import { recordLoginAudit } from '../helpers/store';
 import { useAuth } from '../helpers/useAuth';
 import './Auth.css';
 
@@ -33,7 +34,14 @@ const VerifyEmail: React.FC = () => {
         return;
       }
       await auth.currentUser.getIdToken(true);
-      navigate((await isUserAdmin(auth.currentUser)) ? '/admin' : '/dashboard', { replace: true });
+      const verifiedUser = auth.currentUser;
+      const role = await getUserAdminRole(verifiedUser);
+      await recordLoginAudit(
+        verifiedUser.uid,
+        verifiedUser.email || '',
+        role || 'volunteer'
+      );
+      navigate(role ? '/admin' : '/dashboard', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not refresh verification status.');
     } finally {

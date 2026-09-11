@@ -1082,7 +1082,10 @@ export async function recordLoginAudit(
   await addDoc(collection(db, 'auditLogs'), {
     event: 'login',
     actorId,
-    email: email.trim().toLowerCase(),
+    // Firestore rules compare this value with the authenticated Firebase
+    // email. Preserve Firebase's exact value so mixed-case legacy accounts
+    // are audited instead of having the write rejected.
+    email: email.trim(),
     role,
     occurredAt: serverTimestamp(),
     userAgent: navigator.userAgent.slice(0, 500),
