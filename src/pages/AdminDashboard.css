@@ -1022,6 +1022,23 @@
   grid-template-columns: minmax(260px, 2fr) minmax(130px, 1fr) minmax(150px, 1fr);
 }
 
+.activity-audit-filters {
+  grid-template-columns: minmax(280px, 2fr) repeat(3, minmax(140px, 1fr));
+}
+
+.audit-table td {
+  max-width: 340px;
+  vertical-align: top;
+}
+
+@media (max-width: 900px) {
+  .activity-audit-filters { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 600px) {
+  .activity-audit-filters { grid-template-columns: 1fr; }
+}
+
 .value-filters {
   grid-template-columns: repeat(3, minmax(160px, 1fr));
 }

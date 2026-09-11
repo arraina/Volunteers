@@ -1016,11 +1016,19 @@ export async function getSentMessages(limitCount = 1000): Promise<SentMessage[]>
 
 export interface AuditLog {
   id: string;
-  event: 'login';
+  event: 'login' | 'activity';
   actorId: string;
   email: string;
-  role: 'owner' | 'admin' | 'volunteer';
+  role: 'owner' | 'admin' | 'volunteer' | 'system';
   occurredAt: Date;
+  category?: string;
+  action?: string;
+  summary?: string;
+  targetType?: string;
+  targetId?: string;
+  targetLabel?: string;
+  changedFields?: string[];
+  source?: string;
   userAgent?: string;
   platform?: string;
   timezone?: string;
@@ -1094,18 +1102,26 @@ export async function recordLoginAudit(
   });
 }
 
-/** Owner-only login audit history. */
+/** Owner-only immutable application activity history. */
 export async function getAuditLogs(limitCount = 5000): Promise<AuditLog[]> {
   const snap = await getDocs(query(collection(db, 'auditLogs'), orderBy('occurredAt', 'desc'), limit(limitCount)));
   return snap.docs.map((item) => {
     const data = item.data();
     return {
       id: item.id,
-      event: 'login',
+      event: data.event === 'activity' ? 'activity' : 'login',
       actorId: data.actorId || '',
       email: data.email || '',
-      role: data.role === 'owner' ? 'owner' : data.role === 'admin' ? 'admin' : 'volunteer',
+      role: data.role === 'owner' ? 'owner' : data.role === 'admin' ? 'admin' : data.role === 'system' ? 'system' : 'volunteer',
       occurredAt: firestoreTimestampToDate(data.occurredAt),
+      category: data.category || (data.event === 'login' ? 'Authentication' : 'Other'),
+      action: data.action || (data.event === 'login' ? 'user.login' : ''),
+      summary: data.summary || (data.event === 'login' ? 'Successful verified login' : ''),
+      targetType: data.targetType || undefined,
+      targetId: data.targetId || undefined,
+      targetLabel: data.targetLabel || undefined,
+      changedFields: Array.isArray(data.changedFields) ? data.changedFields : [],
+      source: data.source || undefined,
       userAgent: data.userAgent || undefined,
       platform: data.platform || undefined,
       timezone: data.timezone || undefined,

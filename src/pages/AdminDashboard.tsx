@@ -1728,7 +1728,7 @@ const AppValueTab: React.FC<{ volunteers: VolunteerProfile[] }> = ({ volunteers 
 };
 
 // ---------------------------------------------------------------------------
-// Owner-only login audit tab
+// Owner-only application activity audit tab
 // ---------------------------------------------------------------------------
 
 const AuditTab: React.FC = () => {
@@ -1737,6 +1737,7 @@ const AuditTab: React.FC = () => {
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<'all' | AuditLog['role']>('all');
+  const [category, setCategory] = useState('all');
   const [period, setPeriod] = useState<'7' | '30' | '90' | 'all'>('30');
 
   useEffect(() => {
@@ -1751,53 +1752,68 @@ const AuditTab: React.FC = () => {
     const cutoff = period === 'all' ? null : Date.now() - Number(period) * 86400_000;
     return logs.filter((log) =>
       (role === 'all' || log.role === role)
+      && (category === 'all' || log.category === category)
       && (!cutoff || log.occurredAt.getTime() >= cutoff)
-      && (!needle || [log.email, log.actorId, log.role, log.event, log.userAgent, log.platform, log.timezone]
+      && (!needle || [log.email, log.actorId, log.role, log.event, log.category, log.action,
+        log.summary, log.targetType, log.targetId, log.targetLabel, log.userAgent, log.platform,
+        log.timezone, ...(log.changedFields || [])]
         .some((value) => value?.toLowerCase().includes(needle)))
     );
-  }, [logs, period, role, search]);
+  }, [category, logs, period, role, search]);
 
+  const categories = useMemo(() => Array.from(new Set(logs.map((log) => log.category || 'Other'))).sort(), [logs]);
   const uniqueUsers = new Set(filtered.map((log) => log.actorId)).size;
-  const adminLogins = filtered.filter((log) => log.role === 'admin' || log.role === 'owner').length;
-  const volunteerLogins = filtered.filter((log) => log.role === 'volunteer').length;
+  const loginCount = filtered.filter((log) => log.event === 'login').length;
+  const changeCount = filtered.filter((log) => log.event === 'activity').length;
+  const destructiveCount = filtered.filter((log) => log.action?.includes('trashed') || log.action?.includes('deleted') || log.action === 'admin.access_removed').length;
 
   const exportCsv = () => {
     const clean = (value: string) => `"${value.replace(/"/g, '""')}"`;
-    const rows = ['Date and time,Role,Email,Event,User ID,Platform,Timezone,Device/browser', ...filtered.map((log) => [
-      log.occurredAt.toISOString(), log.role, log.email, log.event, log.actorId,
-      log.platform || '', log.timezone || '', log.userAgent || '',
+    const rows = ['Date and time,Category,Action,Summary,Role,Actor email,Actor ID,Target type,Target ID,Target label,Changed fields,Source,Platform,Timezone,Device/browser', ...filtered.map((log) => [
+      log.occurredAt.toISOString(), log.category || '', log.action || '', log.summary || '', log.role,
+      log.email, log.actorId, log.targetType || '', log.targetId || '', log.targetLabel || '',
+      (log.changedFields || []).join('; '), log.source || '', log.platform || '', log.timezone || '', log.userAgent || '',
     ].map(clean).join(','))];
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }));
-    link.download = 'login-audit.csv';
+    link.download = 'application-activity-audit.csv';
     link.click();
     URL.revokeObjectURL(link.href);
   };
 
   return <div className="analytics-dashboard">
     <div className="panel-head analytics-heading">
-      <div><h2>Login audit</h2><p className="muted small">Owner-only, read-only history of successful verified logins. Tracking begins with this feature’s deployment.</p></div>
+      <div><h2>Application audit</h2><p className="muted small">Owner-only, read-only history of logins and changes across the application. Activity tracking begins with this deployment.</p></div>
       <button className="secondary-btn" disabled={filtered.length === 0} onClick={exportCsv}>Export filtered CSV</button>
     </div>
     {loadError && <div className="error-message">{loadError}</div>}
     <section className="panel analytics-filters">
-      <div className="filter-bar audit-filters">
-        <label className="search-field"><span>Search</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Email, user ID, browser, or timezone" /></label>
-        <label><span>Role</span><select value={role} onChange={(event) => setRole(event.target.value as typeof role)}><option value="all">All roles</option><option value="owner">Owner</option><option value="admin">Admin</option><option value="volunteer">Volunteer</option></select></label>
+      <div className="filter-bar audit-filters activity-audit-filters">
+        <label className="search-field"><span>Search everything</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Person, action, task, event, record ID, field…" /></label>
+        <label><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}><option value="all">All categories</option>{categories.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+        <label><span>Role</span><select value={role} onChange={(event) => setRole(event.target.value as typeof role)}><option value="all">All roles</option><option value="owner">Owner</option><option value="admin">Admin</option><option value="volunteer">Volunteer</option><option value="system">System</option></select></label>
         <label><span>Date range</span><select value={period} onChange={(event) => setPeriod(event.target.value as typeof period)}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All history</option></select></label>
       </div>
     </section>
     <div className="stat-grid">
-      <div className="stat-card"><span className="stat-num">{filtered.length}</span><span className="stat-label">Successful logins</span></div>
+      <div className="stat-card"><span className="stat-num">{filtered.length}</span><span className="stat-label">Recorded activities</span></div>
       <div className="stat-card"><span className="stat-num">{uniqueUsers}</span><span className="stat-label">Unique users</span></div>
-      <div className="stat-card"><span className="stat-num">{adminLogins}</span><span className="stat-label">Owner/Admin logins</span></div>
-      <div className="stat-card"><span className="stat-num">{volunteerLogins}</span><span className="stat-label">Volunteer logins</span></div>
+      <div className="stat-card"><span className="stat-num">{loginCount}</span><span className="stat-label">Successful logins</span></div>
+      <div className="stat-card"><span className="stat-num">{changeCount}</span><span className="stat-label">Data changes</span></div>
+      <div className="stat-card"><span className="stat-num">{destructiveCount}</span><span className="stat-label">Remove/delete actions</span></div>
     </div>
     <section className="panel">
-      <div className="panel-head"><h2>Login records</h2>{loading && <span className="muted small">Loading audit history…</span>}</div>
-      {!loading && filtered.length === 0 && <div className="empty-state"><strong>No matching login records</strong><span>New successful logins will appear here.</span></div>}
-      {filtered.length > 0 && <div className="table-scroll"><table className="report-table"><thead><tr><th>Date and time</th><th>Role</th><th>Email</th><th>Platform</th><th>Timezone</th><th>Device/browser</th></tr></thead>
-        <tbody>{filtered.map((log) => <tr key={log.id}><td>{log.occurredAt.toLocaleString()}</td><td><span className="admin-tag">{log.role}</span></td><td>{log.email}</td><td>{log.platform || 'Unknown'}</td><td>{log.timezone || 'Unknown'}</td><td className="audit-device" title={log.userAgent}>{log.userAgent || 'Unknown'}</td></tr>)}</tbody>
+      <div className="panel-head"><h2>Activity records</h2>{loading && <span className="muted small">Loading audit history…</span>}</div>
+      {!loading && filtered.length === 0 && <div className="empty-state"><strong>No matching activity</strong><span>Adjust the filters or perform a new action.</span></div>}
+      {filtered.length > 0 && <div className="table-scroll"><table className="report-table audit-table"><thead><tr><th>Date and time</th><th>Category</th><th>Activity</th><th>Performed by</th><th>Role</th><th>Target</th><th>Details</th></tr></thead>
+        <tbody>{filtered.map((log) => <tr key={log.id}>
+          <td>{log.occurredAt.toLocaleString()}</td><td>{log.category || 'Other'}</td>
+          <td><strong>{log.summary || log.action || log.event}</strong><div className="muted small">{log.action}</div></td>
+          <td>{log.email || (log.role === 'system' ? 'Automated system' : log.actorId)}</td>
+          <td><span className="admin-tag">{log.role}</span></td>
+          <td>{log.targetLabel || '—'}{log.targetType && <div className="muted small">{log.targetType} · {log.targetId}</div>}</td>
+          <td>{log.changedFields?.length ? `Changed: ${log.changedFields.join(', ')}` : log.event === 'login' ? [log.platform, log.timezone].filter(Boolean).join(' · ') : '—'}</td>
+        </tr>)}</tbody>
       </table></div>}
     </section>
   </div>;
