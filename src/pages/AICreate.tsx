@@ -391,14 +391,6 @@ const AICreateTab: React.FC<Props> = ({ uid, events, tasks: existingTasks, volun
                     />
                   </div>
                 </div>
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={t.openForSignup}
-                    onChange={(e) => updateTask(i, { openForSignup: e.target.checked })}
-                  />
-                  Let volunteers sign themselves up
-                </label>
               </div>
             ))}
           </div>

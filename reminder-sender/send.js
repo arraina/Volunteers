@@ -285,7 +285,7 @@ async function topUpSeries(db, tasksSnap, now, stoppedSeries) {
           skillsNeeded: Array.isArray(t.skillsNeeded) ? t.skillsNeeded : [],
           volunteersNeeded: t.volunteersNeeded || 1,
           assignedVolunteers: [],
-          openForSignup: t.openForSignup !== false,
+          openForSignup: true,
           status: 'open',
           recurrence: t.recurrence,
           seriesId,

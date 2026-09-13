@@ -71,7 +71,6 @@ const VolunteerDashboard: React.FC = () => {
       profile
         ? tasks.filter(
             (t) =>
-              t.openForSignup &&
               !t.assignedVolunteers.includes(profile.uid) &&
               effectiveTaskStatus(t) !== 'cancelled' &&
               effectiveTaskStatus(t) !== 'completed' &&
@@ -266,7 +265,7 @@ const VolunteerDashboard: React.FC = () => {
                           Check out
                         </button>
                       )}
-                      {task.openForSignup && status !== 'completed' && status !== 'cancelled' && (
+                      {status !== 'completed' && status !== 'cancelled' && (
                         <button className="link-btn danger" onClick={() => withdraw(task)}>
                           Withdraw
                         </button>

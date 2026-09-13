@@ -473,7 +473,7 @@ function occurrenceDoc(input: TaskInput, seriesId: string, start: Date, index: n
     skillsNeeded: input.skillsNeeded || [],
     volunteersNeeded: input.volunteersNeeded,
     assignedVolunteers: [],
-    openForSignup: input.openForSignup,
+    openForSignup: true,
     status: 'open' as TaskStatus,
     recurrence: input.recurrence,
     seriesId,
@@ -561,7 +561,7 @@ export async function updateTaskManagementFields(
   if (typeof fields.volunteersNeeded === 'number' && Number.isFinite(fields.volunteersNeeded)) {
     patch.volunteersNeeded = Math.max(1, Math.floor(fields.volunteersNeeded));
   }
-  if (typeof fields.openForSignup === 'boolean') patch.openForSignup = fields.openForSignup;
+  patch.openForSignup = true;
   if (Array.isArray(fields.reminderHoursBefore)) {
     patch.reminderHoursBefore = validateReminderHours(fields.reminderHoursBefore);
   }
@@ -614,7 +614,7 @@ export async function updateTaskManagementFieldsScoped(
       if (typeof fields.description === 'string') patch.description = fields.description.trim();
       if (typeof fields.location === 'string') patch.location = fields.location.trim();
       if (typeof fields.volunteersNeeded === 'number') patch.volunteersNeeded = Math.max(1, Math.floor(fields.volunteersNeeded));
-      if (typeof fields.openForSignup === 'boolean') patch.openForSignup = fields.openForSignup;
+      patch.openForSignup = true;
       if (Array.isArray(fields.reminderHoursBefore)) patch.reminderHoursBefore = validateReminderHours(fields.reminderHoursBefore);
       if (fields.startDateTime) patch.startDateTime = Timestamp.fromDate(shiftedStart);
       if (fields.endDateTime === null) patch.endDateTime = null;

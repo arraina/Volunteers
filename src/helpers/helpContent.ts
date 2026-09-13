@@ -57,7 +57,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: 'How to update your phone', text: 'Open My Profile, replace the phone with its country code, save, then complete SMS verification for the new number.' },
       { heading: 'How to find a task', text: 'Open Open Tasks and type part of the task, event, or location into Search. Adjust filters or sorting if available. Clear filters if an expected task is missing.' },
       { heading: 'How to know you are assigned', text: 'After signup or admin assignment, the task appears under My Tasks and its assigned count increases. If it does not appear, refresh and ask an admin to confirm the saved assignment.' },
-      { heading: 'How to stop participating', text: 'Withdraw from future self-signup tasks where allowed and contact an admin about locked assignments. Turning off required WhatsApp makes the profile inactive; it is not a substitute for cancelling one task.' },
+      { heading: 'How to stop participating', text: 'Withdraw from a future task or contact an admin about the assignment. Turning off required WhatsApp makes the profile inactive; it is not a substitute for cancelling one task.' },
       { heading: 'How to get help', text: 'Search this manual or ask the Help Assistant using a specific question. Include the screen name, action attempted, and exact error message. Do not include passwords, SMS codes, or access tokens.' },
     ], keywords: ['how to', 'common actions', 'password', 'update phone', 'find task', 'assigned', 'get help'],
   },
@@ -112,7 +112,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'roles', title: 'Roles: Volunteer, Admin, and Owner', category: 'Getting Started', roles: ['everyone'],
     summary: 'Understand what each access level can see and change.',
     sections: [
-      { heading: 'Volunteer', text: 'Volunteers manage their profile, browse open tasks, sign themselves up where allowed, withdraw where allowed, see their assignments, submit event feedback, and record their service hours.' },
+      { heading: 'Volunteer', text: 'Volunteers manage their profile, browse open tasks, sign themselves up or withdraw, see their assignments, submit event feedback, and record their service hours.' },
       { heading: 'Admin', text: 'Admins handle normal operations: volunteers, tasks, assignments, events, meeting notes, announcements, reports, and reminders. Admins may move tasks to Trash but cannot restore them, permanently delete them, or manage administrator access.' },
       { heading: 'Owner', text: 'The Owner has all Admin capabilities plus Admin Management, Trash restoration, and permanent task deletion. The Owner account is protected from removal in the app.' },
     ], keywords: ['role', 'permission', 'owner', 'admin', 'volunteer', 'security', 'access'],

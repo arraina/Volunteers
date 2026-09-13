@@ -333,7 +333,7 @@ export function normalizeTask(id: string, data: Record<string, any>): VolunteerT
     skillsNeeded: Array.isArray(data.skillsNeeded) ? data.skillsNeeded : [],
     volunteersNeeded: typeof data.volunteersNeeded === 'number' ? data.volunteersNeeded : 1,
     assignedVolunteers: Array.isArray(data.assignedVolunteers) ? data.assignedVolunteers : [],
-    openForSignup: data.openForSignup !== false,
+    openForSignup: true,
     status: data.status === 'cancelled' ? 'cancelled' : 'open',
     deleted: data.deleted === true,
     deletedAt: data.deletedAt ? firestoreTimestampToDate(data.deletedAt) : undefined,
