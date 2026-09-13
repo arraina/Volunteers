@@ -366,17 +366,20 @@ export function firestoreTimestampToDate(
 export function formatDate(date: Date | undefined): string {
   if (!date) return 'N/A';
   return new Date(date).toLocaleDateString('en-US', {
+    timeZone: 'America/New_York',
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZoneName: 'short',
   });
 }
 
 export function formatDateShort(date: Date | undefined): string {
   if (!date) return 'N/A';
   return new Date(date).toLocaleDateString('en-US', {
+    timeZone: 'America/New_York',
     month: 'short',
     day: 'numeric',
   });

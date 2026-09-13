@@ -82,7 +82,11 @@ async function main() {
         const params = [
           volunteer.firstName || volunteer.name || 'Volunteer',
           task.title,
-          start.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+          `${start.toLocaleString('en-US', {
+            timeZone: 'America/New_York',
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          })} ET`,
           task.location || 'the temple',
         ];
         const plain = `Reminder: "${task.title}" on ${params[2]}${

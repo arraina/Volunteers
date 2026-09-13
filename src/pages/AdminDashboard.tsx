@@ -112,10 +112,34 @@ const emptyVolunteerForm = {
   whatsappOptIn: true,
 };
 
+const EASTERN_TIME_ZONE = 'America/New_York';
+
+// datetime-local has no timezone. Treat its wall-clock value as Eastern Time
+// regardless of the administrator's device timezone.
+const fromEasternDateTimeInput = (value: string): Date => {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) return new Date(NaN);
+  const [, year, month, day, hour, minute] = match.map(Number);
+  const wallClockUtc = Date.UTC(year, month - 1, day, hour, minute);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: EASTERN_TIME_ZONE,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(wallClockUtc));
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((item) => item.type === type)?.value);
+  const representedUtc = Date.UTC(part('year'), part('month') - 1, part('day'), part('hour'), part('minute'));
+  return new Date(wallClockUtc - (representedUtc - wallClockUtc));
+};
+
 const toDateTimeInput = (date?: Date) => {
   if (!date) return '';
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: EASTERN_TIME_ZONE,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || '';
+  return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`;
 };
 
 const taskEditValues = (task: VolunteerTask) => ({
@@ -380,16 +404,17 @@ const TasksTab: React.FC<{
         throw new Error('Task title and start date/time are required.');
       }
       const needed = Math.max(1, parseInt(form.volunteersNeeded, 10) || 1);
-      const reminderHours = form.reminderHoursBefore
+      const reminderHours = Array.from(new Set(form.reminderHoursBefore
         .split(',')
-        .map((s) => parseInt(s.trim(), 10))
-        .filter((n) => Number.isFinite(n) && n > 0);
+        .map((s) => Number(s.trim()))
+        .filter((n) => Number.isFinite(n) && n > 0)))
+        .sort((a, b) => b - a);
 
       await createTask({
         title: form.title,
         description: form.description,
-        startDateTime: new Date(form.startDateTime),
-        endDateTime: form.endDateTime ? new Date(form.endDateTime) : null,
+        startDateTime: fromEasternDateTimeInput(form.startDateTime),
+        endDateTime: form.endDateTime ? fromEasternDateTimeInput(form.endDateTime) : null,
         location: form.location,
         skillsNeeded: [],
         volunteersNeeded: needed,
@@ -461,14 +486,14 @@ const TasksTab: React.FC<{
               </option>
             ))}
           </select>
-          <label className="field-label">Start</label>
+          <label className="field-label">Start (Eastern Time — ET)</label>
           <input
             type="datetime-local"
             value={form.startDateTime}
             onChange={(e) => setForm({ ...form, startDateTime: e.target.value })}
             required
           />
-          <label className="field-label">End (optional)</label>
+          <label className="field-label">End (optional, Eastern Time — ET)</label>
           <input
             type="datetime-local"
             value={form.endDateTime}
@@ -526,13 +551,14 @@ const TasksTab: React.FC<{
               </small>
             </div>
           )}
-          <label className="field-label">Reminder hours before (comma separated)</label>
+          <label className="field-label">Reminder times — hours before (comma separated)</label>
           <input
             type="text"
             placeholder="e.g. 48, 24, 2"
             value={form.reminderHoursBefore}
             onChange={(e) => setForm({ ...form, reminderHoursBefore: e.target.value })}
           />
+          <small className="field-hint">Enter one or several reminders. Example: 168, 48, 24, 2 means one week, two days, one day, and two hours before.</small>
           <label className="checkbox-row">
             <input
               type="checkbox"
@@ -754,12 +780,13 @@ const OccurrenceRow: React.FC<{
   const saveTaskEdit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
-    const start = new Date(editForm.startDateTime);
-    const end = editForm.endDateTime ? new Date(editForm.endDateTime) : null;
+    const start = fromEasternDateTimeInput(editForm.startDateTime);
+    const end = editForm.endDateTime ? fromEasternDateTimeInput(editForm.endDateTime) : null;
     const needed = Number.parseInt(editForm.volunteersNeeded, 10);
-    const reminders = editForm.reminderHoursBefore.split(',')
-      .map((value) => Number.parseInt(value.trim(), 10))
-      .filter((value) => Number.isFinite(value) && value > 0);
+    const reminders = Array.from(new Set(editForm.reminderHoursBefore.split(',')
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isFinite(value) && value > 0)))
+      .sort((a, b) => b - a);
     if (!editForm.title.trim() || Number.isNaN(start.getTime())) {
       setError('Task title and a valid start date/time are required.');
       return;
@@ -825,11 +852,11 @@ const OccurrenceRow: React.FC<{
       {editing && <form className="task-edit-form" onSubmit={saveTaskEdit}>
         <label><span>Task title</span><input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} required /></label>
         <label className="task-edit-wide"><span>Description</span><textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} /></label>
-        <label><span>Start</span><input type="datetime-local" value={editForm.startDateTime} onChange={(e) => setEditForm({ ...editForm, startDateTime: e.target.value })} required /></label>
-        <label><span>End (optional)</span><input type="datetime-local" value={editForm.endDateTime} onChange={(e) => setEditForm({ ...editForm, endDateTime: e.target.value })} /></label>
+        <label><span>Start (Eastern Time — ET)</span><input type="datetime-local" value={editForm.startDateTime} onChange={(e) => setEditForm({ ...editForm, startDateTime: e.target.value })} required /></label>
+        <label><span>End (optional, Eastern Time — ET)</span><input type="datetime-local" value={editForm.endDateTime} onChange={(e) => setEditForm({ ...editForm, endDateTime: e.target.value })} /></label>
         <label><span>Location</span><input value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} /></label>
         <label><span>Volunteers needed</span><input type="number" min={Math.max(1, task.assignedVolunteers.length)} value={editForm.volunteersNeeded} onChange={(e) => setEditForm({ ...editForm, volunteersNeeded: e.target.value })} required /></label>
-        <label className="task-edit-wide"><span>Reminder hours before (comma separated)</span><input value={editForm.reminderHoursBefore} onChange={(e) => setEditForm({ ...editForm, reminderHoursBefore: e.target.value })} placeholder="48, 24, 2" /></label>
+        <label className="task-edit-wide"><span>Reminder times — hours before (comma separated)</span><input value={editForm.reminderHoursBefore} onChange={(e) => setEditForm({ ...editForm, reminderHoursBefore: e.target.value })} placeholder="168, 48, 24, 2" /><small className="field-hint">Each value sends once: one week, two days, one day, and two hours before.</small></label>
         <label className="checkbox-row task-edit-wide"><input type="checkbox" checked={editForm.openForSignup} onChange={(e) => setEditForm({ ...editForm, openForSignup: e.target.checked })} /> Allow volunteers to sign themselves up</label>
         <div className="task-edit-actions task-edit-wide"><button className="primary-btn" disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</button><button type="button" className="secondary-btn" onClick={() => { setEditForm(taskEditValues(task)); setEditing(false); }}>Cancel edit</button></div>
       </form>}
