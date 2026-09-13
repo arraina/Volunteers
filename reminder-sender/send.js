@@ -26,6 +26,10 @@ async function main() {
   const db = initAdmin();
   const messaging = admin.messaging();
   const now = new Date();
+  const emailConfigured = Boolean(process.env.EMAIL_API_KEY && process.env.EMAIL_FROM);
+  if (!emailConfigured) {
+    console.log('Email reminder channel is disabled because EMAIL_API_KEY and EMAIL_FROM are not configured.');
+  }
 
   const [tasksSnap, volunteersSnap, stoppedSeriesSnap] = await Promise.all([
     db.collection('tasks').get(),
@@ -100,7 +104,7 @@ async function main() {
               .then((result) => ({ channel: 'whatsapp', ...result }))
           );
         }
-        if (prefs.email && volunteer.email) {
+        if (emailConfigured && prefs.email && volunteer.email) {
           deliveries.push(
             sendEmail({
               to: volunteer.email,
@@ -156,7 +160,7 @@ async function main() {
     }
   }
 
-  await sendPendingAnnouncements(db, messaging, volunteers);
+  await sendPendingAnnouncements(db, messaging, volunteers, emailConfigured);
   const created = await topUpSeries(db, tasksSnap, now, stoppedSeries);
   const purged = await purgeExpiredTrash(db, tasksSnap, now);
 
@@ -261,7 +265,7 @@ async function purgeExpiredTrash(db, tasksSnap, now) {
   return expired.length;
 }
 
-async function sendPendingAnnouncements(db, messaging, volunteers) {
+async function sendPendingAnnouncements(db, messaging, volunteers, emailConfigured) {
   const snap = await db.collection('announcements').where('delivered', '==', null).get().catch(() => null);
   // Announcements without a `delivered` field are treated as pending.
   const pending = [];
@@ -288,7 +292,7 @@ async function sendPendingAnnouncements(db, messaging, volunteers) {
           templateParams: [v.firstName || v.name || 'Volunteer', ann.title, ann.body, 'the temple'],
         });
       }
-      if (channels.includes('email') && prefs.email && v.email) {
+      if (emailConfigured && channels.includes('email') && prefs.email && v.email) {
         await sendEmail({ to: v.email, subject: ann.title, text: ann.body });
       }
       if (channels.includes('push') && prefs.push && Array.isArray(v.pushTokens) && v.pushTokens.length) {
