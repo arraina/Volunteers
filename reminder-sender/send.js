@@ -12,7 +12,7 @@ function initAdmin() {
     throw new Error('FIREBASE_SERVICE_ACCOUNT env var is required.');
   }
   const serviceAccount = JSON.parse(raw);
-  admin.initializeApp({ credential: admin.cert(serviceAccount) });
+  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
   return admin.firestore();
 }
 
