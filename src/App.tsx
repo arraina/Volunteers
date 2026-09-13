@@ -5,6 +5,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import VolunteerDashboard from './pages/VolunteerDashboard';
 import VerifyEmail from './pages/VerifyEmail';
 import HelpCenter from './pages/HelpCenter';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import { AuthProvider, useAuth } from './helpers/useAuth';
 import { isFirebaseConfigured } from './config/firebase';
 import './App.css';
@@ -65,6 +66,7 @@ function App() {
     <AuthProvider>
       <Router basename={routerBasename}>
         <Routes>
+          <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route
             path="/login"
             element={
