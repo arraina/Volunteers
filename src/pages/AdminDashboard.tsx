@@ -2085,6 +2085,56 @@ const ReportsTab: React.FC<{
   const activeVolunteers = scopedVolunteers.filter((volunteer) => volunteer.participationStatus !== 'inactive');
   const totalHours = scopedLogs.reduce((sum, log) => sum + (log.hours || 0), 0);
 
+  const whatsappDeliveryIssues = useMemo(() => {
+    const byVolunteer = new Map<string, SentMessage[]>();
+    messages
+      .filter((message) => message.channel === 'whatsapp')
+      .sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime())
+      .forEach((message) => {
+        const records = byVolunteer.get(message.volunteerId) || [];
+        records.push(message);
+        byVolunteer.set(message.volunteerId, records);
+      });
+
+    return Array.from(byVolunteer.entries()).flatMap(([volunteerId, records]) => {
+      const latest = records[0];
+      const ageHours = (Date.now() - latest.sentAt.getTime()) / 3_600_000;
+      const failureText = `${latest.failureCode || ''} ${latest.failureReason || ''}`.toLowerCase();
+      const possiblyUnreachable = latest.status === 'failed' && (
+        latest.failureCode === '131026' ||
+        failureText.includes('undeliverable') ||
+        failureText.includes('not a valid whatsapp')
+      );
+      const stalled = ['accepted', 'sent'].includes(latest.status) && ageHours >= 24;
+      if (latest.status !== 'failed' && !stalled) return [];
+
+      let consecutiveFailures = 0;
+      for (const record of records) {
+        if (record.status !== 'failed') break;
+        consecutiveFailures += 1;
+      }
+      const lastDelivered = records.find((record) => ['delivered', 'read'].includes(record.status));
+      const volunteer = volunteers.find((item) => item.uid === volunteerId);
+      return [{
+        volunteerId,
+        volunteerName: volunteer?.name || volunteerId,
+        phoneNumber: volunteer?.phoneNumber || '—',
+        assessment: possiblyUnreachable
+          ? 'Possibly blocked or unreachable'
+          : stalled
+            ? 'No delivery confirmation after 24 hours'
+            : 'Delivery failed',
+        lastDeliveredAt: lastDelivered?.deliveredAt || lastDelivered?.sentAt,
+        consecutiveFailures,
+        detail: latest.failureReason || (stalled ? `Last status: ${latest.status}` : 'No provider detail'),
+        failureCode: latest.failureCode,
+        action: possiblyUnreachable || stalled
+          ? 'Verify the number and contact the volunteer by email or phone.'
+          : 'Review the provider error, correct the profile if needed, then use a future reminder.',
+      }];
+    });
+  }, [messages, volunteers]);
+
   const channelRows = (['whatsapp', 'email', 'push'] as NotificationChannel[]).map((channel) => {
     const records = scopedMessages.filter((message) => message.channel === channel);
     const accepted = records.filter((message) => message.status !== 'failed').length;
@@ -2220,6 +2270,20 @@ const ReportsTab: React.FC<{
                 <td>{message.deliveredAt?.toLocaleString() || '—'}</td>
                 <td>{message.readAt?.toLocaleString() || '—'}</td>
                 <td>{message.failureReason ? `${message.failureCode ? `${message.failureCode}: ` : ''}${message.failureReason}` : '—'}</td>
+              </tr>)}</tbody>
+            </table></div>
+          </>}
+          {whatsappDeliveryIssues.length > 0 && <>
+            <h3>WhatsApp delivery issues</h3>
+            <p className="muted small">WhatsApp does not confirm when a recipient blocks a business. “Possibly blocked” can also mean an invalid, inactive, offline, or otherwise unreachable number.</p>
+            <div className="table-scroll"><table className="report-table"><thead><tr><th>Volunteer</th><th>Assessment</th><th>Last delivered</th><th>Consecutive failures</th><th>Provider detail</th><th>Recommended action</th></tr></thead>
+              <tbody>{whatsappDeliveryIssues.map((issue) => <tr key={issue.volunteerId}>
+                <td>{issue.volunteerName}<br /><span className="muted small">{issue.phoneNumber}</span></td>
+                <td><span className="admin-tag">{issue.assessment}</span></td>
+                <td>{issue.lastDeliveredAt?.toLocaleString() || 'Never recorded'}</td>
+                <td>{issue.consecutiveFailures}</td>
+                <td>{issue.failureCode ? `${issue.failureCode}: ` : ''}{issue.detail}</td>
+                <td>{issue.action}</td>
               </tr>)}</tbody>
             </table></div>
           </>}
