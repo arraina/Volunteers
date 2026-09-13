@@ -50,6 +50,19 @@ service cloud.firestore {
       return request.resource.data.phoneNumber == '';
     }
 
+    function hasValidReminderSchedule() {
+      return request.resource.data.reminderHoursBefore is list
+        && request.resource.data.reminderHoursBefore.size() > 0
+        && request.resource.data.reminderHoursBefore.size() <= 2
+        && request.resource.data.reminderHoursBefore[0] is number
+        && request.resource.data.reminderHoursBefore[0] > 0
+        && (request.resource.data.reminderHoursBefore.size() == 1
+          || (request.resource.data.reminderHoursBefore[1] is number
+            && request.resource.data.reminderHoursBefore[1] > 0
+            && (request.resource.data.reminderHoursBefore[0] - request.resource.data.reminderHoursBefore[1] >= 24
+              || request.resource.data.reminderHoursBefore[1] - request.resource.data.reminderHoursBefore[0] >= 24)));
+    }
+
     function isSelfSignup() {
       return resource.data.openForSignup == true
         && resource.data.status != 'cancelled'
@@ -139,17 +152,17 @@ service cloud.firestore {
     // ----- tasks -----
     match /tasks/{taskId} {
       allow read: if verifiedUser();
-      allow create: if isAdmin();
+      allow create: if isAdmin() && hasValidReminderSchedule();
       allow delete: if isOwner();
       // Admins can update anything. Volunteers may only self-add/remove
       // themselves on the assignedVolunteers array of an open task.
-      allow update: if isOwner()
+      allow update: if ((isOwner()
         || (isAdmin() && (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny([
             'deleted', 'deletedAt', 'deletedBy', 'deletedBatchId', 'deletedScope'
           ])
           || (resource.data.deleted != true && request.resource.data.deleted == true)
-        ))
+        ))) && hasValidReminderSchedule())
         || (verifiedUser() && (isSelfSignup() || isSelfWithdrawal()));
     }
 

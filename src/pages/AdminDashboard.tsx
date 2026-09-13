@@ -72,6 +72,7 @@ import {
   setWhatsAppPaused,
   subscribeWhatsAppNotificationSettings,
   WhatsAppNotificationSettings,
+  validateReminderHours,
   DEFAULT_HORIZON_WEEKS,
 } from '../helpers/store';
 import { HourLog } from '../helpers/types';
@@ -414,11 +415,11 @@ const TasksTab: React.FC<{
         throw new Error('Task title and start date/time are required.');
       }
       const needed = Math.max(1, parseInt(form.volunteersNeeded, 10) || 1);
-      const reminderHours = Array.from(new Set(form.reminderHoursBefore
+      const reminderHours = validateReminderHours(Array.from(new Set(form.reminderHoursBefore
         .split(',')
         .map((s) => Number(s.trim()))
         .filter((n) => Number.isFinite(n) && n > 0)))
-        .sort((a, b) => b - a);
+        .sort((a, b) => b - a));
 
       await createTask({
         title: form.title,
@@ -564,11 +565,11 @@ const TasksTab: React.FC<{
           <label className="field-label">Reminder times — hours before (comma separated)</label>
           <input
             type="text"
-            placeholder="e.g. 48, 24, 2"
+            placeholder="e.g. 72, 24"
             value={form.reminderHoursBefore}
             onChange={(e) => setForm({ ...form, reminderHoursBefore: e.target.value })}
           />
-          <small className="field-hint">Enter one or several reminders. Example: 168, 48, 24, 2 means one week, two days, one day, and two hours before.</small>
+          <small className="field-hint">Maximum 2 reminders, at least 24 hours apart. Example: 72, 24.</small>
           <label className="checkbox-row">
             <input
               type="checkbox"
@@ -793,10 +794,12 @@ const OccurrenceRow: React.FC<{
     const start = fromEasternDateTimeInput(editForm.startDateTime);
     const end = editForm.endDateTime ? fromEasternDateTimeInput(editForm.endDateTime) : null;
     const needed = Number.parseInt(editForm.volunteersNeeded, 10);
-    const reminders = Array.from(new Set(editForm.reminderHoursBefore.split(',')
+    let reminders: number[];
+    try { reminders = validateReminderHours(Array.from(new Set(editForm.reminderHoursBefore.split(',')
       .map((value) => Number(value.trim()))
       .filter((value) => Number.isFinite(value) && value > 0)))
-      .sort((a, b) => b - a);
+      .sort((a, b) => b - a)); }
+    catch (error) { setError(error instanceof Error ? error.message : 'Invalid reminder schedule.'); return; }
     if (!editForm.title.trim() || Number.isNaN(start.getTime())) {
       setError('Task title and a valid start date/time are required.');
       return;
@@ -866,7 +869,7 @@ const OccurrenceRow: React.FC<{
         <label><span>End (optional, Eastern Time — ET)</span><input type="datetime-local" value={editForm.endDateTime} onChange={(e) => setEditForm({ ...editForm, endDateTime: e.target.value })} /></label>
         <label><span>Location</span><input value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} /></label>
         <label><span>Volunteers needed</span><input type="number" min={Math.max(1, task.assignedVolunteers.length)} value={editForm.volunteersNeeded} onChange={(e) => setEditForm({ ...editForm, volunteersNeeded: e.target.value })} required /></label>
-        <label className="task-edit-wide"><span>Reminder times — hours before (comma separated)</span><input value={editForm.reminderHoursBefore} onChange={(e) => setEditForm({ ...editForm, reminderHoursBefore: e.target.value })} placeholder="168, 48, 24, 2" /><small className="field-hint">Each value sends once: one week, two days, one day, and two hours before.</small></label>
+        <label className="task-edit-wide"><span>Reminder times — hours before (comma separated)</span><input value={editForm.reminderHoursBefore} onChange={(e) => setEditForm({ ...editForm, reminderHoursBefore: e.target.value })} placeholder="72, 24" /><small className="field-hint">Maximum 2 reminders, at least 24 hours apart.</small></label>
         <label className="checkbox-row task-edit-wide"><input type="checkbox" checked={editForm.openForSignup} onChange={(e) => setEditForm({ ...editForm, openForSignup: e.target.checked })} /> Allow volunteers to sign themselves up</label>
         <div className="task-edit-actions task-edit-wide"><button className="primary-btn" disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</button><button type="button" className="secondary-btn" onClick={() => { setEditForm(taskEditValues(task)); setEditing(false); }}>Cancel edit</button></div>
       </form>}
@@ -2000,7 +2003,7 @@ const CostTab: React.FC<{ events: TempleEvent[]; uid?: string; isOwner: boolean;
     {loadError && <div className="error-message">{loadError}</div>}
     <section className={`panel whatsapp-control ${whatsappSettings.paused ? 'is-paused' : ''}`}>
       <div><h2>WhatsApp sending control</h2>
-        <p className="muted small">Status: <strong>{whatsappSettings.paused ? 'PAUSED' : 'ACTIVE'}</strong>. Applies to scheduled reminders and WhatsApp announcements.</p>
+        <p className="muted small">Status: <strong>{whatsappSettings.paused ? 'PAUSED' : 'ACTIVE'}</strong>. Applies to scheduled reminders and WhatsApp announcements. Hard limit: 100 successfully accepted WhatsApp messages per Eastern Time day.</p>
         {whatsappSettings.pausedAt && <p className="muted small">Paused {whatsappSettings.pausedAt.toLocaleString()}{whatsappSettings.pauseReason ? ` — ${whatsappSettings.pauseReason}` : ''}</p>}
       </div>
       {isOwner

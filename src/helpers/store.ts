@@ -424,6 +424,21 @@ export interface TaskInput {
   createdBy?: string;
 }
 
+export const MAX_REMINDERS_PER_TASK = 2;
+export const MIN_REMINDER_SPACING_HOURS = 24;
+
+export function validateReminderHours(values: number[]): number[] {
+  const reminders = Array.from(new Set(values.filter((value) => Number.isFinite(value) && value > 0)))
+    .sort((a, b) => b - a);
+  if (reminders.length > MAX_REMINDERS_PER_TASK) {
+    throw new Error(`A task can have no more than ${MAX_REMINDERS_PER_TASK} scheduled reminders.`);
+  }
+  if (reminders.length === 2 && Math.abs(reminders[0] - reminders[1]) < MIN_REMINDER_SPACING_HOURS) {
+    throw new Error(`Scheduled reminders must be at least ${MIN_REMINDER_SPACING_HOURS} hours apart.`);
+  }
+  return reminders;
+}
+
 // Safety cap: never generate more than this many occurrence docs in one call.
 // The scheduled job tops up the rest over time (see reminder-sender).
 export const MAX_OCCURRENCES_PER_CREATE = 750;
@@ -476,6 +491,7 @@ function occurrenceDoc(input: TaskInput, seriesId: string, start: Date, index: n
  * independently assignable. Returns the seriesId (or single task id).
  */
 export async function createTask(input: TaskInput): Promise<string> {
+  input = { ...input, reminderHoursBefore: validateReminderHours(input.reminderHoursBefore) };
   if (input.recurrence === 'none') {
     const ref = await addDoc(collection(db, 'tasks'), {
       ...occurrenceDoc(input, '', input.startDateTime, 0),
@@ -547,7 +563,7 @@ export async function updateTaskManagementFields(
   }
   if (typeof fields.openForSignup === 'boolean') patch.openForSignup = fields.openForSignup;
   if (Array.isArray(fields.reminderHoursBefore)) {
-    patch.reminderHoursBefore = fields.reminderHoursBefore.filter((n) => Number.isFinite(n) && n > 0);
+    patch.reminderHoursBefore = validateReminderHours(fields.reminderHoursBefore);
   }
   if (fields.startDateTime !== undefined || fields.reminderHoursBefore !== undefined) {
     patch.reminderVersion = increment(1);
@@ -599,7 +615,7 @@ export async function updateTaskManagementFieldsScoped(
       if (typeof fields.location === 'string') patch.location = fields.location.trim();
       if (typeof fields.volunteersNeeded === 'number') patch.volunteersNeeded = Math.max(1, Math.floor(fields.volunteersNeeded));
       if (typeof fields.openForSignup === 'boolean') patch.openForSignup = fields.openForSignup;
-      if (Array.isArray(fields.reminderHoursBefore)) patch.reminderHoursBefore = fields.reminderHoursBefore.filter((n) => Number.isFinite(n) && n > 0);
+      if (Array.isArray(fields.reminderHoursBefore)) patch.reminderHoursBefore = validateReminderHours(fields.reminderHoursBefore);
       if (fields.startDateTime) patch.startDateTime = Timestamp.fromDate(shiftedStart);
       if (fields.endDateTime === null) patch.endDateTime = null;
       else if (newDuration !== null) patch.endDateTime = Timestamp.fromDate(new Date(shiftedStart.getTime() + newDuration));

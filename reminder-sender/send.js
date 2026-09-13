@@ -21,6 +21,36 @@ const toDate = (ts) => (ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null);
 // A reminder is "due" when now is within a send window after its computed time.
 // We look back this far so a task that came due while the job was idle still fires.
 const LOOKBACK_MS = 60 * 60 * 1000; // 1 hour
+const DAILY_WHATSAPP_LIMIT = 100;
+const MIN_REMINDER_SPACING_HOURS = 24;
+
+function easternDayStart(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date);
+  const part = (type) => Number(parts.find((item) => item.type === type)?.value);
+  const midnightWallClock = Date.UTC(part('year'), part('month') - 1, part('day'));
+  const represented = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(midnightWallClock));
+  const representedPart = (type) => Number(represented.find((item) => item.type === type)?.value);
+  const representedUtc = Date.UTC(representedPart('year'), representedPart('month') - 1,
+    representedPart('day'), representedPart('hour'), representedPart('minute'), representedPart('second'));
+  return new Date(midnightWallClock - (representedUtc - midnightWallClock));
+}
+
+function limitedReminderHours(values) {
+  const sorted = Array.from(new Set((Array.isArray(values) ? values : [24])
+    .filter((value) => Number.isFinite(value) && value > 0))).sort((a, b) => b - a);
+  const selected = [];
+  for (const value of sorted) {
+    if (selected.every((existing) => Math.abs(existing - value) >= MIN_REMINDER_SPACING_HOURS)) selected.push(value);
+    if (selected.length === 2) break;
+  }
+  return selected;
+}
 
 async function main() {
   const db = initAdmin();
@@ -39,6 +69,13 @@ async function main() {
   ]);
   const whatsappPaused = whatsappSettingsSnap.exists && whatsappSettingsSnap.data().paused === true;
   if (whatsappPaused) console.log('WhatsApp sending is globally paused by an Owner.');
+  const todayMessagesSnap = await db.collection('sentMessages')
+    .where('sentAt', '>=', admin.firestore.Timestamp.fromDate(easternDayStart(now))).get();
+  let whatsappSentToday = todayMessagesSnap.docs.filter((item) => {
+    const data = item.data();
+    return data.channel === 'whatsapp' && !['failed', 'skipped'].includes(data.status);
+  }).length;
+  console.log(`WhatsApp daily usage: ${whatsappSentToday}/${DAILY_WHATSAPP_LIMIT}.`);
   const stoppedSeries = new Set(stoppedSeriesSnap.docs.map((d) => d.id));
 
   const volunteers = new Map();
@@ -58,9 +95,7 @@ async function main() {
     const completionTime = toDate(task.endDateTime) || start;
     if (now >= completionTime) continue;
 
-    const reminderHours = Array.isArray(task.reminderHoursBefore)
-      ? task.reminderHoursBefore
-      : [24];
+    const reminderHours = limitedReminderHours(task.reminderHoursBefore);
     const assigned = Array.isArray(task.assignedVolunteers) ? task.assignedVolunteers : [];
 
     for (const hours of reminderHours) {
@@ -103,8 +138,13 @@ async function main() {
 
         const whatsappEnabled = !volunteer.whatsappOptOutAt;
         if (whatsappEnabled && volunteer.phoneNumber) {
-          deliveries.push(whatsappPaused
-            ? Promise.resolve({ channel: 'whatsapp', ok: false, skipped: true, skipReason: 'WhatsApp globally paused by Owner' })
+          const skipReason = whatsappPaused
+            ? 'WhatsApp globally paused by Owner'
+            : whatsappSentToday >= DAILY_WHATSAPP_LIMIT
+              ? `Daily WhatsApp limit of ${DAILY_WHATSAPP_LIMIT} reached`
+              : '';
+          deliveries.push(skipReason
+            ? Promise.resolve({ channel: 'whatsapp', ok: false, skipped: true, skipReason })
             : sendWhatsApp({ to: volunteer.phoneNumber, templateParams: params })
                 .then((result) => ({ channel: 'whatsapp', ...result }))
           );
@@ -150,7 +190,10 @@ async function main() {
             ...(providerAccepted ? { acceptedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
             sentAt: admin.firestore.FieldValue.serverTimestamp(),
           });
-          if (r.ok) sentCount += 1;
+          if (r.ok) {
+            sentCount += 1;
+            if (r.channel === 'whatsapp') whatsappSentToday += 1;
+          }
           else if (skipped) skippedCount += 1;
           else failCount += 1;
         }
@@ -168,7 +211,10 @@ async function main() {
     }
   }
 
-  await sendPendingAnnouncements(db, messaging, volunteers, emailConfigured, whatsappPaused);
+  const announcementResults = await sendPendingAnnouncements(db, messaging, volunteers, emailConfigured, whatsappPaused, whatsappSentToday);
+  sentCount += announcementResults.sent;
+  failCount += announcementResults.failed;
+  skippedCount += announcementResults.skipped;
   const created = await topUpSeries(db, tasksSnap, now, stoppedSeries);
   const purged = await purgeExpiredTrash(db, tasksSnap, now);
 
@@ -273,10 +319,11 @@ async function purgeExpiredTrash(db, tasksSnap, now) {
   return expired.length;
 }
 
-async function sendPendingAnnouncements(db, messaging, volunteers, emailConfigured, whatsappPaused) {
+async function sendPendingAnnouncements(db, messaging, volunteers, emailConfigured, whatsappPaused, whatsappSentToday) {
   const snap = await db.collection('announcements').where('delivered', '==', null).get().catch(() => null);
   // Announcements without a `delivered` field are treated as pending.
   const pending = [];
+  const counts = { sent: 0, failed: 0, skipped: 0 };
   const allSnap = await db.collection('announcements').get();
   allSnap.forEach((d) => {
     const data = d.data();
@@ -294,11 +341,30 @@ async function sendPendingAnnouncements(db, messaging, volunteers, emailConfigur
 
     for (const v of recipients) {
       const prefs = v.notificationPrefs || { whatsapp: true, email: true, push: false };
-      if (!whatsappPaused && channels.includes('whatsapp') && !v.whatsappOptOutAt && v.phoneNumber) {
-        await sendWhatsApp({
-          to: v.phoneNumber,
-          templateParams: [v.firstName || v.name || 'Volunteer', ann.title, ann.body, 'the temple'],
+      if (channels.includes('whatsapp') && !v.whatsappOptOutAt && v.phoneNumber) {
+        const skipReason = whatsappPaused
+          ? 'WhatsApp globally paused by Owner'
+          : whatsappSentToday >= DAILY_WHATSAPP_LIMIT
+            ? `Daily WhatsApp limit of ${DAILY_WHATSAPP_LIMIT} reached`
+            : '';
+        const result = skipReason
+          ? { ok: false, skipped: true, skipReason }
+          : await sendWhatsApp({
+              to: v.phoneNumber,
+              templateParams: [v.firstName || v.name || 'Volunteer', ann.title, ann.body, 'the temple'],
+            });
+        await db.collection('sentMessages').add({
+          announcementId: ann.id, volunteerId: v.id, channel: 'whatsapp',
+          status: result.skipped ? 'skipped' : result.ok ? 'accepted' : 'failed',
+          providerId: result.id || null, failureReason: result.ok || result.skipped ? null : result.error || 'unknown',
+          skipReason: result.skipped ? result.skipReason : null, billingCategory: 'utility',
+          estimatedCostUsd: result.ok ? 0.0034 : 0,
+          ...(result.ok ? { acceptedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
+          sentAt: admin.firestore.FieldValue.serverTimestamp(),
         });
+        if (result.ok) { whatsappSentToday += 1; counts.sent += 1; }
+        else if (result.skipped) counts.skipped += 1;
+        else counts.failed += 1;
       }
       if (emailConfigured && channels.includes('email') && prefs.email && v.email) {
         await sendEmail({ to: v.email, subject: ann.title, text: ann.body });
@@ -313,6 +379,7 @@ async function sendPendingAnnouncements(db, messaging, volunteers, emailConfigur
       { merge: true }
     );
   }
+  return counts;
 }
 
 main().catch((err) => {
