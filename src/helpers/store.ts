@@ -1011,6 +1011,12 @@ export async function getSentMessages(limitCount = 1000): Promise<SentMessage[]>
       billingCategory: data.billingCategory || undefined,
       estimatedCostUsd: typeof data.estimatedCostUsd === 'number' ? data.estimatedCostUsd : undefined,
       sentAt: firestoreTimestampToDate(data.sentAt),
+      acceptedAt: data.acceptedAt ? firestoreTimestampToDate(data.acceptedAt) : undefined,
+      deliveredAt: data.deliveredAt ? firestoreTimestampToDate(data.deliveredAt) : undefined,
+      readAt: data.readAt ? firestoreTimestampToDate(data.readAt) : undefined,
+      failedAt: data.failedAt ? firestoreTimestampToDate(data.failedAt) : undefined,
+      webhookReceivedAt: data.webhookReceivedAt ? firestoreTimestampToDate(data.webhookReceivedAt) : undefined,
+      failureCode: data.failureCode || undefined,
     } as SentMessage;
   });
 }

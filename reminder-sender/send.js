@@ -120,17 +120,19 @@ async function main() {
 
         // Record sent messages for the admin audit log.
         for (const r of results) {
+          const providerAccepted = r.ok && r.channel === 'whatsapp';
           await db.collection('sentMessages').add({
             taskId: task.id,
             volunteerId,
             channel: r.channel,
-            status: r.ok ? 'sent' : 'failed',
+            status: r.ok ? (providerAccepted ? 'accepted' : 'sent') : 'failed',
             providerId: r.id || null,
             failureReason: r.ok ? null : r.error || 'unknown',
             // Current direct-Meta North America utility estimate. Storing the
             // applied rate keeps historical monthly totals stable if rates change.
             billingCategory: r.channel === 'whatsapp' ? 'utility' : null,
             estimatedCostUsd: r.ok && r.channel === 'whatsapp' ? 0.0034 : 0,
+            ...(providerAccepted ? { acceptedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
             sentAt: admin.firestore.FieldValue.serverTimestamp(),
           });
           if (r.ok) sentCount += 1;

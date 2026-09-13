@@ -1646,9 +1646,11 @@ const AppValueTab: React.FC<{ volunteers: VolunteerProfile[] }> = ({ volunteers 
     const expectedAttendance = completed.reduce((sum, task) => sum + task.assignedVolunteers.length, 0);
     const completedIds = new Set(completed.map((task) => task.id));
     const attendedSessions = new Set(monthLogs.filter((log) => completedIds.has(log.taskId)).map((log) => `${log.taskId}:${log.volunteerId}`)).size;
-    const delivered = monthMessages.filter((message) => message.status === 'sent').length;
+    const delivered = monthMessages.filter((message) => message.channel === 'whatsapp'
+      ? ['delivered', 'read'].includes(message.status)
+      : message.status === 'sent').length;
     const failed = monthMessages.filter((message) => message.status === 'failed').length;
-    const whatsappCost = monthMessages.filter((message) => message.channel === 'whatsapp' && message.status === 'sent')
+    const whatsappCost = monthMessages.filter((message) => message.channel === 'whatsapp' && message.status !== 'failed')
       .reduce((sum, message) => sum + (message.estimatedCostUsd ?? NORTH_AMERICA_UTILITY_RATE_USD), 0);
     const volunteerHours = monthLogs.reduce((sum, log) => sum + (log.hours || 0), 0);
     const adminHoursSaved = delivered * minutesPerReminder / 60;
@@ -1865,7 +1867,7 @@ const CostTab: React.FC<{ events: TempleEvent[]; uid?: string }> = ({ events, ui
   }, []);
 
   const costs = useMemo<DisplayCost[]>(() => [...entries, ...messages
-    .filter((message) => message.channel === 'whatsapp' && message.status === 'sent')
+    .filter((message) => message.channel === 'whatsapp' && message.status !== 'failed')
     .map((message) => ({ id: `message-${message.id}`, category: 'whatsapp' as CostCategory,
       description: 'WhatsApp reminder', amountUsd: message.estimatedCostUsd ?? NORTH_AMERICA_UTILITY_RATE_USD,
       incurredAt: message.sentAt, vendor: 'Meta', status: 'estimated' as const, recurring: false,
@@ -2058,8 +2060,14 @@ const ReportsTab: React.FC<{
 
   const channelRows = (['whatsapp', 'email', 'push'] as NotificationChannel[]).map((channel) => {
     const records = scopedMessages.filter((message) => message.channel === channel);
-    const sent = records.filter((message) => message.status === 'sent').length;
-    return { channel, attempted: records.length, sent, failed: records.length - sent };
+    const accepted = records.filter((message) => message.status !== 'failed').length;
+    const sent = records.filter((message) => ['sent', 'delivered', 'read'].includes(message.status)).length;
+    const delivered = channel === 'whatsapp'
+      ? records.filter((message) => ['delivered', 'read'].includes(message.status)).length
+      : sent;
+    const read = records.filter((message) => message.status === 'read').length;
+    const failed = records.filter((message) => message.status === 'failed').length;
+    return { channel, attempted: records.length, accepted, sent, delivered, read, failed };
   }).filter((row) => channelFilter === 'all' || row.channel === channelFilter);
 
   const assignmentCount = new Map<string, number>();
@@ -2170,9 +2178,24 @@ const ReportsTab: React.FC<{
         <section className="panel">
           <h2>Reminder health</h2>
           {scopedMessages.length === 0 && <p className="muted">No reminder delivery records match the selected scope.</p>}
-          <table className="report-table"><thead><tr><th>Channel</th><th>Attempted</th><th>Sent</th><th>Failed</th><th>Success</th></tr></thead>
-            <tbody>{channelRows.map((row) => <tr key={row.channel}><td>{row.channel}</td><td>{row.attempted}</td><td>{row.sent}</td><td>{row.failed}</td><td>{row.attempted ? `${Math.round(row.sent / row.attempted * 100)}%` : '—'}</td></tr>)}</tbody>
+          <table className="report-table"><thead><tr><th>Channel</th><th>Attempted</th><th>Accepted</th><th>Sent</th><th>Delivered</th><th>Read</th><th>Failed</th><th>Delivery</th><th>Read rate</th></tr></thead>
+            <tbody>{channelRows.map((row) => <tr key={row.channel}><td>{row.channel}</td><td>{row.attempted}</td><td>{row.accepted}</td><td>{row.sent}</td><td>{row.delivered}</td><td>{row.read}</td><td>{row.failed}</td><td>{row.sent ? `${Math.round(row.delivered / row.sent * 100)}%` : '—'}</td><td>{row.delivered ? `${Math.round(row.read / row.delivered * 100)}%` : '—'}</td></tr>)}</tbody>
           </table>
+          {scopedMessages.some((message) => message.channel === 'whatsapp') && <>
+            <h3>Recent WhatsApp lifecycle</h3>
+            <div className="table-scroll"><table className="report-table"><thead><tr><th>Volunteer</th><th>Task</th><th>Current status</th><th>Accepted</th><th>Sent</th><th>Delivered</th><th>Read</th><th>Failure</th></tr></thead>
+              <tbody>{scopedMessages.filter((message) => message.channel === 'whatsapp').slice(0, 25).map((message) => <tr key={message.id}>
+                <td>{volunteers.find((volunteer) => volunteer.uid === message.volunteerId)?.name || message.volunteerId}</td>
+                <td>{allTasks.find((task) => task.id === message.taskId)?.title || '—'}</td>
+                <td><span className="admin-tag">{message.status}</span></td>
+                <td>{message.acceptedAt?.toLocaleString() || message.sentAt.toLocaleString()}</td>
+                <td>{['sent', 'delivered', 'read'].includes(message.status) ? 'Confirmed' : '—'}</td>
+                <td>{message.deliveredAt?.toLocaleString() || '—'}</td>
+                <td>{message.readAt?.toLocaleString() || '—'}</td>
+                <td>{message.failureReason ? `${message.failureCode ? `${message.failureCode}: ` : ''}${message.failureReason}` : '—'}</td>
+              </tr>)}</tbody>
+            </table></div>
+          </>}
           <p className="muted small">Readiness: {scopedVolunteers.filter((v) => v.whatsappOptIn && v.phoneNumber).length} WhatsApp · {scopedVolunteers.filter((v) => v.email).length} email · {scopedVolunteers.filter((v) => v.pushTokens?.length).length} browser push.</p>
         </section>
       </div>

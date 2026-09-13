@@ -165,12 +165,18 @@ export interface SentMessage {
   volunteerId: string;
   channel: NotificationChannel;
   destination: string;
-  status: 'sent' | 'failed';
+  status: 'accepted' | 'sent' | 'delivered' | 'read' | 'failed';
   providerId?: string;
   failureReason?: string;
   billingCategory?: 'utility' | 'marketing' | 'authentication' | 'service';
   estimatedCostUsd?: number;
   sentAt: Date;
+  acceptedAt?: Date;
+  deliveredAt?: Date;
+  readAt?: Date;
+  failedAt?: Date;
+  webhookReceivedAt?: Date;
+  failureCode?: string;
 }
 
 export interface EventFeedbackRecord {

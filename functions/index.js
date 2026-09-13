@@ -1,10 +1,77 @@
 const { randomUUID } = require('crypto');
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
+const { defineSecret } = require('firebase-functions/params');
 const { onDocumentWrittenWithAuthContext } = require('firebase-functions/v2/firestore');
 const admin = require('firebase-admin');
 
 admin.initializeApp();
 const db = admin.firestore();
+const whatsappWebhookVerifyToken = defineSecret('WHATSAPP_WEBHOOK_VERIFY_TOKEN');
+
+const WHATSAPP_STATUS_RANK = { accepted: 0, sent: 1, delivered: 2, read: 3 };
+
+/** Receive Meta's WhatsApp message-status callbacks and update the original record. */
+exports.whatsappStatusWebhook = onRequest(
+  { region: 'us-central1', maxInstances: 2, secrets: [whatsappWebhookVerifyToken] },
+  async (request, response) => {
+    if (request.method === 'GET') {
+      const verified = request.query['hub.mode'] === 'subscribe'
+        && request.query['hub.verify_token'] === whatsappWebhookVerifyToken.value();
+      if (verified && request.query['hub.challenge']) response.status(200).send(String(request.query['hub.challenge']));
+      else response.sendStatus(403);
+      return;
+    }
+    if (request.method !== 'POST') {
+      response.set('Allow', 'GET, POST').sendStatus(405);
+      return;
+    }
+    try {
+      const statuses = [];
+      for (const entry of request.body?.entry || []) {
+        for (const change of entry.changes || []) {
+          for (const status of change.value?.statuses || []) statuses.push(status);
+        }
+      }
+      await Promise.all(statuses.map(async (event) => {
+        const providerId = typeof event.id === 'string' ? event.id : '';
+        const nextStatus = typeof event.status === 'string' ? event.status.toLowerCase() : '';
+        if (!providerId || !['sent', 'delivered', 'read', 'failed'].includes(nextStatus)) return;
+        const match = await db.collection('sentMessages').where('providerId', '==', providerId).limit(1).get();
+        if (match.empty) return;
+        const ref = match.docs[0].ref;
+        const occurredAt = /^\d+$/.test(String(event.timestamp || ''))
+          ? admin.firestore.Timestamp.fromMillis(Number(event.timestamp) * 1000)
+          : admin.firestore.Timestamp.now();
+        await db.runTransaction(async (transaction) => {
+          const snapshot = await transaction.get(ref);
+          if (!snapshot.exists || snapshot.data().channel !== 'whatsapp') return;
+          const current = snapshot.data().status || 'accepted';
+          if (current === 'read' || (current === 'failed' && nextStatus !== 'failed')) return;
+          if (nextStatus !== 'failed' && current !== 'failed'
+            && (WHATSAPP_STATUS_RANK[nextStatus] || 0) < (WHATSAPP_STATUS_RANK[current] || 0)) return;
+          const update = {
+            status: nextStatus,
+            [`${nextStatus}At`]: occurredAt,
+            webhookReceivedAt: admin.firestore.FieldValue.serverTimestamp(),
+          };
+          if (event.recipient_id) update.recipientId = String(event.recipient_id);
+          if (event.conversation?.id) update.conversationId = String(event.conversation.id);
+          if (event.pricing?.category) update.billingCategory = String(event.pricing.category);
+          if (nextStatus === 'failed') {
+            const error = Array.isArray(event.errors) ? event.errors[0] : null;
+            update.failureReason = error?.error_data?.details || error?.message || error?.title || 'Meta reported delivery failure';
+            if (error?.code !== undefined) update.failureCode = String(error.code);
+          }
+          transaction.update(ref, update);
+        });
+      }));
+      response.sendStatus(200);
+    } catch (error) {
+      console.error('WhatsApp status webhook failed', error);
+      response.sendStatus(500);
+    }
+  }
+);
 
 exports.deleteVolunteerAccount = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
   if (!request.auth || request.auth.token.email_verified !== true) {
