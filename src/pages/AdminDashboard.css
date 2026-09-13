@@ -480,6 +480,24 @@
   color: #64748b;
 }
 
+.whatsapp-paused-banner {
+  background: #fff3cd;
+  border: 1px solid #e0a800;
+  border-radius: 8px;
+  color: #664d03;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+}
+
+.whatsapp-control {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.whatsapp-control.is-paused { border: 2px solid #e0a800; }
+
 .task-edit-form {
   background: #fff;
   border: 1px solid #cfe3d3;

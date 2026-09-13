@@ -1008,6 +1008,7 @@ export async function getSentMessages(limitCount = 1000): Promise<SentMessage[]>
       status: data.status,
       providerId: data.providerId || undefined,
       failureReason: data.failureReason || undefined,
+      skipReason: data.skipReason || undefined,
       billingCategory: data.billingCategory || undefined,
       estimatedCostUsd: typeof data.estimatedCostUsd === 'number' ? data.estimatedCostUsd : undefined,
       sentAt: firestoreTimestampToDate(data.sentAt),
@@ -1019,6 +1020,41 @@ export async function getSentMessages(limitCount = 1000): Promise<SentMessage[]>
       failureCode: data.failureCode || undefined,
     } as SentMessage;
   });
+}
+
+export interface WhatsAppNotificationSettings {
+  paused: boolean;
+  pauseReason?: string;
+  pausedAt?: Date;
+  pausedBy?: string;
+  resumedAt?: Date;
+  resumedBy?: string;
+}
+
+export function subscribeWhatsAppNotificationSettings(cb: (settings: WhatsAppNotificationSettings) => void) {
+  return onSnapshot(doc(db, 'notificationSettings', 'whatsapp'), (snapshot) => {
+    const data = snapshot.data();
+    cb({
+      paused: data?.paused === true,
+      pauseReason: data?.pauseReason || undefined,
+      pausedAt: data?.pausedAt ? firestoreTimestampToDate(data.pausedAt) : undefined,
+      pausedBy: data?.pausedBy || undefined,
+      resumedAt: data?.resumedAt ? firestoreTimestampToDate(data.resumedAt) : undefined,
+      resumedBy: data?.resumedBy || undefined,
+    });
+  });
+}
+
+export async function setWhatsAppPaused(paused: boolean, actorId: string, pauseReason?: string) {
+  await setDoc(doc(db, 'notificationSettings', 'whatsapp'), {
+    paused,
+    pauseReason: paused ? (pauseReason?.trim() || 'Paused by Owner') : null,
+    ...(paused
+      ? { pausedAt: serverTimestamp(), pausedBy: actorId }
+      : { resumedAt: serverTimestamp(), resumedBy: actorId }),
+    updatedAt: serverTimestamp(),
+    updatedBy: actorId,
+  }, { merge: true });
 }
 
 export type CostCategory = 'whatsapp' | 'sms' | 'firebase' | 'email' | 'ai_api'

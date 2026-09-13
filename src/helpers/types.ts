@@ -165,9 +165,10 @@ export interface SentMessage {
   volunteerId: string;
   channel: NotificationChannel;
   destination: string;
-  status: 'accepted' | 'sent' | 'delivered' | 'read' | 'failed';
+  status: 'accepted' | 'sent' | 'delivered' | 'read' | 'failed' | 'skipped';
   providerId?: string;
   failureReason?: string;
+  skipReason?: string;
   billingCategory?: 'utility' | 'marketing' | 'authentication' | 'service';
   estimatedCostUsd?: number;
   sentAt: Date;

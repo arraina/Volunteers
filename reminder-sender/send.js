@@ -31,11 +31,14 @@ async function main() {
     console.log('Email reminder channel is disabled because EMAIL_API_KEY and EMAIL_FROM are not configured.');
   }
 
-  const [tasksSnap, volunteersSnap, stoppedSeriesSnap] = await Promise.all([
+  const [tasksSnap, volunteersSnap, stoppedSeriesSnap, whatsappSettingsSnap] = await Promise.all([
     db.collection('tasks').get(),
     db.collection('volunteers').get(),
     db.collection('taskSeries').get(),
+    db.collection('notificationSettings').doc('whatsapp').get(),
   ]);
+  const whatsappPaused = whatsappSettingsSnap.exists && whatsappSettingsSnap.data().paused === true;
+  if (whatsappPaused) console.log('WhatsApp sending is globally paused by an Owner.');
   const stoppedSeries = new Set(stoppedSeriesSnap.docs.map((d) => d.id));
 
   const volunteers = new Map();
@@ -43,6 +46,7 @@ async function main() {
 
   let sentCount = 0;
   let failCount = 0;
+  let skippedCount = 0;
 
   for (const taskDoc of tasksSnap.docs) {
     const task = { id: taskDoc.id, ...taskDoc.data() };
@@ -99,9 +103,10 @@ async function main() {
 
         const whatsappEnabled = !volunteer.whatsappOptOutAt;
         if (whatsappEnabled && volunteer.phoneNumber) {
-          deliveries.push(
-            sendWhatsApp({ to: volunteer.phoneNumber, templateParams: params })
-              .then((result) => ({ channel: 'whatsapp', ...result }))
+          deliveries.push(whatsappPaused
+            ? Promise.resolve({ channel: 'whatsapp', ok: false, skipped: true, skipReason: 'WhatsApp globally paused by Owner' })
+            : sendWhatsApp({ to: volunteer.phoneNumber, templateParams: params })
+                .then((result) => ({ channel: 'whatsapp', ...result }))
           );
         }
         if (emailConfigured && prefs.email && volunteer.email) {
@@ -129,13 +134,15 @@ async function main() {
         // Record sent messages for the admin audit log.
         for (const r of results) {
           const providerAccepted = r.ok && r.channel === 'whatsapp';
+          const skipped = r.skipped === true;
           await db.collection('sentMessages').add({
             taskId: task.id,
             volunteerId,
             channel: r.channel,
-            status: r.ok ? (providerAccepted ? 'accepted' : 'sent') : 'failed',
+            status: skipped ? 'skipped' : r.ok ? (providerAccepted ? 'accepted' : 'sent') : 'failed',
             providerId: r.id || null,
-            failureReason: r.ok ? null : r.error || 'unknown',
+            failureReason: r.ok || skipped ? null : r.error || 'unknown',
+            skipReason: skipped ? r.skipReason : null,
             // Current direct-Meta North America utility estimate. Storing the
             // applied rate keeps historical monthly totals stable if rates change.
             billingCategory: r.channel === 'whatsapp' ? 'utility' : null,
@@ -144,6 +151,7 @@ async function main() {
             sentAt: admin.firestore.FieldValue.serverTimestamp(),
           });
           if (r.ok) sentCount += 1;
+          else if (skipped) skippedCount += 1;
           else failCount += 1;
         }
 
@@ -160,12 +168,12 @@ async function main() {
     }
   }
 
-  await sendPendingAnnouncements(db, messaging, volunteers, emailConfigured);
+  await sendPendingAnnouncements(db, messaging, volunteers, emailConfigured, whatsappPaused);
   const created = await topUpSeries(db, tasksSnap, now, stoppedSeries);
   const purged = await purgeExpiredTrash(db, tasksSnap, now);
 
   console.log(
-    `Done. Sent ${sentCount}, failed ${failCount}, generated ${created} new occurrence(s), purged ${purged} expired trash item(s).`
+    `Done. Sent ${sentCount}, skipped ${skippedCount}, failed ${failCount}, generated ${created} new occurrence(s), purged ${purged} expired trash item(s).`
   );
 }
 
@@ -265,7 +273,7 @@ async function purgeExpiredTrash(db, tasksSnap, now) {
   return expired.length;
 }
 
-async function sendPendingAnnouncements(db, messaging, volunteers, emailConfigured) {
+async function sendPendingAnnouncements(db, messaging, volunteers, emailConfigured, whatsappPaused) {
   const snap = await db.collection('announcements').where('delivered', '==', null).get().catch(() => null);
   // Announcements without a `delivered` field are treated as pending.
   const pending = [];
@@ -286,7 +294,7 @@ async function sendPendingAnnouncements(db, messaging, volunteers, emailConfigur
 
     for (const v of recipients) {
       const prefs = v.notificationPrefs || { whatsapp: true, email: true, push: false };
-      if (channels.includes('whatsapp') && !v.whatsappOptOutAt && v.phoneNumber) {
+      if (!whatsappPaused && channels.includes('whatsapp') && !v.whatsappOptOutAt && v.phoneNumber) {
         await sendWhatsApp({
           to: v.phoneNumber,
           templateParams: [v.firstName || v.name || 'Volunteer', ann.title, ann.body, 'the temple'],

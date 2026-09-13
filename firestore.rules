@@ -233,6 +233,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /notificationSettings/{id} {
+      allow read: if isAdmin();
+      allow create, update: if isOwner();
+      allow delete: if false;
+    }
+
     // Itemized operating expenses. Admins may record/edit/soft-delete costs;
     // restoration and permanent deletion follow the Owner-only Trash workflow.
     match /costEntries/{id} {

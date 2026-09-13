@@ -69,6 +69,9 @@ import {
   subscribeAdmins,
   updateVolunteer,
   saveAppValueReport,
+  setWhatsAppPaused,
+  subscribeWhatsAppNotificationSettings,
+  WhatsAppNotificationSettings,
   DEFAULT_HORIZON_WEEKS,
 } from '../helpers/store';
 import { HourLog } from '../helpers/types';
@@ -194,6 +197,7 @@ const AdminDashboard: React.FC = () => {
   const [events, setEvents] = useState<TempleEvent[]>([]);
   const [deletedTasks, setDeletedTasks] = useState<VolunteerTask[]>([]);
   const [deletedRecords, setDeletedRecords] = useState<TrashRecord[]>([]);
+  const [whatsappSettings, setWhatsappSettings] = useState<WhatsAppNotificationSettings>({ paused: false });
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -202,12 +206,14 @@ const AdminDashboard: React.FC = () => {
     const unsubEvents = subscribeEvents(setEvents);
     const unsubTrash = subscribeDeletedTasks(setDeletedTasks);
     const unsubRecordTrash = subscribeDeletedRecords(setDeletedRecords);
+    const unsubWhatsappSettings = subscribeWhatsAppNotificationSettings(setWhatsappSettings);
     return () => {
       unsubTasks();
       unsubVols();
       unsubEvents();
       unsubTrash();
       unsubRecordTrash();
+      unsubWhatsappSettings();
     };
   }, []);
 
@@ -278,6 +284,10 @@ const AdminDashboard: React.FC = () => {
       </nav>
 
       <div className="dashboard-content">
+        {whatsappSettings.paused && <div className="whatsapp-paused-banner" role="alert">
+          <strong>WhatsApp sending is paused.</strong> Scheduled reminders and WhatsApp announcements will not be sent.
+          {whatsappSettings.pauseReason && <> Reason: {whatsappSettings.pauseReason}.</>}
+        </div>}
         {error && <div className="error-message">{error}</div>}
         {tab === 'tasks' && (
           <TasksTab
@@ -305,7 +315,7 @@ const AdminDashboard: React.FC = () => {
         )}
         {tab === 'history' && <HistoryTab volunteers={volunteers} setError={setError} />}
         {tab === 'reports' && <ReportsTab volunteers={volunteers} tasks={tasks} events={events} />}
-        {tab === 'costs' && <CostTab events={events} uid={user?.uid} />}
+        {tab === 'costs' && <CostTab events={events} uid={user?.uid} isOwner={isOwner} whatsappSettings={whatsappSettings} />}
         {tab === 'trash' && <TrashTab tasks={deletedTasks} records={deletedRecords} isOwner={isOwner} setError={setError} />}
         {tab === 'admins' && isOwner && <AdminManagementTab ownerUid={user?.uid || ''} volunteers={volunteers} setError={setError} />}
         {tab === 'audit' && isOwner && <AuditTab />}
@@ -1677,7 +1687,7 @@ const AppValueTab: React.FC<{ volunteers: VolunteerProfile[] }> = ({ volunteers 
       ? ['delivered', 'read'].includes(message.status)
       : message.status === 'sent').length;
     const failed = monthMessages.filter((message) => message.status === 'failed').length;
-    const whatsappCost = monthMessages.filter((message) => message.channel === 'whatsapp' && message.status !== 'failed')
+    const whatsappCost = monthMessages.filter((message) => message.channel === 'whatsapp' && !['failed', 'skipped'].includes(message.status))
       .reduce((sum, message) => sum + (message.estimatedCostUsd ?? NORTH_AMERICA_UTILITY_RATE_USD), 0);
     const volunteerHours = monthLogs.reduce((sum, log) => sum + (log.hours || 0), 0);
     const adminHoursSaved = delivered * minutesPerReminder / 60;
@@ -1872,12 +1882,13 @@ const costDateTimeNow = () => {
 };
 type DisplayCost = CostEntry & { automatic?: boolean };
 
-const CostTab: React.FC<{ events: TempleEvent[]; uid?: string }> = ({ events, uid }) => {
+const CostTab: React.FC<{ events: TempleEvent[]; uid?: string; isOwner: boolean; whatsappSettings: WhatsAppNotificationSettings }> = ({ events, uid, isOwner, whatsappSettings }) => {
   const [messages, setMessages] = useState<SentMessage[]>([]);
   const [entries, setEntries] = useState<CostEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [updatingWhatsapp, setUpdatingWhatsapp] = useState(false);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<'all' | CostCategory>('all');
   const [period, setPeriod] = useState<'today' | '7' | '30' | 'month' | 'all'>('month');
@@ -1894,7 +1905,7 @@ const CostTab: React.FC<{ events: TempleEvent[]; uid?: string }> = ({ events, ui
   }, []);
 
   const costs = useMemo<DisplayCost[]>(() => [...entries, ...messages
-    .filter((message) => message.channel === 'whatsapp' && message.status !== 'failed')
+    .filter((message) => message.channel === 'whatsapp' && !['failed', 'skipped'].includes(message.status))
     .map((message) => ({ id: `message-${message.id}`, category: 'whatsapp' as CostCategory,
       description: 'WhatsApp reminder', amountUsd: message.estimatedCostUsd ?? NORTH_AMERICA_UTILITY_RATE_USD,
       incurredAt: message.sentAt, vendor: 'Meta', status: 'estimated' as const, recurring: false,
@@ -1962,12 +1973,40 @@ const CostTab: React.FC<{ events: TempleEvent[]; uid?: string }> = ({ events, ui
     finally { setSaving(false); }
   };
 
+  const toggleWhatsAppSending = async () => {
+    if (!uid || !isOwner) return;
+    if (whatsappSettings.paused) {
+      if (!window.confirm('Resume all scheduled WhatsApp reminders and announcements?')) return;
+      setUpdatingWhatsapp(true); setLoadError('');
+      try { await setWhatsAppPaused(false, uid); }
+      catch (error) { setLoadError(error instanceof Error ? error.message : 'Could not resume WhatsApp sending.'); }
+      finally { setUpdatingWhatsapp(false); }
+      return;
+    }
+    if (!window.confirm('Pause ALL WhatsApp reminders and announcements? Due reminders will be recorded as skipped and will not be sent later.')) return;
+    const reason = window.prompt('Optional: enter the reason for pausing WhatsApp sending.', 'Emergency stop by Owner');
+    if (reason === null) return;
+    setUpdatingWhatsapp(true); setLoadError('');
+    try { await setWhatsAppPaused(true, uid, reason); }
+    catch (error) { setLoadError(error instanceof Error ? error.message : 'Could not pause WhatsApp sending.'); }
+    finally { setUpdatingWhatsapp(false); }
+  };
+
   return <div className="analytics-dashboard">
     <div className="panel-head analytics-heading">
       <div><h2>Operating costs</h2><p className="muted small">Track communication, technology, event, supply, and reimbursement costs when incurred.</p></div>
       <button className="secondary-btn" disabled={filtered.length === 0} onClick={exportCsv}>Export filtered CSV</button>
     </div>
     {loadError && <div className="error-message">{loadError}</div>}
+    <section className={`panel whatsapp-control ${whatsappSettings.paused ? 'is-paused' : ''}`}>
+      <div><h2>WhatsApp sending control</h2>
+        <p className="muted small">Status: <strong>{whatsappSettings.paused ? 'PAUSED' : 'ACTIVE'}</strong>. Applies to scheduled reminders and WhatsApp announcements.</p>
+        {whatsappSettings.pausedAt && <p className="muted small">Paused {whatsappSettings.pausedAt.toLocaleString()}{whatsappSettings.pauseReason ? ` — ${whatsappSettings.pauseReason}` : ''}</p>}
+      </div>
+      {isOwner
+        ? <button className={whatsappSettings.paused ? 'primary-btn' : 'danger-btn'} disabled={updatingWhatsapp} onClick={toggleWhatsAppSending}>{updatingWhatsapp ? 'Updating…' : whatsappSettings.paused ? 'Resume WhatsApp sending' : 'Pause WhatsApp sending'}</button>
+        : <span className="muted small">Only an Owner can change this setting.</span>}
+    </section>
     <div className="stat-grid">
       <div className="stat-card"><span className="stat-num">{money(todayTotal)}</span><span className="stat-label">Cost today</span></div>
       <div className="stat-card"><span className="stat-num">{money(current.total)}</span><span className="stat-label">Month to date</span></div>
@@ -2137,14 +2176,15 @@ const ReportsTab: React.FC<{
 
   const channelRows = (['whatsapp', 'email', 'push'] as NotificationChannel[]).map((channel) => {
     const records = scopedMessages.filter((message) => message.channel === channel);
-    const accepted = records.filter((message) => message.status !== 'failed').length;
+    const accepted = records.filter((message) => !['failed', 'skipped'].includes(message.status)).length;
     const sent = records.filter((message) => ['sent', 'delivered', 'read'].includes(message.status)).length;
     const delivered = channel === 'whatsapp'
       ? records.filter((message) => ['delivered', 'read'].includes(message.status)).length
       : sent;
     const read = records.filter((message) => message.status === 'read').length;
     const failed = records.filter((message) => message.status === 'failed').length;
-    return { channel, attempted: records.length, accepted, sent, delivered, read, failed };
+    const skipped = records.filter((message) => message.status === 'skipped').length;
+    return { channel, attempted: records.length - skipped, accepted, sent, delivered, read, failed, skipped };
   }).filter((row) => channelFilter === 'all' || row.channel === channelFilter);
 
   const assignmentCount = new Map<string, number>();
@@ -2255,8 +2295,8 @@ const ReportsTab: React.FC<{
         <section className="panel">
           <h2>Reminder health</h2>
           {scopedMessages.length === 0 && <p className="muted">No reminder delivery records match the selected scope.</p>}
-          <table className="report-table"><thead><tr><th>Channel</th><th>Attempted</th><th>Accepted</th><th>Sent</th><th>Delivered</th><th>Read</th><th>Failed</th><th>Delivery</th><th>Read rate</th></tr></thead>
-            <tbody>{channelRows.map((row) => <tr key={row.channel}><td>{row.channel}</td><td>{row.attempted}</td><td>{row.accepted}</td><td>{row.sent}</td><td>{row.delivered}</td><td>{row.read}</td><td>{row.failed}</td><td>{row.sent ? `${Math.round(row.delivered / row.sent * 100)}%` : '—'}</td><td>{row.delivered ? `${Math.round(row.read / row.delivered * 100)}%` : '—'}</td></tr>)}</tbody>
+          <table className="report-table"><thead><tr><th>Channel</th><th>Attempted</th><th>Accepted</th><th>Sent</th><th>Delivered</th><th>Read</th><th>Failed</th><th>Skipped</th><th>Delivery</th><th>Read rate</th></tr></thead>
+            <tbody>{channelRows.map((row) => <tr key={row.channel}><td>{row.channel}</td><td>{row.attempted}</td><td>{row.accepted}</td><td>{row.sent}</td><td>{row.delivered}</td><td>{row.read}</td><td>{row.failed}</td><td>{row.skipped}</td><td>{row.sent ? `${Math.round(row.delivered / row.sent * 100)}%` : '—'}</td><td>{row.delivered ? `${Math.round(row.read / row.delivered * 100)}%` : '—'}</td></tr>)}</tbody>
           </table>
           {scopedMessages.some((message) => message.channel === 'whatsapp') && <>
             <h3>Recent WhatsApp lifecycle</h3>
@@ -2269,7 +2309,7 @@ const ReportsTab: React.FC<{
                 <td>{['sent', 'delivered', 'read'].includes(message.status) ? 'Confirmed' : '—'}</td>
                 <td>{message.deliveredAt?.toLocaleString() || '—'}</td>
                 <td>{message.readAt?.toLocaleString() || '—'}</td>
-                <td>{message.failureReason ? `${message.failureCode ? `${message.failureCode}: ` : ''}${message.failureReason}` : '—'}</td>
+                <td>{message.skipReason || (message.failureReason ? `${message.failureCode ? `${message.failureCode}: ` : ''}${message.failureReason}` : '—')}</td>
               </tr>)}</tbody>
             </table></div>
           </>}

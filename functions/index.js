@@ -140,14 +140,14 @@ exports.deleteVolunteerAccount = onCall({ region: 'us-central1', maxInstances: 2
 const AUDITED_COLLECTIONS = new Set([
   'admins', 'announcements', 'appValueReports', 'eventActionItems',
   'costEntries', 'eventFeedback', 'eventMeetings', 'events', 'eventTemplates', 'hourLogs',
-  'reminders', 'sentMessages', 'tasks', 'taskSeries', 'volunteers',
+  'notificationSettings', 'reminders', 'sentMessages', 'tasks', 'taskSeries', 'volunteers',
 ]);
 
 const CATEGORY_BY_COLLECTION = {
   admins: 'Administration', announcements: 'Communications', appValueReports: 'Reporting', costEntries: 'Costs',
   eventActionItems: 'Event planning', eventFeedback: 'Feedback', eventMeetings: 'Event planning',
   events: 'Events', eventTemplates: 'Event planning', hourLogs: 'Service hours',
-  reminders: 'Notifications', sentMessages: 'Notifications', tasks: 'Tasks',
+  notificationSettings: 'Notifications', reminders: 'Notifications', sentMessages: 'Notifications', tasks: 'Tasks',
   taskSeries: 'Tasks', volunteers: 'Volunteers',
 };
 
@@ -155,7 +155,7 @@ const TYPE_BY_COLLECTION = {
   admins: 'administrator', announcements: 'announcement', appValueReports: 'value report', costEntries: 'cost entry',
   eventActionItems: 'action item', eventFeedback: 'feedback', eventMeetings: 'meeting',
   events: 'event', eventTemplates: 'event template', hourLogs: 'hour log',
-  reminders: 'reminder', sentMessages: 'message', tasks: 'task',
+  notificationSettings: 'notification setting', reminders: 'reminder', sentMessages: 'message', tasks: 'task',
   taskSeries: 'task series', volunteers: 'volunteer',
 };
 
@@ -189,6 +189,11 @@ function describeActivity(collectionId, before, after) {
   if (collectionId === 'hourLogs' && !before.checkOut && after.checkOut) return { action: 'hours.checked_out', verb: 'Recorded checkout for' };
   if (collectionId === 'events' && JSON.stringify(before.planningDoc) !== JSON.stringify(after.planningDoc)) return { action: 'event.plan_updated', verb: 'Updated planning document for' };
   if (collectionId === 'sentMessages') return { action: 'notification.status_updated', verb: 'Updated notification delivery for' };
+  if (collectionId === 'notificationSettings' && before?.paused !== after?.paused) {
+    return after.paused
+      ? { action: 'whatsapp.paused', verb: 'Paused' }
+      : { action: 'whatsapp.resumed', verb: 'Resumed' };
+  }
   return { action: `${type}.updated`, verb: 'Updated' };
 }
 
