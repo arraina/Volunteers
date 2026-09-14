@@ -343,6 +343,7 @@ const TasksTab: React.FC<{
   const [taskSearch, setTaskSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
   const [eventFilter, setEventFilter] = useState('all');
+  const [creatorFilter, setCreatorFilter] = useState<'all' | 'mine'>('all');
   const [taskSort, setTaskSort] = useState<'soonest' | 'latest' | 'title'>('soonest');
   const [undoBatchId, setUndoBatchId] = useState('');
 
@@ -360,14 +361,15 @@ const TasksTab: React.FC<{
       const matchesStatus = statusFilter === 'all' || effectiveTaskStatus(task) === statusFilter;
       const matchesEvent = eventFilter === 'all'
         || (eventFilter === '__none__' ? !task.eventId : task.eventId === eventFilter);
-      return matchesSearch && matchesStatus && matchesEvent;
+      const matchesCreator = creatorFilter === 'all' || Boolean(uid && task.createdBy === uid);
+      return matchesSearch && matchesStatus && matchesEvent && matchesCreator;
     });
     return result.sort((a, b) => {
       if (taskSort === 'title') return a.title.localeCompare(b.title);
       const delta = a.startDateTime.getTime() - b.startDateTime.getTime();
       return taskSort === 'latest' ? -delta : delta;
     });
-  }, [tasks, taskSearch, statusFilter, eventFilter, taskSort]);
+  }, [tasks, taskSearch, statusFilter, eventFilter, creatorFilter, taskSort, uid]);
 
   const taskStats = useMemo(() => ({
     total: tasks.length,
@@ -604,11 +606,12 @@ const TasksTab: React.FC<{
             <h2>Tasks</h2>
             <p className="muted small">{filteredTasks.length} of {tasks.length} occurrences shown</p>
           </div>
-          {(taskSearch || statusFilter !== 'all' || eventFilter !== 'all') && (
+          {(taskSearch || statusFilter !== 'all' || eventFilter !== 'all' || creatorFilter !== 'all') && (
             <button className="link-btn" onClick={() => {
               setTaskSearch('');
               setStatusFilter('all');
               setEventFilter('all');
+              setCreatorFilter('all');
             }}>Clear filters</button>
           )}
         </div>
@@ -630,6 +633,13 @@ const TasksTab: React.FC<{
               <option value="all">All events</option>
               <option value="__none__">Standalone</option>
               {events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Created by</span>
+            <select value={creatorFilter} onChange={(e) => setCreatorFilter(e.target.value as typeof creatorFilter)}>
+              <option value="all">All admins</option>
+              <option value="mine">Created by me</option>
             </select>
           </label>
           <label>

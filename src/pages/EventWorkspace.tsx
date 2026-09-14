@@ -94,6 +94,7 @@ const toDateTimeInput = (date?: Date) => {
 
 const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
   const [eventId, setEventId] = useState(events[0]?.id || '');
+  const [creatorFilter, setCreatorFilter] = useState<'all' | 'mine'>('all');
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
   const [templates, setTemplates] = useState<EventTemplate[]>([]);
@@ -110,9 +111,14 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
   const [actionFilter, setActionFilter] = useState<'active' | 'all' | ActionStatus>('active');
   const [actionSearch, setActionSearch] = useState('');
 
+  const visibleEvents = useMemo(
+    () => events.filter((item) => creatorFilter === 'all' || Boolean(uid && item.createdBy === uid)),
+    [events, creatorFilter, uid]
+  );
+
   useEffect(() => {
-    if (!eventId && events[0]) setEventId(events[0].id);
-  }, [events, eventId]);
+    if (!visibleEvents.some((item) => item.id === eventId)) setEventId(visibleEvents[0]?.id || '');
+  }, [visibleEvents, eventId]);
 
   const event = events.find((item) => item.id === eventId);
   const eventTasks = useMemo(() => tasks.filter((task) => task.eventId === eventId), [tasks, eventId]);
@@ -355,10 +361,20 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
   return <div className="stacked-form">
     <section className="panel">
       <h2>Event Workspace</h2>
+      <label>
+        <span>Created by</span>
+        <select value={creatorFilter} onChange={(e) => setCreatorFilter(e.target.value as typeof creatorFilter)}>
+          <option value="all">All admins</option>
+          <option value="mine">Created by me</option>
+        </select>
+      </label>
       <select value={eventId} onChange={(e) => setEventId(e.target.value)}>
         <option value="">Select an event</option>
-        {events.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        {visibleEvents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select>
+      {creatorFilter === 'mine' && visibleEvents.length === 0 && (
+        <p className="muted small">You have not created any events yet.</p>
+      )}
       {event && <div className="row">
         <button className="secondary-btn" onClick={exportCalendar}>Download calendar (.ics)</button>
         <button className="secondary-btn" onClick={saveTemplate} disabled={!eventTasks.length}>Save as template</button>
