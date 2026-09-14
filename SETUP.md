@@ -65,6 +65,14 @@ You send directly through Meta using the same number your WhatsApp CRM uses.
   > Hi {{1}}, reminder: {{2}} on {{3}} at {{4}}.
 - Note its **name** and **language code** (e.g. `en_US`).
 
+**Create the daily limit alert template**
+- Create and approve the Utility template `daily_whatsapp_limit_alert` in the
+  same language as the reminder template.
+- Its body must contain two variables in this order: `{{1}}` current messages
+  used today and `{{2}}` the daily limit.
+- The sender delivers it once per Eastern Time day to the configured Owner
+  number when usage reaches 50 of 100 messages.
+
 ## 5. Email reminders (Resend free tier — optional)
 
 1. Create an account at <https://resend.com>, verify a sender domain/address.

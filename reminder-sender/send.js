@@ -10,11 +10,63 @@ const toDate = (ts) => (ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null);
 
 // A reminder is "due" when now is within a send window after its computed time.
 // We look back this far so a task that came due while the job was idle still fires.
-// Recover a reminder if an hourly GitHub schedule is moderately delayed.
+// Recover a reminder if the hourly Google Cloud schedule is moderately delayed.
 // The remindersSent marker still guarantees each reminder is processed once.
 const LOOKBACK_MS = 2 * 60 * 60 * 1000; // 2 hours
 const DAILY_WHATSAPP_LIMIT = 100;
+const DAILY_WHATSAPP_ALERT_THRESHOLD = 50;
+const DAILY_WHATSAPP_ALERT_RECIPIENT = '15184959439';
+const DAILY_WHATSAPP_ALERT_TEMPLATE = 'daily_whatsapp_limit_alert';
 const MIN_REMINDER_SPACING_HOURS = 24;
+
+function easternDayKey(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date);
+  const part = (type) => parts.find((item) => item.type === type)?.value || '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+async function sendDailyLimitAlertIfNeeded(db, count, now, whatsappPaused) {
+  if (whatsappPaused || count < DAILY_WHATSAPP_ALERT_THRESHOLD || count >= DAILY_WHATSAPP_LIMIT) {
+    return { count, sent: 0, failed: 0 };
+  }
+  const markerRef = db.collection('notificationAlerts').doc(`whatsapp-daily-limit-${easternDayKey(now)}`);
+  if ((await markerRef.get()).exists) return { count, sent: 0, failed: 0 };
+
+  const result = await sendWhatsApp({
+    to: DAILY_WHATSAPP_ALERT_RECIPIENT,
+    templateName: DAILY_WHATSAPP_ALERT_TEMPLATE,
+    templateParams: [String(count), String(DAILY_WHATSAPP_LIMIT)],
+  });
+  await db.collection('sentMessages').add({
+    channel: 'whatsapp',
+    notificationType: 'daily_limit_alert',
+    volunteerId: 'owner-alert',
+    destination: DAILY_WHATSAPP_ALERT_RECIPIENT,
+    status: result.ok ? 'accepted' : 'failed',
+    providerId: result.id || null,
+    failureReason: result.ok ? null : result.error || 'unknown',
+    billingCategory: 'utility',
+    estimatedCostUsd: result.ok ? 0.0034 : 0,
+    ...(result.ok ? { acceptedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
+    sentAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  await markerRef.set({
+    attemptedAt: admin.firestore.FieldValue.serverTimestamp(),
+    usageAtAlert: count,
+    dailyLimit: DAILY_WHATSAPP_LIMIT,
+    status: result.ok ? 'accepted' : 'failed',
+    providerId: result.id || null,
+    failureReason: result.ok ? null : result.error || 'unknown',
+  });
+  if (!result.ok) {
+    console.error(`Daily WhatsApp limit alert failed: ${result.error || 'unknown'}`);
+    return { count, sent: 0, failed: 1 };
+  }
+  console.log(`Daily WhatsApp limit alert sent at ${count}/${DAILY_WHATSAPP_LIMIT}.`);
+  return { count: count + 1, sent: 1, failed: 0 };
+}
 
 function easternDayStart(date) {
   const parts = new Intl.DateTimeFormat('en-US', {
@@ -75,6 +127,10 @@ async function runReminderSender() {
   let sentCount = 0;
   let failCount = 0;
   let skippedCount = 0;
+  const initialAlert = await sendDailyLimitAlertIfNeeded(db, whatsappSentToday, now, whatsappPaused);
+  whatsappSentToday = initialAlert.count;
+  sentCount += initialAlert.sent;
+  failCount += initialAlert.failed;
 
   for (const taskDoc of tasksSnap.docs) {
     const task = { id: taskDoc.id, ...taskDoc.data() };
@@ -173,7 +229,13 @@ async function runReminderSender() {
           });
           if (r.ok) {
             sentCount += 1;
-            if (r.channel === 'whatsapp') whatsappSentToday += 1;
+            if (r.channel === 'whatsapp') {
+              whatsappSentToday += 1;
+              const alert = await sendDailyLimitAlertIfNeeded(db, whatsappSentToday, now, whatsappPaused);
+              whatsappSentToday = alert.count;
+              sentCount += alert.sent;
+              failCount += alert.failed;
+            }
           }
           else if (skipped) skippedCount += 1;
           else failCount += 1;
@@ -344,7 +406,14 @@ async function sendPendingAnnouncements(db, volunteers, emailConfigured, whatsap
           ...(result.ok ? { acceptedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
           sentAt: admin.firestore.FieldValue.serverTimestamp(),
         });
-        if (result.ok) { whatsappSentToday += 1; counts.sent += 1; }
+        if (result.ok) {
+          whatsappSentToday += 1;
+          counts.sent += 1;
+          const alert = await sendDailyLimitAlertIfNeeded(db, whatsappSentToday, new Date(), whatsappPaused);
+          whatsappSentToday = alert.count;
+          counts.sent += alert.sent;
+          counts.failed += alert.failed;
+        }
         else if (result.skipped) counts.skipped += 1;
         else counts.failed += 1;
       }

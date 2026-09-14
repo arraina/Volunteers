@@ -10,11 +10,11 @@ const GRAPH_VERSION = 'v21.0';
  * Automated (business-initiated) reminders MUST use an approved template.
  * Body variable count must match your approved template's {{1}}..{{n}}.
  */
-async function sendWhatsApp({ to, templateParams }) {
+async function sendWhatsApp({ to, templateParams, templateName: templateNameOverride, templateLang }) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const templateName = process.env.WHATSAPP_TEMPLATE_NAME;
-  const lang = process.env.WHATSAPP_TEMPLATE_LANG || 'en_US';
+  const templateName = templateNameOverride || process.env.WHATSAPP_TEMPLATE_NAME;
+  const lang = templateLang || process.env.WHATSAPP_TEMPLATE_LANG || 'en_US';
 
   if (!token || !phoneNumberId || !templateName) {
     return { ok: false, error: 'WhatsApp env not configured' };
