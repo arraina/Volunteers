@@ -202,6 +202,12 @@ const AdminDashboard: React.FC = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!isOwner && (tab === 'announcements' || tab === 'history' || tab === 'reports')) {
+      setTab('tasks');
+    }
+  }, [isOwner, tab]);
+
+  useEffect(() => {
     const unsubTasks = subscribeTasks(setTasks);
     const unsubVols = subscribeVolunteers(setVolunteers);
     const unsubEvents = subscribeEvents(setEvents);
@@ -254,18 +260,18 @@ const AdminDashboard: React.FC = () => {
         >
           Volunteers
         </button>
-        <button
+        {isOwner && <button
           className={tab === 'announcements' ? 'active' : ''}
           onClick={() => setTab('announcements')}
         >
           Announcements
-        </button>
-        <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
+        </button>}
+        {isOwner && <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
           History
-        </button>
-        <button className={tab === 'reports' ? 'active' : ''} onClick={() => setTab('reports')}>
+        </button>}
+        {isOwner && <button className={tab === 'reports' ? 'active' : ''} onClick={() => setTab('reports')}>
           Analytics
-        </button>
+        </button>}
         <button className={tab === 'costs' ? 'active' : ''} onClick={() => setTab('costs')}>
           Costs
         </button>
@@ -311,11 +317,11 @@ const AdminDashboard: React.FC = () => {
         )}
         {tab === 'events' && <EventWorkspace uid={user?.uid} events={events} tasks={tasks} setError={setError} />}
         {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} uid={user?.uid} setError={setError} />}
-        {tab === 'announcements' && (
+        {tab === 'announcements' && isOwner && (
           <AnnouncementsTab uid={user?.uid} setError={setError} />
         )}
-        {tab === 'history' && <HistoryTab volunteers={volunteers} setError={setError} />}
-        {tab === 'reports' && <ReportsTab volunteers={volunteers} tasks={tasks} events={events} />}
+        {tab === 'history' && isOwner && <HistoryTab volunteers={volunteers} setError={setError} />}
+        {tab === 'reports' && isOwner && <ReportsTab volunteers={volunteers} tasks={tasks} events={events} />}
         {tab === 'costs' && <CostTab events={events} uid={user?.uid} isOwner={isOwner} whatsappSettings={whatsappSettings} />}
         {tab === 'trash' && <TrashTab tasks={deletedTasks} records={deletedRecords} isOwner={isOwner} setError={setError} />}
         {tab === 'admins' && isOwner && <AdminManagementTab ownerUid={user?.uid || ''} volunteers={volunteers} setError={setError} />}
