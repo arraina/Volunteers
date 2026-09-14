@@ -1320,9 +1320,6 @@ const VolunteersTab: React.FC<{
             onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
             required
           />
-          <p className="muted small">
-            WhatsApp reminders are enabled by default. The volunteer can disable them later from My Profile.
-          </p>
           <button type="submit" className="primary-btn">
             Add Volunteer &amp; Send Invitation
           </button>
