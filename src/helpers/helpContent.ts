@@ -31,7 +31,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: '1. Confirm access', text: 'Sign in with a verified email. The header should say Admin or Owner. If you still see the Volunteer dashboard, ask the Owner to verify your Admin access.' },
       { heading: '2. Review volunteers', text: 'Open Volunteers. Search existing records before adding anyone to avoid duplicate logins. Confirm name, email, international phone number, active status, and WhatsApp consent.' },
       { heading: '3. Create the event first', text: 'For an organized program, open Event Workspace and create the event with its correct name, date, and description. Standalone operational tasks can be created without an event.' },
-      { heading: '4. Create tasks', text: 'Open Tasks, enter the title and start time, then add end time, location, volunteers needed, signup setting, recurrence, and reminder hours. Link the task to the event when applicable.' },
+      { heading: '4. Create tasks', text: 'Open Tasks, enter the title and Eastern Time (ET) start time, then add end time, location, volunteers needed, recurrence, and reminder hours. Every task is available for volunteer self-signup until full. Link the task to the event when applicable.' },
       { heading: '5. Check every occurrence', text: 'For recurring work, expand the series and verify the generated dates. Each occurrence has its own assignments and capacity.' },
       { heading: '6. Fill coverage gaps', text: 'Assign eligible volunteers from the dropdown or allow self-signup. Watch Open and Need people counts. The assignment control closes automatically when capacity is reached.' },
       { heading: '7. Verify communications', text: 'Before relying on reminders, confirm the volunteer has valid contact information and enabled channels. Review message history for provider or delivery failures.' },
@@ -47,6 +47,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: '3. Explain the boundary', text: 'Admins perform daily operations and can move tasks to Trash. Only the Owner manages Admin access, restores trashed tasks, and permanently deletes tasks.' },
       { heading: '4. Review access regularly', text: 'Periodically open Admin Management and remove Admin access when a coordinator no longer needs it. Their volunteer profile, assignments, and service history remain.' },
       { heading: '5. Protect recovery', text: 'Review Trash before its 30-day cleanup. Restore mistakes and use Delete permanently only when certain the task record is no longer needed.' },
+      { heading: '6. Control WhatsApp safely', text: 'Use the Owner WhatsApp emergency stop if messages must stop immediately. The app also limits WhatsApp to 100 messages per Eastern Time day and sends a warning at 50. Resume only after the issue is understood.' },
     ], keywords: ['new owner', 'owner setup', 'quick start', 'admin access', 'security checklist'],
   },
   {
@@ -73,6 +74,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: 'How to cancel and reopen', text: 'Find the dated task and choose Cancel task. For a recurring series, choose whether it applies once or to future dates. Choose Reopen on a cancelled task to reverse the action.' },
       { heading: 'How to delete safely', text: 'Choose Move to Trash, select one or future dates for a recurring task, and confirm. Regular Admins then ask the Owner if restoration is needed. Do not use cancellation merely to hide incorrect test data.' },
       { heading: 'How to send an announcement', text: 'Open Announcements, choose the intended audience and channels, write a clear message, verify recipients, and submit. Check delivery history afterward; external provider acceptance is separate from saving the announcement.' },
+      { heading: 'How to focus on your work', text: 'Tasks and Event Workspace default to Created by me, using the signed-in Admin account. Switch Created by to All admins when collaborating on another coordinator’s records. Older records without creator information appear only in All admins.' },
     ], keywords: ['how to admin', 'add volunteer', 'resend', 'assign', 'capacity', 'cancel', 'delete', 'announcement'],
   },
   {
@@ -91,7 +93,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'troubleshooting', title: 'How to troubleshoot common problems', category: 'How To', roles: ['everyone'],
     summary: 'Fast checks for missing tasks, assignments, messages, verification codes, and access.',
     sections: [
-      { heading: 'A task is missing', text: 'Clear search and filters, verify the date range and event, and check whether the task is completed, cancelled, or in Trash. Volunteers only see eligible open tasks and their own assignments.' },
+      { heading: 'A task is missing', text: 'Admins should switch Created by from Created by me to All admins, then clear the other filters and check whether the task is completed, cancelled, or in Trash. Volunteers only see eligible open tasks and their own assignments.' },
       { heading: 'An assignment did not save', text: 'Confirm the task still has an open place, the volunteer is active with WhatsApp and a phone, and the person is not already assigned. Retry once and copy any error message for the Owner.' },
       { heading: 'A reminder did not arrive', text: 'Confirm assignment, task time, reminder schedule, channel preference, and valid contact details. Admins should check message history and the email or WhatsApp provider status. Never assume a saved reminder means the provider delivered it.' },
       { heading: 'An SMS code did not arrive', text: 'Check country code and phone digits, wait before retrying, and confirm Firebase Phone Authentication, authorized domain, quota, and billing configuration. Do not repeatedly request codes because Firebase limits verification traffic.' },
@@ -124,6 +126,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: 'Profile information', text: 'My Profile stores name, email, phone, typical available days, and reminder channels. Save changes after editing. Email is tied to the login account and is displayed as read-only to volunteers.' },
       { heading: 'Available days', text: 'Available days help coordinators understand when a volunteer usually prefers to serve. They do not automatically assign or block tasks. No selection means no usual-day preference was provided; the volunteer can still sign up or be assigned.' },
       { heading: 'WhatsApp requirement', text: 'WhatsApp reminders are enabled by default for active volunteers. Turning WhatsApp off displays a warning and makes the profile inactive, preventing new assignments and service notifications while preserving history.' },
+      { heading: 'Temple reminder number', text: 'Automatic reminders come from the temple WhatsApp number +1 (973) 299-0970. Add it to your contacts. It is an automated sender and replies are not monitored.' },
     ], keywords: ['profile', 'availability', 'available days', 'whatsapp', 'email', 'inactive'],
   },
   {
@@ -171,7 +174,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'admin-tasks', title: 'Creating tasks and recurring schedules', category: 'Administration', roles: ['admin', 'owner'],
     summary: 'Create standalone or event tasks, set capacity, recurrence, signup, and reminder timing.',
     sections: [
-      { heading: 'Create a task', text: 'Provide a title and start date/time. Optionally add an event, description, end time, location, volunteer count, recurrence, signup permission, and comma-separated reminder hours such as 48, 24, 2.' },
+      { heading: 'Create a task', text: 'Provide a title and Eastern Time (ET) start date/time. Optionally add an event, description, end time, location, volunteer count, recurrence, and up to two comma-separated reminder hours, such as 48, 24. Reminder times must be at least 24 hours apart. Every task is open for volunteer self-signup until full.' },
       { heading: 'Recurring tasks', text: 'Daily, weekly, and monthly schedules generate dated occurrences ahead of time. Each occurrence can have different assigned volunteers. Choose whether an edit, cancellation, or Trash action affects one date or that date and future occurrences.' },
       { heading: 'Assignments', text: 'Select an eligible volunteer from the occurrence dropdown. Names appear immediately after a successful save. Remove someone to reopen capacity.' },
       { heading: 'Manual editing', text: 'Choose Edit Task on a dated occurrence to update its details without AI. For a recurring series, apply the changes only to that occurrence or to that date and all future occurrences.' },
@@ -181,17 +184,19 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'reminders', title: 'Automatic reminders and delivery channels', category: 'Notifications', roles: ['everyone'],
     summary: 'When reminders run and what is required for email and WhatsApp.',
     sections: [
-      { heading: 'Timing', text: 'Each task stores reminder hours before its start. The scheduled reminder service checks upcoming assigned tasks, sends each configured reminder once, and records delivery results for administrators.' },
+      { heading: 'Timing', text: 'Each task can store up to two reminder times, expressed as hours before its Eastern Time (ET) start and at least 24 hours apart. Google Cloud Scheduler runs the sender hourly at 7 minutes past the hour. A two-hour recovery window catches slightly delayed runs, and duplicate protection sends each configured reminder only once.' },
       { heading: 'Eligibility', text: 'Cancelled, completed, and trashed tasks do not generate reminders. A volunteer must be assigned and have the relevant channel enabled with valid contact information.' },
       { heading: 'Channels', text: 'Email requires the configured email provider. WhatsApp requires a working WhatsApp Business account, sender number, access token, and approved message template.' },
-      { heading: 'Troubleshooting', text: 'Admins can inspect reminder and message history. A saved assignment does not guarantee delivery if the external provider is restricted, credentials are missing, a template is rejected, or the address or phone is invalid.' },
-    ], keywords: ['automatic reminder', 'email', 'whatsapp', 'delivery', 'template', 'provider'],
+      { heading: 'WhatsApp safeguards', text: 'The app allows at most 100 WhatsApp sends per Eastern Time day and alerts the configured Owner number when usage reaches 50. The Owner can pause or resume all WhatsApp sending with the emergency control.' },
+      { heading: 'Lifecycle and troubleshooting', text: 'Analytics records Accepted, Sent, Delivered, Read, and Failed provider updates. Read can remain blank when the recipient disables read receipts. A blocked recipient may remain undelivered or produce a provider failure; WhatsApp does not explicitly reveal that the person blocked the sender.' },
+    ], keywords: ['automatic reminder', 'email', 'whatsapp', 'delivery', 'read', 'failed', 'template', 'provider', 'daily limit', 'pause'],
   },
   {
     id: 'events', title: 'Events, planning meetings, and templates', category: 'Events', roles: ['admin', 'owner'],
     summary: 'Organize tasks around events and preserve planning knowledge.',
     sections: [
       { heading: 'Event workspace', text: 'Create an event to group its tasks, planning notes, action items, and feedback. The event date is the scheduled date used for organization and template-based planning.' },
+      { heading: 'Created by filter', text: 'Event Workspace defaults to Created by me so each Admin can focus on events they created. Choose All admins to open the shared event list. This filter changes visibility only; Admin records remain collaborative rather than privately owned.' },
       { heading: 'Meeting notes', text: 'Capture the meeting date, attendees, discussion, decisions, and action items. Include an owner and due date in action items so follow-up is clear.' },
       { heading: 'Event templates', text: 'A template is a reusable event plan. It saves a common event structure and task list so a similar future event can be created for a new date without starting over.' },
     ], keywords: ['event', 'workspace', 'meeting notes', 'action items', 'template', 'date', 'planning'],
@@ -226,7 +231,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'analytics', title: 'Analytics, filters, and planning decisions', category: 'Reports', roles: ['admin', 'owner'],
     summary: 'Use dashboard metrics and filters to identify coverage, participation, and planning needs.',
     sections: [
-      { heading: 'Filters', text: 'Filter by task or event text, status, event, date range, and sort order to focus the dashboard. Clear filters to return to the full view.' },
+      { heading: 'Filters', text: 'The Admin Tasks view defaults to Created by me to reduce noise. Search by task or event text and filter by status or event; choose All admins for the shared list. Analytics has separate date, event, channel, and volunteer filters.' },
       { heading: 'Planning', text: 'Use open places and fill rates to identify staffing gaps, participation and hours to understand engagement, and event feedback to improve repeat events. Treat low activity as a prompt for outreach, not a judgment about a volunteer.' },
       { heading: 'Free-service capacity', text: 'The capacity table lists the current official free limits for supporting services. App-record estimates include a usage percentage and forecast where possible. Provider-only measurements are clearly identified and link to the corresponding service dashboard instead of showing a guessed value.' },
     ], keywords: ['analytics', 'dashboard', 'filter', 'search', 'coverage', 'hours', 'planning'],
