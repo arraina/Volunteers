@@ -20,7 +20,7 @@ exports.sendVolunteerReminders = onSchedule(
       process.env.WHATSAPP_ACCESS_TOKEN = whatsappAccessToken.value();
       process.env.WHATSAPP_PHONE_NUMBER_ID = '1279758458557456';
       process.env.WHATSAPP_TEMPLATE_NAME = 'task_reminder_hk_v2';
-      process.env.WHATSAPP_TEMPLATE_LANG = 'en';
+      process.env.WHATSAPP_TEMPLATE_LANG = 'en_US';
       return runReminderSender();
   }
 );
