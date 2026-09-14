@@ -200,6 +200,10 @@ const AdminDashboard: React.FC = () => {
   const [deletedRecords, setDeletedRecords] = useState<TrashRecord[]>([]);
   const [whatsappSettings, setWhatsappSettings] = useState<WhatsAppNotificationSettings>({ paused: false });
   const [error, setError] = useState('');
+  const trashCount = useMemo(
+    () => new Set(deletedTasks.map((task) => task.deletedBatchId || task.id)).size + deletedRecords.length,
+    [deletedTasks, deletedRecords]
+  );
 
   useEffect(() => {
     if (!isOwner && (tab === 'announcements' || tab === 'history' || tab === 'reports')) {
@@ -276,7 +280,7 @@ const AdminDashboard: React.FC = () => {
           Costs
         </button>
         <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')}>
-          Trash ({deletedTasks.length + deletedRecords.length})
+          Trash ({trashCount})
         </button>
         {isOwner && <button className={tab === 'admins' ? 'active' : ''} onClick={() => setTab('admins')}>
           Admin Management
