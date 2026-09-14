@@ -23,8 +23,7 @@ turning on automated reminders.
    Actions**.
 2. Add the Firebase web config as **repository variables** (Settings → Secrets
    and variables → Actions → **Variables**), matching the names in
-   `.github/workflows/pages.yml` (`REACT_APP_FIREBASE_*`, and
-   `REACT_APP_FIREBASE_VAPID_KEY` if using web push).
+   `.github/workflows/pages.yml` (`REACT_APP_FIREBASE_*`).
 3. Push to `main`. The **Deploy React App to GitHub Pages** workflow builds and
    publishes automatically.
 
@@ -71,15 +70,7 @@ You send directly through Meta using the same number your WhatsApp CRM uses.
 1. Create an account at <https://resend.com>, verify a sender domain/address.
 2. Create an API key.
 
-## 6. Web push (Firebase Cloud Messaging — free, optional)
-
-1. **Firebase → Project Settings → Cloud Messaging → Web Push certificates →**
-   generate a key pair. Put the public key in `REACT_APP_FIREBASE_VAPID_KEY`.
-2. Edit `public/firebase-messaging-sw.js` and replace the `REPLACE_*`
-   placeholders with your public Firebase web config (service workers can't read
-   env vars at runtime).
-
-## 7. Reminder sender secrets (GitHub Actions)
+## 6. Reminder sender secrets (GitHub Actions)
 
 The scheduled job needs a **Firebase service account** and your channel
 credentials. Add these as **repository secrets** (Settings → Secrets and
@@ -105,7 +96,7 @@ run it manually from the Actions tab (workflow_dispatch) to test.
 - The reminder sender uses admin credentials and runs server-side only.
 - Reminders are idempotent: a `remindersSent` marker prevents double-sending.
 
-## 8. AI Create (natural-language event/task creation — Google Gemini)
+## 7. AI Create (natural-language event/task creation — Google Gemini)
 
 Lets an admin type "Create Janmashtami on Aug 26 evening with tasks: pot washing
 4 people, parking 6, stalls 3" and get an editable event + task plan to confirm.

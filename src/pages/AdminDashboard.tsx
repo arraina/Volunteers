@@ -1488,7 +1488,7 @@ const AnnouncementsTab: React.FC<{ uid?: string; setError: (s: string) => void }
         />
         <label className="field-label">Send via</label>
         <div className="chip-group">
-          {(['whatsapp', 'email', 'push'] as NotificationChannel[]).map((c) => (
+          {(['whatsapp', 'email'] as NotificationChannel[]).map((c) => (
             <button
               type="button"
               key={c}
@@ -2168,7 +2168,7 @@ const ReportsTab: React.FC<{
     });
   }, [messages, volunteers]);
 
-  const channelRows = (['whatsapp', 'email', 'push'] as NotificationChannel[]).map((channel) => {
+  const channelRows = (['whatsapp', 'email'] as NotificationChannel[]).map((channel) => {
     const records = scopedMessages.filter((message) => message.channel === channel);
     const accepted = records.filter((message) => !['failed', 'skipped'].includes(message.status)).length;
     const sent = records.filter((message) => ['sent', 'delivered', 'read'].includes(message.status)).length;
@@ -2235,7 +2235,7 @@ const ReportsTab: React.FC<{
             <option value="all">All events</option>{events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
           </select></label>
           <label><span>Reminder channel</span><select value={channelFilter} onChange={(e) => setChannelFilter(e.target.value as typeof channelFilter)}>
-            <option value="all">All channels</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="push">Browser push</option>
+            <option value="all">All channels</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option>
           </select></label>
           <label className="search-field"><span>Volunteer</span><input value={volunteerSearch} onChange={(e) => setVolunteerSearch(e.target.value)} placeholder="Name, email, or phone" /></label>
         </div>
@@ -2321,7 +2321,7 @@ const ReportsTab: React.FC<{
               </tr>)}</tbody>
             </table></div>
           </>}
-          <p className="muted small">Readiness: {scopedVolunteers.filter((v) => v.whatsappOptIn && v.phoneNumber).length} WhatsApp · {scopedVolunteers.filter((v) => v.email).length} email · {scopedVolunteers.filter((v) => v.pushTokens?.length).length} browser push.</p>
+          <p className="muted small">Readiness: {scopedVolunteers.filter((v) => v.whatsappOptIn && v.phoneNumber).length} WhatsApp · {scopedVolunteers.filter((v) => v.email).length} email.</p>
         </section>
       </div>
 

@@ -22,7 +22,6 @@ import {
   subscribeTasks,
   updateVolunteer,
 } from '../helpers/store';
-import { enableWebPush } from '../helpers/notifications';
 import { normalizePhoneNumber, validatePhoneNumber } from '../helpers/phone';
 import '../pages/AdminDashboard.css';
 import './VolunteerDashboard.css';
@@ -319,7 +318,6 @@ const ProfileTab: React.FC<{
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [availability, setAvailability] = useState<string[]>(profile.availability);
   const [prefs, setPrefs] = useState(profile.notificationPrefs);
-  const [pushBusy, setPushBusy] = useState(false);
   const phoneValidation = validatePhoneNumber(phoneNumber);
   const toggle = (list: string[], value: string, setter: (v: string[]) => void) =>
     setter(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
@@ -342,20 +340,6 @@ const ProfileTab: React.FC<{
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save profile.');
-    }
-  };
-
-  const setupPush = async () => {
-    setPushBusy(true);
-    setError('');
-    try {
-      await enableWebPush(profile.uid);
-      setPrefs((p) => ({ ...p, push: true }));
-      setMessage('Web push notifications enabled on this device.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not enable push notifications.');
-    } finally {
-      setPushBusy(false);
     }
   };
 
@@ -405,7 +389,7 @@ const ProfileTab: React.FC<{
 
         <label className="field-label">Reminder preferences</label>
         <div className="pref-rows">
-          {(['whatsapp', 'email', 'push'] as NotificationChannel[]).map((c) => (
+          {(['whatsapp', 'email'] as NotificationChannel[]).map((c) => (
             <label key={c} className="checkbox-row">
               <input
                 type="checkbox"
@@ -424,7 +408,7 @@ const ProfileTab: React.FC<{
                   setPrefs({ ...prefs, [c]: enabled });
                 }}
               />
-              {c === 'whatsapp' ? 'WhatsApp (required while active)' : c === 'email' ? 'Email' : 'Browser push'}
+              {c === 'whatsapp' ? 'WhatsApp (required while active)' : 'Email'}
             </label>
           ))}
         </div>
@@ -441,15 +425,6 @@ const ProfileTab: React.FC<{
         </button>
       </form>
 
-      <div className="push-setup">
-        <button className="secondary-btn" onClick={setupPush} disabled={pushBusy}>
-          {pushBusy ? 'Enabling…' : 'Enable browser push on this device'}
-        </button>
-        <p className="muted small">
-          Web push works after you allow notifications in your browser. WhatsApp and email
-          reminders don't require this.
-        </p>
-      </div>
     </section>
   );
 };

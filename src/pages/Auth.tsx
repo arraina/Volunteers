@@ -176,7 +176,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
           <div className="hero-feature">
             <div className="icon">🔔</div>
             <strong>Auto reminders</strong>
-            <span>WhatsApp, email and push before every task.</span>
+            <span>WhatsApp and email reminders before every task.</span>
           </div>
           <div className="hero-feature">
             <div className="icon">✨</div>

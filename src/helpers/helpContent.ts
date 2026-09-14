@@ -124,8 +124,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: 'Profile information', text: 'My Profile stores name, email, phone, typical available days, and reminder channels. Save changes after editing. Email is tied to the login account and is displayed as read-only to volunteers.' },
       { heading: 'Available days', text: 'Available days help coordinators understand when a volunteer usually prefers to serve. They do not automatically assign or block tasks. No selection means no usual-day preference was provided; the volunteer can still sign up or be assigned.' },
       { heading: 'WhatsApp requirement', text: 'WhatsApp reminders are enabled by default for active volunteers. Turning WhatsApp off displays a warning and makes the profile inactive, preventing new assignments and service notifications while preserving history.' },
-      { heading: 'Browser push', text: 'Browser push is optional and must be enabled separately on each device. Email and WhatsApp do not depend on browser push.' },
-    ], keywords: ['profile', 'availability', 'available days', 'whatsapp', 'email', 'browser push', 'inactive'],
+    ], keywords: ['profile', 'availability', 'available days', 'whatsapp', 'email', 'inactive'],
   },
   {
     id: 'phone', title: 'Phone numbers and SMS verification', category: 'Volunteers', roles: ['volunteer', 'admin', 'owner'],
@@ -179,13 +178,13 @@ export const HELP_ARTICLES: HelpArticle[] = [
   },
   {
     id: 'reminders', title: 'Automatic reminders and delivery channels', category: 'Notifications', roles: ['everyone'],
-    summary: 'When reminders run and what is required for email, WhatsApp, and browser push.',
+    summary: 'When reminders run and what is required for email and WhatsApp.',
     sections: [
       { heading: 'Timing', text: 'Each task stores reminder hours before its start. The scheduled reminder service checks upcoming assigned tasks, sends each configured reminder once, and records delivery results for administrators.' },
       { heading: 'Eligibility', text: 'Cancelled, completed, and trashed tasks do not generate reminders. A volunteer must be assigned and have the relevant channel enabled with valid contact information.' },
-      { heading: 'Channels', text: 'Email requires the configured email provider. WhatsApp requires a working WhatsApp Business account, sender number, access token, and approved message template. Browser push requires permission and registration on that device.' },
+      { heading: 'Channels', text: 'Email requires the configured email provider. WhatsApp requires a working WhatsApp Business account, sender number, access token, and approved message template.' },
       { heading: 'Troubleshooting', text: 'Admins can inspect reminder and message history. A saved assignment does not guarantee delivery if the external provider is restricted, credentials are missing, a template is rejected, or the address or phone is invalid.' },
-    ], keywords: ['automatic reminder', 'email', 'whatsapp', 'push', 'delivery', 'template', 'provider'],
+    ], keywords: ['automatic reminder', 'email', 'whatsapp', 'delivery', 'template', 'provider'],
   },
   {
     id: 'events', title: 'Events, planning meetings, and templates', category: 'Events', roles: ['admin', 'owner'],

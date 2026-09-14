@@ -141,7 +141,7 @@ export async function createInvitedVolunteerProfile(
   const phoneNumber = normalizePhoneNumber(input.phoneNumber, true);
   await setDoc(doc(db, 'volunteers', uid), {
     ...buildVolunteerDoc({ ...input, phoneNumber }),
-    notificationPrefs: { whatsapp: whatsappOptIn, email: true, push: false },
+    notificationPrefs: { whatsapp: whatsappOptIn, email: true },
     whatsappOptIn,
     whatsappOptInAt: whatsappOptIn ? serverTimestamp() : null,
     whatsappOptOutAt: whatsappOptIn ? null : serverTimestamp(),
@@ -177,8 +177,7 @@ function buildVolunteerDoc(input: VolunteerInput) {
     phoneNumber: normalizePhoneNumber(input.phoneNumber),
     skills: input.skills || [],
     availability: input.availability || [],
-    notificationPrefs: { whatsapp: input.whatsappOptIn !== false, email: true, push: false },
-    pushTokens: [],
+    notificationPrefs: { whatsapp: input.whatsappOptIn !== false, email: true },
     totalHours: 0,
   };
 }
@@ -332,13 +331,6 @@ export async function permanentlyDeleteTrashRecord(record: TrashRecord) {
 export async function deleteVolunteerAccount(uid: string): Promise<void> {
   const removeAccount = httpsCallable<{ uid: string }, { deleted: boolean }>(functions, 'deleteVolunteerAccount');
   await removeAccount({ uid });
-}
-
-export async function registerPushToken(uid: string, token: string): Promise<void> {
-  await updateDoc(doc(db, 'volunteers', uid), {
-    pushTokens: arrayUnion(token),
-    updatedAt: serverTimestamp(),
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -887,8 +879,6 @@ export function computeRemindersForAssignment(
   const channels: NotificationChannel[] = [];
   if (volunteer.notificationPrefs.whatsapp && volunteer.phoneNumber) channels.push('whatsapp');
   if (volunteer.notificationPrefs.email && volunteer.email) channels.push('email');
-  if (volunteer.notificationPrefs.push && (volunteer.pushTokens?.length || 0) > 0)
-    channels.push('push');
 
   const hoursList = task.reminderHoursBefore.length ? task.reminderHoursBefore : [];
   for (const hours of hoursList) {
@@ -898,12 +888,7 @@ export function computeRemindersForAssignment(
         taskId: task.id,
         volunteerId: volunteer.uid,
         channel,
-        destination:
-          channel === 'whatsapp'
-            ? volunteer.phoneNumber
-            : channel === 'email'
-              ? volunteer.email
-              : (volunteer.pushTokens || []).join(','),
+        destination: channel === 'whatsapp' ? volunteer.phoneNumber : volunteer.email,
         message: `Reminder: "${task.title}" on ${task.startDateTime.toLocaleString()}${
           task.location ? ` at ${task.location}` : ''
         }.`,

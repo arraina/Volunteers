@@ -2,8 +2,8 @@
 
 A zero-cost volunteer coordination app for a temple/nonprofit. Admins create
 **tasks** and assign volunteers; volunteers can register themselves and sign up
-for open tasks. The app sends **automated reminders** over WhatsApp, email, and
-web push, scheduled entirely by **GitHub Actions** (no server, no credit card).
+for open tasks. The app sends **automated reminders** over WhatsApp and email,
+scheduled entirely by **GitHub Actions** (no server, no credit card).
 
 ## What it does
 
@@ -24,10 +24,9 @@ web push, scheduled entirely by **GitHub Actions** (no server, no credit card).
 - See their assigned tasks and withdraw
 - Check in / check out to log volunteer hours
 - Edit their profile: skills, weekly availability, and reminder preferences
-- Enable browser push notifications
 
 **Automated reminders**
-- A scheduled GitHub Actions job runs every 15 minutes, finds tasks whose
+- A scheduled GitHub Actions job runs hourly, finds tasks whose
   reminder time is due, and messages each assigned volunteer on their chosen
   channels. Recurring tasks automatically spawn their next occurrence.
 
@@ -48,7 +47,6 @@ web push, scheduled entirely by **GitHub Actions** (no server, no credit card).
 | Database + Auth (Firebase free tier) | Free |
 | Scheduler (GitHub Actions) | Free |
 | Email (Resend free tier) | Free |
-| Web push (Firebase Cloud Messaging) | Free |
 | AI proxy (Cloudflare Workers free tier) | Free within Cloudflare's limits |
 | AI generation (Gemini) | Subject to the selected Gemini plan and quota |
 | WhatsApp (Meta Cloud API) | Meta's per-conversation fee only |
@@ -63,7 +61,7 @@ template messages.
 React app (GitHub Pages)  ──►  Firebase Auth + Firestore (free tier)
                                      ▲
                                      │ reads tasks/volunteers/announcements
-GitHub Actions cron ── reminder-sender/ (firebase-admin) ──► WhatsApp / Email / Push
+GitHub Actions cron ── reminder-sender/ (firebase-admin) ──► WhatsApp / Email
 ```
 
 - `src/` — the React + TypeScript app (the only frontend)

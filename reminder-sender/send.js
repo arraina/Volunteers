@@ -4,7 +4,7 @@
 // preferred channels, and records what was sent so it never double-sends.
 
 import admin from 'firebase-admin';
-import { sendWhatsApp, sendEmail, sendPush } from './channels.js';
+import { sendWhatsApp, sendEmail } from './channels.js';
 
 function initAdmin() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -56,7 +56,6 @@ function limitedReminderHours(values) {
 
 async function main() {
   const db = initAdmin();
-  const messaging = admin.messaging();
   const now = new Date();
   const emailConfigured = Boolean(process.env.EMAIL_API_KEY && process.env.EMAIL_FROM);
   if (!emailConfigured) {
@@ -120,7 +119,6 @@ async function main() {
         const prefs = volunteer.notificationPrefs || {
           whatsapp: true,
           email: true,
-          push: false,
         };
         const deliveries = [];
 
@@ -158,15 +156,6 @@ async function main() {
               subject: `Reminder: ${task.title}`,
               text: plain,
             }).then((result) => ({ channel: 'email', ...result }))
-          );
-        }
-        if (prefs.push && Array.isArray(volunteer.pushTokens) && volunteer.pushTokens.length) {
-          deliveries.push(
-            sendPush(messaging, {
-              tokens: volunteer.pushTokens,
-              title: 'Task reminder',
-              body: plain,
-            }).then((result) => ({ channel: 'push', ...result }))
           );
         }
 
@@ -213,7 +202,7 @@ async function main() {
     }
   }
 
-  const announcementResults = await sendPendingAnnouncements(db, messaging, volunteers, emailConfigured, whatsappPaused, whatsappSentToday);
+  const announcementResults = await sendPendingAnnouncements(db, volunteers, emailConfigured, whatsappPaused, whatsappSentToday);
   sentCount += announcementResults.sent;
   failCount += announcementResults.failed;
   skippedCount += announcementResults.skipped;
@@ -321,7 +310,7 @@ async function purgeExpiredTrash(db, tasksSnap, now) {
   return expired.length;
 }
 
-async function sendPendingAnnouncements(db, messaging, volunteers, emailConfigured, whatsappPaused, whatsappSentToday) {
+async function sendPendingAnnouncements(db, volunteers, emailConfigured, whatsappPaused, whatsappSentToday) {
   const snap = await db.collection('announcements').where('delivered', '==', null).get().catch(() => null);
   // Announcements without a `delivered` field are treated as pending.
   const pending = [];
@@ -342,7 +331,7 @@ async function sendPendingAnnouncements(db, messaging, volunteers, emailConfigur
     });
 
     for (const v of recipients) {
-      const prefs = v.notificationPrefs || { whatsapp: true, email: true, push: false };
+      const prefs = v.notificationPrefs || { whatsapp: true, email: true };
       if (channels.includes('whatsapp') && !v.whatsappOptOutAt && v.phoneNumber) {
         const skipReason = whatsappPaused
           ? 'WhatsApp globally paused by Owner'
@@ -370,9 +359,6 @@ async function sendPendingAnnouncements(db, messaging, volunteers, emailConfigur
       }
       if (emailConfigured && channels.includes('email') && prefs.email && v.email) {
         await sendEmail({ to: v.email, subject: ann.title, text: ann.body });
-      }
-      if (channels.includes('push') && prefs.push && Array.isArray(v.pushTokens) && v.pushTokens.length) {
-        await sendPush(messaging, { tokens: v.pushTokens, title: ann.title, body: ann.body });
       }
     }
 

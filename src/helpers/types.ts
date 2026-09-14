@@ -8,7 +8,7 @@ import { doc, getDoc } from 'firebase/firestore';
 
 export type TaskStatus = 'open' | 'filled' | 'completed' | 'cancelled';
 
-export type NotificationChannel = 'whatsapp' | 'email' | 'push';
+export type NotificationChannel = 'whatsapp' | 'email';
 
 export type RecurrenceFrequency = 'none' | 'daily' | 'weekly' | 'monthly';
 
@@ -43,7 +43,6 @@ export const WEEKDAYS = [
 export interface NotificationPreferences {
   whatsapp: boolean;
   email: boolean;
-  push: boolean;
 }
 
 export interface VolunteerProfile {
@@ -71,8 +70,6 @@ export interface VolunteerProfile {
   deleted?: boolean;
   deletedAt?: Date;
   deletedBy?: string;
-  /** FCM web-push tokens for this volunteer's devices. */
-  pushTokens?: string[];
   /** Total volunteered hours (rolled up from hour logs). */
   totalHours: number;
   isAdmin?: boolean;
@@ -260,7 +257,6 @@ export async function getUserProfile(userId: string): Promise<VolunteerProfile |
 export const defaultNotificationPrefs = (): NotificationPreferences => ({
   whatsapp: true,
   email: true,
-  push: false,
 });
 
 export function normalizeVolunteer(uid: string, data: Record<string, any>): VolunteerProfile {
@@ -279,9 +275,8 @@ export function normalizeVolunteer(uid: string, data: Record<string, any>): Volu
     skills: Array.isArray(data.skills) ? data.skills : [],
     availability: Array.isArray(data.availability) ? data.availability : [],
     notificationPrefs: {
-      ...defaultNotificationPrefs(),
-      ...(data.notificationPrefs || {}),
       whatsapp: whatsappEnabled,
+      email: data.notificationPrefs?.email !== false,
     },
     whatsappOptIn: whatsappEnabled,
     whatsappOptInAt: data.whatsappOptInAt?.toDate?.(),
@@ -296,7 +291,6 @@ export function normalizeVolunteer(uid: string, data: Record<string, any>): Volu
     deleted: data.deleted === true,
     deletedAt: data.deletedAt ? firestoreTimestampToDate(data.deletedAt) : undefined,
     deletedBy: data.deletedBy || undefined,
-    pushTokens: Array.isArray(data.pushTokens) ? data.pushTokens : [],
     totalHours: typeof data.totalHours === 'number' ? data.totalHours : 0,
     isAdmin: data.isAdmin === true,
     joinedDate: firestoreTimestampToDate(data.joinedDate),

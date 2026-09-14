@@ -86,27 +86,6 @@ export async function sendEmail({ to, subject, text }) {
   }
 }
 
-/**
- * Send a web-push notification via Firebase Cloud Messaging (admin SDK).
- * `messaging` is the admin.messaging() instance. `tokens` is an array of
- * device tokens. Free.
- */
-export async function sendPush(messaging, { tokens, title, body }) {
-  const validTokens = (tokens || []).filter(Boolean);
-  if (validTokens.length === 0) {
-    return { ok: false, error: 'No push tokens' };
-  }
-  try {
-    const resp = await messaging.sendEachForMulticast({
-      tokens: validTokens,
-      notification: { title, body },
-    });
-    return { ok: resp.successCount > 0, id: `${resp.successCount}/${validTokens.length}` };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-}
-
 // Meta expects E.164 without a leading '+'.
 function normalizePhone(phone) {
   return String(phone).replace(/[^\d]/g, '');
