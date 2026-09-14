@@ -94,7 +94,7 @@ const toDateTimeInput = (date?: Date) => {
 
 const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
   const [eventId, setEventId] = useState(events[0]?.id || '');
-  const [creatorFilter, setCreatorFilter] = useState<'all' | 'mine'>('all');
+  const [creatorFilter, setCreatorFilter] = useState<'all' | 'mine'>('mine');
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
   const [templates, setTemplates] = useState<EventTemplate[]>([]);

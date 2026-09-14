@@ -343,7 +343,7 @@ const TasksTab: React.FC<{
   const [taskSearch, setTaskSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
   const [eventFilter, setEventFilter] = useState('all');
-  const [creatorFilter, setCreatorFilter] = useState<'all' | 'mine'>('all');
+  const [creatorFilter, setCreatorFilter] = useState<'all' | 'mine'>('mine');
   const [taskSort, setTaskSort] = useState<'soonest' | 'latest' | 'title'>('soonest');
   const [undoBatchId, setUndoBatchId] = useState('');
 
@@ -611,7 +611,7 @@ const TasksTab: React.FC<{
               setTaskSearch('');
               setStatusFilter('all');
               setEventFilter('all');
-              setCreatorFilter('all');
+              setCreatorFilter('mine');
             }}>Clear filters</button>
           )}
         </div>
