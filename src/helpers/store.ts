@@ -23,6 +23,13 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../config/firebase';
 import { normalizePhoneNumber } from './phone';
+import { validateReminderHours } from './reminderValidation';
+export {
+  MAX_REMINDERS_PER_TASK,
+  MIN_REMINDER_LEAD_HOURS,
+  MIN_REMINDER_SPACING_HOURS,
+  validateReminderHours,
+} from './reminderValidation';
 import {
   Announcement,
   EventFeedbackRecord,
@@ -414,21 +421,6 @@ export interface TaskInput {
   eventId?: string;
   eventName?: string;
   createdBy?: string;
-}
-
-export const MAX_REMINDERS_PER_TASK = 2;
-export const MIN_REMINDER_SPACING_HOURS = 24;
-
-export function validateReminderHours(values: number[]): number[] {
-  const reminders = Array.from(new Set(values.filter((value) => Number.isFinite(value) && value > 0)))
-    .sort((a, b) => b - a);
-  if (reminders.length > MAX_REMINDERS_PER_TASK) {
-    throw new Error(`A task can have no more than ${MAX_REMINDERS_PER_TASK} scheduled reminders.`);
-  }
-  if (reminders.length === 2 && Math.abs(reminders[0] - reminders[1]) < MIN_REMINDER_SPACING_HOURS) {
-    throw new Error(`Scheduled reminders must be at least ${MIN_REMINDER_SPACING_HOURS} hours apart.`);
-  }
-  return reminders;
 }
 
 // Safety cap: never generate more than this many occurrence docs in one call.

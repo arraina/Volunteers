@@ -571,7 +571,7 @@ const TasksTab: React.FC<{
             value={form.reminderHoursBefore}
             onChange={(e) => setForm({ ...form, reminderHoursBefore: e.target.value })}
           />
-          <small className="field-hint">Maximum 2 reminders permitted. Numbers are hours before the task and must be at least 24 hours apart. Sample format: 72, 24.</small>
+          <small className="field-hint">Maximum 2 reminders permitted. Each must be at least 24 hours before the task, and two reminders must be at least 24 hours apart. Sample format: 72, 24.</small>
           <button type="submit" disabled={saving} className="primary-btn">
             {saving ? 'Saving…' : 'Create Task'}
           </button>
@@ -871,7 +871,7 @@ const OccurrenceRow: React.FC<{
         <label><span>End (optional, Eastern Time — ET)</span><input type="datetime-local" value={editForm.endDateTime} onChange={(e) => setEditForm({ ...editForm, endDateTime: e.target.value })} /></label>
         <label><span>Location</span><input value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} /></label>
         <label><span>Volunteers needed</span><input type="number" min={Math.max(1, task.assignedVolunteers.length)} value={editForm.volunteersNeeded} onChange={(e) => setEditForm({ ...editForm, volunteersNeeded: e.target.value })} required /></label>
-        <label className="task-edit-wide"><span>Reminder times (hours before the task)</span><input value={editForm.reminderHoursBefore} onChange={(e) => setEditForm({ ...editForm, reminderHoursBefore: e.target.value })} placeholder="72, 24" /><small className="field-hint">Maximum 2 reminders permitted. Numbers are hours before the task and must be at least 24 hours apart. Sample format: 72, 24.</small></label>
+        <label className="task-edit-wide"><span>Reminder times (hours before the task)</span><input value={editForm.reminderHoursBefore} onChange={(e) => setEditForm({ ...editForm, reminderHoursBefore: e.target.value })} placeholder="72, 24" /><small className="field-hint">Maximum 2 reminders permitted. Each must be at least 24 hours before the task, and two reminders must be at least 24 hours apart. Sample format: 72, 24.</small></label>
         <div className="task-edit-actions task-edit-wide"><button className="primary-btn" disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</button><button type="button" className="secondary-btn" onClick={() => { setEditForm(taskEditValues(task)); setEditing(false); }}>Cancel edit</button></div>
       </form>}
       <div className="task-actions">
