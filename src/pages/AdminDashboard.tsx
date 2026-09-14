@@ -34,8 +34,6 @@ import {
   AppValueReport,
   CostCategory,
   CostEntry,
-  confirmCostEntry,
-  createCostEntry,
   subscribeEvents,
   subscribeCostEntries,
   permanentlyDeleteTaskBatch,
@@ -1890,10 +1888,6 @@ const COST_CATEGORIES: { value: CostCategory; label: string }[] = [
   { value: 'transport_reimbursement', label: 'Transportation / reimbursement' }, { value: 'other', label: 'Other' },
 ];
 const categoryLabel = (value: string) => COST_CATEGORIES.find((item) => item.value === value)?.label || value;
-const costDateTimeNow = () => {
-  const value = new Date();
-  return new Date(value.getTime() - value.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-};
 type DisplayCost = CostEntry & { automatic?: boolean };
 
 const CostTab: React.FC<{ events: TempleEvent[]; uid?: string; isOwner: boolean; whatsappSettings: WhatsAppNotificationSettings }> = ({ events, uid, isOwner, whatsappSettings }) => {
@@ -1901,13 +1895,11 @@ const CostTab: React.FC<{ events: TempleEvent[]; uid?: string; isOwner: boolean;
   const [entries, setEntries] = useState<CostEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [saving, setSaving] = useState(false);
   const [updatingWhatsapp, setUpdatingWhatsapp] = useState(false);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<'all' | CostCategory>('all');
   const [period, setPeriod] = useState<'today' | '7' | '30' | 'month' | 'all'>('month');
   const [costStatus, setCostStatus] = useState<'all' | 'estimated' | 'confirmed'>('all');
-  const [form, setForm] = useState({ category: 'other' as CostCategory, description: '', amount: '', incurredAt: costDateTimeNow(), eventId: '', vendor: '', notes: '', status: 'confirmed' as 'estimated' | 'confirmed', recurring: false });
 
   useEffect(() => {
     const unsubscribe = subscribeCostEntries(setEntries);
@@ -1973,20 +1965,6 @@ const CostTab: React.FC<{ events: TempleEvent[]; uid?: string; isOwner: boolean;
     link.click();
     URL.revokeObjectURL(link.href);
   };
-  const saveCost = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const amount = Number(form.amount);
-    if (!form.description.trim() || !Number.isFinite(amount) || amount < 0 || !form.incurredAt) return setLoadError('Enter a description, date/time, and valid amount.');
-    setSaving(true); setLoadError('');
-    try {
-      await createCostEntry({ category: form.category, description: form.description, amountUsd: amount,
-        incurredAt: new Date(form.incurredAt), eventId: form.eventId || undefined, vendor: form.vendor,
-        notes: form.notes, status: form.status, recurring: form.recurring, createdBy: uid });
-      setForm({ category: 'other', description: '', amount: '', incurredAt: costDateTimeNow(), eventId: '', vendor: '', notes: '', status: 'confirmed', recurring: false });
-    } catch (error) { setLoadError(error instanceof Error ? error.message : 'Could not save the cost.'); }
-    finally { setSaving(false); }
-  };
-
   const toggleWhatsAppSending = async () => {
     if (!uid || !isOwner) return;
     if (whatsappSettings.paused) {
@@ -2008,7 +1986,7 @@ const CostTab: React.FC<{ events: TempleEvent[]; uid?: string; isOwner: boolean;
 
   return <div className="analytics-dashboard">
     <div className="panel-head analytics-heading">
-      <div><h2>Operating costs</h2><p className="muted small">Track communication, technology, event, supply, and reimbursement costs when incurred.</p></div>
+      <div><h2>Operating costs</h2><p className="muted small">Read-only view of costs captured automatically as services are used.</p></div>
       <button className="secondary-btn" disabled={filtered.length === 0} onClick={exportCsv}>Export filtered CSV</button>
     </div>
     {loadError && <div className="error-message">{loadError}</div>}
@@ -2028,22 +2006,6 @@ const CostTab: React.FC<{ events: TempleEvent[]; uid?: string; isOwner: boolean;
       <div className="stat-card"><span className="stat-num">{money(projectedCost)}</span><span className="stat-label">Projected month total</span></div>
     </div>
     <section className="panel">
-      <h2>Add cost as it is incurred</h2>
-      <form className="cost-entry-form" onSubmit={saveCost}>
-        <label><span>Category</span><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as CostCategory })}>{COST_CATEGORIES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-        <label><span>Description</span><input required value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What was purchased or billed?" /></label>
-        <label><span>Amount (USD)</span><input required type="number" min="0" step="0.0001" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></label>
-        <label><span>Date and time</span><input required type="datetime-local" value={form.incurredAt} onChange={(e) => setForm({ ...form, incurredAt: e.target.value })} /></label>
-        <label><span>Event (optional)</span><select value={form.eventId} onChange={(e) => setForm({ ...form, eventId: e.target.value })}><option value="">Organization-wide</option>{events.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label><span>Vendor/provider</span><input value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} placeholder="Meta, Google, store…" /></label>
-        <label><span>Status</span><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as 'estimated' | 'confirmed' })}><option value="confirmed">Confirmed</option><option value="estimated">Estimated</option></select></label>
-        <label className="cost-check"><input type="checkbox" checked={form.recurring} onChange={(e) => setForm({ ...form, recurring: e.target.checked })} /> Recurring expense</label>
-        <label className="cost-notes"><span>Notes/reference</span><textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Receipt, invoice, billing period, or details" /></label>
-        <button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : 'Add cost'}</button>
-      </form>
-      <p className="muted small">Delivered WhatsApp reminders are included automatically. Other charges can be entered immediately as estimated and recorded as confirmed when known.</p>
-    </section>
-    <section className="panel">
       <div className="filter-bar cost-filters">
         <label><span>Search</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Description, vendor, event, notes" /></label>
         <label><span>Period</span><select value={period} onChange={(e) => setPeriod(e.target.value as typeof period)}><option value="today">Today</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="month">This month</option><option value="all">All history</option></select></label>
@@ -2051,8 +2013,8 @@ const CostTab: React.FC<{ events: TempleEvent[]; uid?: string; isOwner: boolean;
         <label><span>Status</span><select value={costStatus} onChange={(e) => setCostStatus(e.target.value as typeof costStatus)}><option value="all">All statuses</option><option value="confirmed">Confirmed</option><option value="estimated">Estimated</option></select></label>
       </div>
       <div className="panel-head"><h2>Transactions ({filtered.length})</h2>{loading && <span className="muted small">Loading costs…</span>}</div>
-      {!loading && filtered.length === 0 && <div className="empty-state"><strong>No matching costs</strong><span>Add an expense or change the filters.</span></div>}
-      {filtered.length > 0 && <div className="table-scroll"><table className="report-table"><thead><tr><th>Date/time</th><th>Category</th><th>Description</th><th>Event/vendor</th><th>Status</th><th>Amount</th><th></th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id}><td>{item.incurredAt.toLocaleString()}</td><td>{categoryLabel(item.category)}</td><td><strong>{item.description}</strong>{item.recurring && <div className="muted small">Recurring</div>}{item.notes && <div className="muted small">{item.notes}</div>}</td><td>{events.find((event) => event.id === item.eventId)?.name || 'Organization-wide'}<div className="muted small">{item.vendor || '—'}</div></td><td><span className="admin-tag">{item.status}</span><div className="muted small">{item.automatic ? 'Automatic' : 'Manual'}</div>{!item.automatic && item.status === 'estimated' && <button className="link-btn" onClick={() => confirmCostEntry(item.id).catch((error) => setLoadError(error.message))}>Mark confirmed</button>}</td><td>{money(item.amountUsd)}</td><td>{!item.automatic && <button className="danger-link" onClick={() => uid && trashRecord('costEntries', item.id, uid).catch((error) => setLoadError(error.message))}>Move to Trash</button>}</td></tr>)}</tbody></table></div>}
+      {!loading && filtered.length === 0 && <div className="empty-state"><strong>No matching costs</strong><span>Captured service costs will appear here automatically.</span></div>}
+      {filtered.length > 0 && <div className="table-scroll"><table className="report-table"><thead><tr><th>Date/time</th><th>Category</th><th>Description</th><th>Event/vendor</th><th>Status</th><th>Amount</th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id}><td>{item.incurredAt.toLocaleString()}</td><td>{categoryLabel(item.category)}</td><td><strong>{item.description}</strong>{item.recurring && <div className="muted small">Recurring</div>}{item.notes && <div className="muted small">{item.notes}</div>}</td><td>{events.find((event) => event.id === item.eventId)?.name || 'Organization-wide'}<div className="muted small">{item.vendor || '—'}</div></td><td><span className="admin-tag">{item.status}</span><div className="muted small">{item.automatic ? 'Automatic' : 'Previously recorded'}</div></td><td>{money(item.amountUsd)}</td></tr>)}</tbody></table></div>}
     </section>
     <section className="panel">
       <h2>Monthly history</h2>
