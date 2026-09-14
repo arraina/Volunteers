@@ -388,6 +388,11 @@ const ProfileTab: React.FC<{
         </div>
 
         <label className="field-label">Reminder preferences</label>
+        <p className="reminder-number-notice">
+          Automatic WhatsApp reminders are sent from the temple phone number{' '}
+          <a href="tel:+19732990970">+1 (973) 299-0970</a>. Please add this number to your
+          contacts so you recognize temple reminders.
+        </p>
         <div className="pref-rows">
           {(['whatsapp', 'email'] as NotificationChannel[]).map((c) => (
             <label key={c} className="checkbox-row">
