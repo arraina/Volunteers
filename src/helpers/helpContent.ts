@@ -18,8 +18,8 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: '1. Activate your account', text: 'Self-register with your name, email, phone, and a password for this app, or open the invitation sent by an admin. Confirm your email before signing in. If an invitation link expired, use Forgot password.' },
       { heading: '2. Complete My Profile', text: 'Open My Profile, check your name and phone, select the days you are usually available, and save. Availability is guidance for coordinators; it does not block you from other days.' },
       { heading: '3. Verify your phone', text: 'In My Profile, request an SMS code and enter it when received. Keep WhatsApp enabled so your profile remains active and task reminders can reach you.' },
-      { heading: '4. Join a task', text: 'Open Open Tasks, search by event, task, or location, check the date and open places, then choose Sign Up. If the task is full, cancelled, or not open for self-signup, contact an admin.' },
-      { heading: '5. Confirm your commitment', text: 'Open My Tasks and verify that the assignment appears. Review the location and time. If plans change, withdraw early where the button is available or contact an admin.' },
+      { heading: '4. Join a task', text: 'Open Open Tasks, search by event, task, or location, then use Availability to show tasks available for signup, full tasks, or all upcoming tasks. Choose Sign Up when a place is open.' },
+      { heading: '5. Confirm your commitment', text: 'Open My Upcoming Tasks and verify that the assignment appears. Review the location and time. If plans change, withdraw early where the button is available or contact an admin. Previous assignments are kept separately under Past Tasks.' },
       { heading: '6. Serve and record time', text: 'For tasks using hour tracking, check in when service begins and check out when it ends. Confirm that the recorded hours appear correctly.' },
       { heading: '7. Share feedback', text: 'After the event, open Event Feedback, select the event, and write free-flowing comments about what worked and what should improve next time.' },
     ], keywords: ['new volunteer', 'quick start', 'first day', 'onboarding', 'how to begin', 'checklist'],
@@ -56,7 +56,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: 'How to change your password', text: 'Sign out, open Log in, choose Forgot password, enter the account email, and follow the emailed link. An admin-created volunteer can use this same process.' },
       { heading: 'How to update your phone', text: 'Open My Profile, replace the phone with its country code, save, then complete SMS verification for the new number.' },
       { heading: 'How to find a task', text: 'Open Open Tasks and type part of the task, event, or location into Search. Adjust filters or sorting if available. Clear filters if an expected task is missing.' },
-      { heading: 'How to know you are assigned', text: 'After signup or admin assignment, the task appears under My Tasks and its assigned count increases. If it does not appear, refresh and ask an admin to confirm the saved assignment.' },
+      { heading: 'How to know you are assigned', text: 'After signup or admin assignment, the task appears under My Upcoming Tasks and its assigned count increases. After the task date it moves to Past Tasks. If it does not appear, refresh and ask an admin to confirm the saved assignment.' },
       { heading: 'How to stop participating', text: 'Withdraw from a future task or contact an admin about the assignment. Turning off required WhatsApp makes the profile inactive; it is not a substitute for cancelling one task.' },
       { heading: 'How to get help', text: 'Search this manual or ask the Help Assistant using a specific question. Include the screen name, action attempted, and exact error message. Do not include passwords, SMS codes, or access tokens.' },
     ], keywords: ['how to', 'common actions', 'password', 'update phone', 'find task', 'assigned', 'get help'],
@@ -137,12 +137,13 @@ export const HELP_ARTICLES: HelpArticle[] = [
   },
   {
     id: 'tasks-volunteer', title: 'Finding, joining, and leaving tasks', category: 'Tasks', roles: ['volunteer'],
-    summary: 'Use Open Tasks and My Tasks to manage service commitments.',
+    summary: 'Use Open Tasks, My Upcoming Tasks, and Past Tasks to manage service commitments.',
     sections: [
-      { heading: 'Open Tasks', text: 'Open Tasks shows future tasks that permit volunteer self-signup and still have space. Search and filters help narrow the list. Select Sign Up to take an available place.' },
-      { heading: 'My Tasks', text: 'My Tasks shows current assignments. A volunteer can withdraw when self-withdrawal is allowed. Contact an admin if the task is locked, cancelled, or requires coordinator assistance.' },
+      { heading: 'Open Tasks', text: 'Open Tasks shows future tasks. Use Availability to switch between tasks available for signup, full tasks, and all upcoming tasks. Search and sorting further narrow the list.' },
+      { heading: 'My Upcoming Tasks', text: 'My Upcoming Tasks shows current future assignments. A volunteer can withdraw when self-withdrawal is allowed. Contact an admin if the task is locked, cancelled, or requires coordinator assistance.' },
+      { heading: 'Past Tasks', text: 'Past Tasks keeps previous assignments separate from upcoming commitments and supports the same search and sorting controls.' },
       { heading: 'Capacity', text: 'A task cannot accept more assigned volunteers than Volunteers needed. Assignment controls close once all places are filled.' },
-    ], keywords: ['open tasks', 'my tasks', 'sign up', 'withdraw', 'capacity', 'filled'],
+    ], keywords: ['open tasks', 'my upcoming tasks', 'past tasks', 'sign up', 'withdraw', 'capacity', 'filled'],
   },
   {
     id: 'task-status', title: 'Task status and lifecycle', category: 'Tasks', roles: ['everyone'],
@@ -227,6 +228,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     sections: [
       { heading: 'Filters', text: 'Filter by task or event text, status, event, date range, and sort order to focus the dashboard. Clear filters to return to the full view.' },
       { heading: 'Planning', text: 'Use open places and fill rates to identify staffing gaps, participation and hours to understand engagement, and event feedback to improve repeat events. Treat low activity as a prompt for outreach, not a judgment about a volunteer.' },
+      { heading: 'Free-service capacity', text: 'The capacity table lists the current official free limits for supporting services. App-record estimates include a usage percentage and forecast where possible. Provider-only measurements are clearly identified and link to the corresponding service dashboard instead of showing a guessed value.' },
     ], keywords: ['analytics', 'dashboard', 'filter', 'search', 'coverage', 'hours', 'planning'],
   },
   {

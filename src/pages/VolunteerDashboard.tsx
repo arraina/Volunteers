@@ -17,6 +17,7 @@ import {
   assignVolunteerToTask,
   checkIn,
   checkOut,
+  getPastTasks,
   getVolunteer,
   removeVolunteerFromTask,
   subscribeTasks,
@@ -27,7 +28,7 @@ import '../pages/AdminDashboard.css';
 import './VolunteerDashboard.css';
 import EventFeedback from './EventFeedback';
 
-type Tab = 'open' | 'mine' | 'feedback' | 'profile';
+type Tab = 'open' | 'mine' | 'past' | 'feedback' | 'profile';
 
 const VolunteerDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -35,10 +36,12 @@ const VolunteerDashboard: React.FC = () => {
   const [tab, setTab] = useState<Tab>('open');
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
   const [tasks, setTasks] = useState<VolunteerTask[]>([]);
+  const [historicalTasks, setHistoricalTasks] = useState<VolunteerTask[]>([]);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [taskSearch, setTaskSearch] = useState('');
   const [taskSort, setTaskSort] = useState<'soonest' | 'latest' | 'title'>('soonest');
+  const [openTaskFilter, setOpenTaskFilter] = useState<'all' | 'available' | 'full'>('available');
   // Active check-in sessions: taskId -> { logId, checkInAt }
   const [activeCheckins, setActiveCheckins] = useState<
     Record<string, { logId: string; at: Date }>
@@ -47,6 +50,7 @@ const VolunteerDashboard: React.FC = () => {
   useEffect(() => {
     if (!user) return;
     getVolunteer(user.uid).then(setProfile);
+    getPastTasks().then(setHistoricalTasks).catch(() => setHistoricalTasks([]));
     const unsub = subscribeTasks(setTasks);
     return unsub;
   }, [user]);
@@ -61,9 +65,24 @@ const VolunteerDashboard: React.FC = () => {
   };
 
   const myTasks = useMemo(
-    () => (profile ? tasks.filter((t) => t.assignedVolunteers.includes(profile.uid)) : []),
+    () => (profile ? tasks.filter((t) =>
+      t.assignedVolunteers.includes(profile.uid) &&
+      effectiveTaskStatus(t) !== 'completed' &&
+      effectiveTaskStatus(t) !== 'cancelled' &&
+      t.startDateTime > new Date()
+    ) : []),
     [tasks, profile]
   );
+
+  const pastTasks = useMemo(() => {
+    if (!profile) return [];
+    const byId = new Map<string, VolunteerTask>();
+    [...historicalTasks, ...tasks].forEach((task) => byId.set(task.id, task));
+    return Array.from(byId.values()).filter((task) =>
+      task.assignedVolunteers.includes(profile.uid) &&
+      (task.startDateTime <= new Date() || ['completed', 'cancelled'].includes(effectiveTaskStatus(task)))
+    );
+  }, [historicalTasks, tasks, profile]);
 
   const openTasks = useMemo(
     () =>
@@ -93,12 +112,19 @@ const VolunteerDashboard: React.FC = () => {
   }, [taskSearch, taskSort]);
 
   const visibleOpenTasks = useMemo(
-    () => filterAndSortTasks(openTasks),
-    [openTasks, filterAndSortTasks]
+    () => filterAndSortTasks(openTasks.filter((task) =>
+      openTaskFilter === 'all' ||
+      (openTaskFilter === 'available' ? !isTaskFull(task) : isTaskFull(task))
+    )),
+    [openTasks, openTaskFilter, filterAndSortTasks]
   );
   const visibleMyTasks = useMemo(
     () => filterAndSortTasks(myTasks),
     [myTasks, filterAndSortTasks]
+  );
+  const visiblePastTasks = useMemo(
+    () => filterAndSortTasks(pastTasks),
+    [pastTasks, filterAndSortTasks]
   );
 
   const signUp = async (task: VolunteerTask) => {
@@ -171,7 +197,10 @@ const VolunteerDashboard: React.FC = () => {
           Open Tasks
         </button>
         <button className={tab === 'mine' ? 'active' : ''} onClick={() => setTab('mine')}>
-          My Tasks ({myTasks.length})
+          My Upcoming Tasks ({myTasks.length})
+        </button>
+        <button className={tab === 'past' ? 'active' : ''} onClick={() => setTab('past')}>
+          Past Tasks ({pastTasks.length})
         </button>
         <button className={tab === 'feedback' ? 'active' : ''} onClick={() => setTab('feedback')}>
           Event Feedback
@@ -191,7 +220,13 @@ const VolunteerDashboard: React.FC = () => {
             <div className="panel-head results-heading">
               <div><h2>Tasks you can sign up for</h2><p className="muted small">{visibleOpenTasks.length} opportunities shown</p></div>
             </div>
-            <VolunteerTaskFilters search={taskSearch} setSearch={setTaskSearch} sort={taskSort} setSort={setTaskSort} />
+            <VolunteerTaskFilters search={taskSearch} setSearch={setTaskSearch} sort={taskSort} setSort={setTaskSort}>
+              <label><span>Availability</span><select value={openTaskFilter} onChange={(e) => setOpenTaskFilter(e.target.value as typeof openTaskFilter)}>
+                <option value="available">Available to sign up</option>
+                <option value="full">Full tasks</option>
+                <option value="all">All upcoming tasks</option>
+              </select></label>
+            </VolunteerTaskFilters>
             {visibleOpenTasks.length === 0 && <div className="empty-state"><strong>No matching open tasks</strong><span>Try another search.</span></div>}
             <div className="task-list">
               {visibleOpenTasks.map((task) => {
@@ -280,6 +315,29 @@ const VolunteerDashboard: React.FC = () => {
         {tab === 'profile' && (
           <ProfileTab profile={profile} onSaved={reload} setError={setError} setMessage={setMessage} />
         )}
+
+        {tab === 'past' && (
+          <section className="panel">
+            <div className="panel-head results-heading">
+              <div><h2>Your past tasks</h2><p className="muted small">{visiblePastTasks.length} previous assignments shown</p></div>
+            </div>
+            <VolunteerTaskFilters search={taskSearch} setSearch={setTaskSearch} sort={taskSort} setSort={setTaskSort} />
+            {visiblePastTasks.length === 0 && <div className="empty-state"><strong>No matching past tasks</strong><span>Completed and cancelled assignments will appear here.</span></div>}
+            <div className="task-list">
+              {visiblePastTasks.map((task) => {
+                const status = effectiveTaskStatus(task);
+                return <div key={task.id} className="task-card">
+                  <div className="task-card-head">
+                    <div><h3>{task.title}</h3>{task.eventName && <p className="event-label">{task.eventName}</p>}<p className="muted">{formatDate(task.startDateTime)}{task.location ? ` · ${task.location}` : ''}</p></div>
+                    <span className={`status-badge status-${status}`}>{status}</span>
+                  </div>
+                  {task.description && <p>{task.description}</p>}
+                  <p className="muted small">You were assigned to this task.</p>
+                </div>;
+              })}
+            </div>
+          </section>
+        )}
         {tab === 'feedback' && (
           <EventFeedback profile={profile} tasks={tasks} setError={setError} setMessage={setMessage} />
         )}
@@ -293,10 +351,12 @@ const VolunteerTaskFilters: React.FC<{
   setSearch: (value: string) => void;
   sort: 'soonest' | 'latest' | 'title';
   setSort: (value: 'soonest' | 'latest' | 'title') => void;
-}> = ({ search, setSearch, sort, setSort }) => (
+  children?: React.ReactNode;
+}> = ({ search, setSearch, sort, setSort, children }) => (
   <div className="filter-bar volunteer-task-filters">
     <label className="search-field"><span>Search</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Task, event, or location" /></label>
     <label><span>Sort</span><select value={sort} onChange={(e) => setSort(e.target.value as 'soonest' | 'latest' | 'title')}><option value="soonest">Soonest first</option><option value="latest">Latest first</option><option value="title">Task name</option></select></label>
+    {children}
   </div>
 );
 

@@ -2218,6 +2218,38 @@ const ReportsTab: React.FC<{
     (b.event.date?.getTime() || b.event.createdAt.getTime()) - (a.event.date?.getTime() || a.event.createdAt.getTime())
   ).slice(0, 10);
 
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const emailThisMonth = messages.filter((message) => message.channel === 'email' && message.sentAt >= monthStart).length;
+  const emailToday = messages.filter((message) => message.channel === 'email' && message.sentAt >= dayStart).length;
+  const estimatedDocuments = volunteers.length + allTasks.length + events.length + logs.length + messages.length + feedback.length;
+  const estimatedStorageMib = estimatedDocuments * 2 / 1024;
+  const newProfilesLast30Days = volunteers.filter((volunteer) =>
+    (volunteer.createdAt || volunteer.joinedDate) >= new Date(now.getTime() - 30 * 86400_000)
+  ).length;
+  const authEta = newProfilesLast30Days > 0
+    ? new Date(now.getFullYear(), now.getMonth() + Math.ceil((50_000 - volunteers.length) / newProfilesLast30Days), 1).toLocaleDateString()
+    : 'No limit date at current growth';
+  const projectedEmailMonth = emailThisMonth * daysInMonth / Math.max(1, now.getDate());
+  const emailEta = projectedEmailMonth >= 3_000 && emailThisMonth > 0
+    ? `Around day ${Math.ceil(3_000 / (emailThisMonth / Math.max(1, now.getDate())))} of this month`
+    : 'Not expected this month';
+  const capacityRows: Array<{
+    service: string; usage: string; limit: string; percent?: number; forecast: string; basis: string; href: string;
+  }> = [
+    { service: 'Firebase Authentication', usage: `${volunteers.length.toLocaleString()} volunteer profiles`, limit: '50,000 MAU no-cost tier (Blaze)', percent: volunteers.length / 50_000 * 100, forecast: authEta, basis: 'Profile count is a conservative proxy; actual monthly active users are provider-only.', href: 'https://firebase.google.com/docs/auth/' },
+    { service: 'Cloud Firestore storage', usage: `≈ ${estimatedStorageMib.toFixed(2)} MiB from ${estimatedDocuments.toLocaleString()} loaded records`, limit: '1 GiB stored data', percent: estimatedStorageMib / 1024 * 100, forecast: 'Not enough storage-growth history', basis: 'Estimate assumes 2 KiB per loaded document and does not include indexes or records outside query windows.', href: 'https://firebase.google.com/docs/firestore/pricing' },
+    { service: 'Cloud Firestore reads', usage: 'Provider dashboard required', limit: '50,000 document reads/day', forecast: 'Cannot project without Google usage telemetry', basis: 'The browser cannot safely read project-wide billing metrics.', href: 'https://console.cloud.google.com/firestore/databases/-default-/usage?project=temple-volunteers-8ff23' },
+    { service: 'Cloud Firestore writes', usage: 'Provider dashboard required', limit: '20,000 document writes/day', forecast: 'Cannot project without Google usage telemetry', basis: 'The browser cannot safely read project-wide billing metrics.', href: 'https://console.cloud.google.com/firestore/databases/-default-/usage?project=temple-volunteers-8ff23' },
+    { service: 'Firebase Cloud Functions', usage: 'Provider dashboard required', limit: '2,000,000 invocations/month no-cost quota', forecast: 'Cannot project without Google usage telemetry', basis: 'Used for secure account operations and WhatsApp lifecycle webhooks.', href: 'https://console.cloud.google.com/functions/list?project=temple-volunteers-8ff23' },
+    { service: 'GitHub Actions scheduler', usage: `≈ ${(24 * now.getDate()).toLocaleString()} scheduled runs this month`, limit: 'Free standard runners for this public repository', forecast: 'No metered-minute limit while repository remains public', basis: 'Estimate uses the hourly reminder schedule; manual runs and deployment jobs are not included.', href: 'https://github.com/arraina/Volunteers/actions' },
+    { service: 'GitHub Pages hosting', usage: 'Bandwidth is not exposed to the app', limit: '1 GiB site; 100 GiB/month soft bandwidth limit', forecast: 'Cannot project without GitHub traffic telemetry', basis: 'The public app is deployed through GitHub Pages.', href: 'https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits' },
+    { service: 'Cloudflare AI proxy', usage: 'Provider dashboard required', limit: '100,000 Worker requests/day (Free)', forecast: 'Cannot project without Cloudflare analytics', basis: 'Only AI Create requests pass through this Worker.', href: 'https://dash.cloudflare.com/' },
+    { service: 'Gemini API', usage: 'Provider dashboard required', limit: 'Varies by model, project, and usage tier', forecast: 'Check active limits in Google AI Studio', basis: 'Google does not provide one fixed free quota for every Gemini model.', href: 'https://ai.google.dev/gemini-api/docs/rate-limits' },
+    { service: 'Resend email', usage: `${emailThisMonth.toLocaleString()} tracked this month; ${emailToday} today`, limit: '3,000/month and 100/day (Free)', percent: emailThisMonth / 3_000 * 100, forecast: emailEta, basis: 'Based on message records retained by this app; confirm totals in Resend.', href: 'https://resend.com/docs/knowledge-base/account-quotas-and-limits' },
+  ];
+
   return (
     <div className="analytics-dashboard">
       <div className="panel-head analytics-heading">
@@ -2255,6 +2287,20 @@ const ReportsTab: React.FC<{
         <div className="stat-card"><span className="stat-num">{totalHours.toFixed(1)}</span><span className="stat-label">Hours recorded</span></div>
         <div className="stat-card"><span className="stat-num">{failedMessages.length}</span><span className="stat-label">Reminder failures</span></div>
       </div>
+
+      <section className="panel service-capacity">
+        <div className="panel-head"><div><h2>Free-service capacity</h2><p className="muted small">Current no-cost limits and the best usage signal available inside this application.</p></div></div>
+        <div className="capacity-note"><strong>Important:</strong> Only rows marked as estimates or tracked records are calculated here. Provider-dashboard rows are intentionally not guessed. WhatsApp and phone-verification SMS are paid services and remain under Costs.</div>
+        <div className="table-scroll"><table className="report-table"><thead><tr><th>Service</th><th>Current usage</th><th>Free limit</th><th>Used</th><th>Expected limit time</th><th>Measurement</th></tr></thead>
+          <tbody>{capacityRows.map((row) => <tr key={row.service}>
+            <td><a href={row.href} target="_blank" rel="noreferrer"><strong>{row.service}</strong></a></td>
+            <td>{row.usage}</td><td>{row.limit}</td>
+            <td>{row.percent === undefined ? '—' : <div className="capacity-meter-cell"><div className="capacity-meter" aria-label={`${row.percent.toFixed(2)}% used`}><span style={{ width: `${Math.min(100, row.percent)}%` }} /></div><span>{row.percent < 0.01 ? '<0.01' : row.percent.toFixed(2)}%</span></div>}</td>
+            <td>{row.forecast}</td><td className="muted small">{row.basis}</td>
+          </tr>)}</tbody>
+        </table></div>
+        <p className="muted small">Limits were reviewed September 14, 2026. Select a service name to verify its current provider limit and detailed usage.</p>
+      </section>
 
       <div className="analytics-grid">
         <section className="panel">

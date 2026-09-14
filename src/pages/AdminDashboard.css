@@ -1111,6 +1111,40 @@
   overflow-x: auto;
 }
 
+.service-capacity {
+  margin: 1rem 0;
+}
+
+.capacity-note {
+  background: #fffbeb;
+  border-left: 4px solid #d97706;
+  border-radius: var(--radius-sm);
+  color: #78350f;
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.capacity-meter-cell {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  min-width: 130px;
+}
+
+.capacity-meter {
+  background: #e2e8f0;
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+  width: 75px;
+}
+
+.capacity-meter span {
+  background: var(--green-600);
+  display: block;
+  height: 100%;
+}
+
 .audit-device {
   max-width: 320px;
   overflow: hidden;
