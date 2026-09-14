@@ -1153,8 +1153,7 @@ const VolunteersTab: React.FC<{
       ) {
         throw new Error('First name, last name, email, and phone are required.');
       }
-      if (!form.whatsappOptIn) throw new Error('Confirm WhatsApp consent before adding the volunteer.');
-      await createVolunteerInvitation(form);
+      await createVolunteerInvitation({ ...form, whatsappOptIn: true });
       setForm(emptyVolunteerForm);
       window.alert('Volunteer added. A login invitation was sent by email.');
     } catch (err) {
@@ -1321,15 +1320,9 @@ const VolunteersTab: React.FC<{
             onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })}
             required
           />
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={form.whatsappOptIn}
-              onChange={(e) => setForm({ ...form, whatsappOptIn: e.target.checked })}
-              required
-            />
-            Volunteer has agreed to receive WhatsApp reminders
-          </label>
+          <p className="muted small">
+            WhatsApp reminders are enabled by default. The volunteer can disable them later from My Profile.
+          </p>
           <button type="submit" className="primary-btn">
             Add Volunteer &amp; Send Invitation
           </button>
