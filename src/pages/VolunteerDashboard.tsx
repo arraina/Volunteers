@@ -24,6 +24,7 @@ import {
   updateVolunteer,
 } from '../helpers/store';
 import { normalizePhoneNumber, validatePhoneNumber } from '../helpers/phone';
+import { findTaskScheduleConflicts } from '../helpers/scheduleConflicts';
 import '../pages/AdminDashboard.css';
 import './VolunteerDashboard.css';
 import EventFeedback from './EventFeedback';
@@ -83,6 +84,16 @@ const VolunteerDashboard: React.FC = () => {
       (task.startDateTime <= new Date() || ['completed', 'cancelled'].includes(effectiveTaskStatus(task)))
     );
   }, [historicalTasks, tasks, profile]);
+
+  const scheduleConflicts = useMemo(() => findTaskScheduleConflicts(myTasks), [myTasks]);
+  const conflictsByTask = useMemo(() => {
+    const result = new Map<string, VolunteerTask[]>();
+    scheduleConflicts.forEach(({ first, second }) => {
+      result.set(first.id, [...(result.get(first.id) || []), second]);
+      result.set(second.id, [...(result.get(second.id) || []), first]);
+    });
+    return result;
+  }, [scheduleConflicts]);
 
   const openTasks = useMemo(
     () =>
@@ -214,6 +225,12 @@ const VolunteerDashboard: React.FC = () => {
       <div className="dashboard-content">
         {error && <div className="error-message">{error}</div>}
         {message && <div className="success-message">{message}</div>}
+        {scheduleConflicts.length > 0 && (
+          <div className="schedule-conflict-banner" role="alert">
+            <strong>Schedule warning: {scheduleConflicts.length} overlapping task {scheduleConflicts.length === 1 ? 'pair' : 'pairs'}.</strong>
+            <span>You are still assigned. Open My Upcoming Tasks to review the times and withdraw or contact an Admin if needed.</span>
+          </div>
+        )}
 
         {tab === 'open' && (
           <section className="panel">
@@ -272,6 +289,7 @@ const VolunteerDashboard: React.FC = () => {
               {visibleMyTasks.map((task) => {
                 const checkedIn = Boolean(activeCheckins[task.id]);
                 const status = effectiveTaskStatus(task);
+                const conflictingTasks = conflictsByTask.get(task.id) || [];
                 const isToday =
                   Math.abs(task.startDateTime.getTime() - Date.now()) < 24 * 3600 * 1000;
                 return (
@@ -288,6 +306,12 @@ const VolunteerDashboard: React.FC = () => {
                       <span className={`status-badge status-${status}`}>{status}</span>
                     </div>
                     {task.description && <p>{task.description}</p>}
+                    {conflictingTasks.length > 0 && (
+                      <p className="task-conflict-warning" role="status">
+                        <strong>Schedule overlap:</strong>{' '}
+                        {conflictingTasks.map((item) => `${item.title} (${formatDate(item.startDateTime)})`).join('; ')}
+                      </p>
+                    )}
                     <div className="task-actions">
                       {isToday && !checkedIn && (
                         <button className="secondary-btn" onClick={() => doCheckIn(task)}>

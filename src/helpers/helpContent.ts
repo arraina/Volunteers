@@ -146,6 +146,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: 'My Upcoming Tasks', text: 'My Upcoming Tasks shows current future assignments. A volunteer can withdraw when self-withdrawal is allowed. Contact an admin if the task is locked, cancelled, or requires coordinator assistance.' },
       { heading: 'Past Tasks', text: 'Past Tasks keeps previous assignments separate from upcoming commitments and supports the same search and sorting controls.' },
       { heading: 'Capacity', text: 'A task cannot accept more assigned volunteers than Volunteers needed. Assignment controls close once all places are filled.' },
+      { heading: 'Overlapping assignments', text: 'If two upcoming assignments have the same time or overlap, the dashboard displays a warning and identifies the conflicting tasks. The warning does not block signup or remove either assignment; review the times, withdraw if appropriate, or contact an Admin.' },
     ], keywords: ['open tasks', 'my upcoming tasks', 'past tasks', 'sign up', 'withdraw', 'capacity', 'filled'],
   },
   {

@@ -29,6 +29,27 @@
   font-weight: 700;
 }
 
+.schedule-conflict-banner,
+.task-conflict-warning {
+  border-left: 4px solid #d97706;
+  background: #fffbeb;
+  color: #78350f;
+  border-radius: 6px;
+}
+
+.schedule-conflict-banner {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+}
+
+.task-conflict-warning {
+  margin: 0.75rem 0;
+  padding: 0.7rem 0.8rem;
+  line-height: 1.45;
+}
+
 .phone-verification {
   display: grid;
   gap: 0.55rem;
