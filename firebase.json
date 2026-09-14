@@ -13,5 +13,8 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "functions": [{ "source": "functions", "codebase": "default" }]
+  "functions": [
+    { "source": "functions", "codebase": "default" },
+    { "source": "reminder-sender", "codebase": "reminders" }
+  ]
 }

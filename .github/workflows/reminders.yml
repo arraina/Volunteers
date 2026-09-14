@@ -1,9 +1,8 @@
 name: Send Volunteer Reminders
 
 on:
-  schedule:
-    # Runs hourly at an off-peak minute. GitHub cron is UTC and best-effort.
-    - cron: '7 * * * *'
+  # Automatic reminders run in Firebase/Google Cloud Scheduler. Keep this
+  # workflow only as an operator-controlled fallback.
   workflow_dispatch: {}
 
 # Prevent overlapping runs.

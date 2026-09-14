@@ -10,7 +10,7 @@ const GRAPH_VERSION = 'v21.0';
  * Automated (business-initiated) reminders MUST use an approved template.
  * Body variable count must match your approved template's {{1}}..{{n}}.
  */
-export async function sendWhatsApp({ to, templateParams }) {
+async function sendWhatsApp({ to, templateParams }) {
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const templateName = process.env.WHATSAPP_TEMPLATE_NAME;
@@ -60,7 +60,7 @@ export async function sendWhatsApp({ to, templateParams }) {
  * Send an email via Resend (https://resend.com) free tier.
  * Requires EMAIL_API_KEY (Resend key) and EMAIL_FROM (verified sender).
  */
-export async function sendEmail({ to, subject, text }) {
+async function sendEmail({ to, subject, text }) {
   const apiKey = process.env.EMAIL_API_KEY;
   const from = process.env.EMAIL_FROM;
   if (!apiKey || !from) {
@@ -90,3 +90,5 @@ export async function sendEmail({ to, subject, text }) {
 function normalizePhone(phone) {
   return String(phone).replace(/[^\d]/g, '');
 }
+
+module.exports = { sendWhatsApp, sendEmail };

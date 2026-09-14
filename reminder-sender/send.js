@@ -1,20 +1,10 @@
 // Scheduled reminder + announcement sender.
-// Runs in GitHub Actions on a cron. Reads Firestore with a service account,
+// Runs as a Firebase scheduled function. Reads Firestore with Admin credentials,
 // computes which task reminders are due, sends them across each volunteer's
 // preferred channels, and records what was sent so it never double-sends.
 
-import admin from 'firebase-admin';
-import { sendWhatsApp, sendEmail } from './channels.js';
-
-function initAdmin() {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!raw) {
-    throw new Error('FIREBASE_SERVICE_ACCOUNT env var is required.');
-  }
-  const serviceAccount = JSON.parse(raw);
-  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-  return admin.firestore();
-}
+const admin = require('firebase-admin');
+const { sendWhatsApp, sendEmail } = require('./channels');
 
 const toDate = (ts) => (ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null);
 
@@ -54,8 +44,8 @@ function limitedReminderHours(values) {
   return selected;
 }
 
-async function main() {
-  const db = initAdmin();
+async function runReminderSender() {
+  const db = admin.firestore();
   const now = new Date();
   const emailConfigured = Boolean(process.env.EMAIL_API_KEY && process.env.EMAIL_FROM);
   if (!emailConfigured) {
@@ -212,6 +202,7 @@ async function main() {
   console.log(
     `Done. Sent ${sentCount}, skipped ${skippedCount}, failed ${failCount}, generated ${created} new occurrence(s), purged ${purged} expired trash item(s).`
   );
+  return { sent: sentCount, skipped: skippedCount, failed: failCount, generated: created, purged };
 }
 
 function advance(date, frequency) {
@@ -370,7 +361,4 @@ async function sendPendingAnnouncements(db, volunteers, emailConfigured, whatsap
   return counts;
 }
 
-main().catch((err) => {
-  console.error('Reminder sender failed:', err);
-  process.exit(1);
-});
+module.exports = { runReminderSender };

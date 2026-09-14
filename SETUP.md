@@ -70,11 +70,14 @@ You send directly through Meta using the same number your WhatsApp CRM uses.
 1. Create an account at <https://resend.com>, verify a sender domain/address.
 2. Create an API key.
 
-## 6. Reminder sender secrets (GitHub Actions)
+## 6. Reminder sender (Firebase scheduled function)
 
-The scheduled job needs a **Firebase service account** and your channel
-credentials. Add these as **repository secrets** (Settings → Secrets and
-variables → Actions → **Secrets**):
+The automatic sender runs in Firebase at 7 minutes past every hour. Store the
+Meta token in Google Secret Manager with `firebase functions:secrets:set
+WHATSAPP_ACCESS_TOKEN`, then deploy the `reminders` functions codebase.
+
+GitHub Actions remains available only as a manual emergency fallback. Its
+repository secrets are:
 
 | Secret | Value |
 | --- | --- |
@@ -86,12 +89,12 @@ variables → Actions → **Secrets**):
 | `EMAIL_API_KEY` | Resend API key (optional) |
 | `EMAIL_FROM` | Verified from address (optional) |
 
-The **Send Volunteer Reminders** workflow runs every 15 minutes. You can also
-run it manually from the Actions tab (workflow_dispatch) to test.
+The **Send Volunteer Reminders** GitHub workflow no longer runs on a cron. Run
+it manually from the Actions tab only when the Firebase schedule is unavailable.
 
 ### Security notes
 
-- Never commit tokens. They live only in GitHub secrets and are injected at run
+- Never commit tokens. They live only in Secret Manager (and GitHub secrets for the fallback) and are injected at run
   time. The Firebase **web** config (`REACT_APP_*`) is public and safe to expose.
 - The reminder sender uses admin credentials and runs server-side only.
 - Reminders are idempotent: a `remindersSent` marker prevents double-sending.

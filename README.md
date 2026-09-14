@@ -3,7 +3,7 @@
 A zero-cost volunteer coordination app for a temple/nonprofit. Admins create
 **tasks** and assign volunteers; volunteers can register themselves and sign up
 for open tasks. The app sends **automated reminders** over WhatsApp and email,
-scheduled entirely by **GitHub Actions** (no server, no credit card).
+scheduled by **Firebase Functions and Google Cloud Scheduler**.
 
 ## What it does
 
@@ -26,7 +26,7 @@ scheduled entirely by **GitHub Actions** (no server, no credit card).
 - Edit their profile: skills, weekly availability, and reminder preferences
 
 **Automated reminders**
-- A scheduled GitHub Actions job runs hourly, finds tasks whose
+- A scheduled Firebase function runs hourly at 7 minutes past the hour, finds tasks whose
   reminder time is due, and messages each assigned volunteer on their chosen
   channels. Recurring tasks automatically spawn their next occurrence.
 
@@ -45,7 +45,7 @@ scheduled entirely by **GitHub Actions** (no server, no credit card).
 | --- | --- |
 | Hosting (GitHub Pages) | Free |
 | Database + Auth (Firebase free tier) | Free |
-| Scheduler (GitHub Actions) | Free |
+| Scheduler (Google Cloud Scheduler) | First 3 jobs per billing account are free |
 | Email (Resend free tier) | Free |
 | AI proxy (Cloudflare Workers free tier) | Free within Cloudflare's limits |
 | AI generation (Gemini) | Subject to the selected Gemini plan and quota |
@@ -65,10 +65,10 @@ GitHub Actions cron ── reminder-sender/ (firebase-admin) ──► WhatsApp 
 ```
 
 - `src/` — the React + TypeScript app (the only frontend)
-- `reminder-sender/` — Node script run by GitHub Actions to send reminders
+- `reminder-sender/` — Firebase scheduled function that sends reminders
 - `firestore.rules` — access control (admins vs volunteers)
 - `.github/workflows/pages.yml` — builds & deploys the app to GitHub Pages
-- `.github/workflows/reminders.yml` — the scheduled reminder sender
+- `.github/workflows/reminders.yml` — manual emergency fallback for the reminder sender
 
 ## Quick start
 
