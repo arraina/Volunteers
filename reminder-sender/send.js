@@ -20,7 +20,9 @@ const toDate = (ts) => (ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null);
 
 // A reminder is "due" when now is within a send window after its computed time.
 // We look back this far so a task that came due while the job was idle still fires.
-const LOOKBACK_MS = 60 * 60 * 1000; // 1 hour
+// Recover a reminder if an hourly GitHub schedule is moderately delayed.
+// The remindersSent marker still guarantees each reminder is processed once.
+const LOOKBACK_MS = 2 * 60 * 60 * 1000; // 2 hours
 const DAILY_WHATSAPP_LIMIT = 100;
 const MIN_REMINDER_SPACING_HOURS = 24;
 

@@ -2,8 +2,8 @@ name: Send Volunteer Reminders
 
 on:
   schedule:
-    # Runs every 15 minutes. GitHub cron is UTC; timing is approximate.
-    - cron: '*/15 * * * *'
+    # Runs hourly at an off-peak minute. GitHub cron is UTC and best-effort.
+    - cron: '7 * * * *'
   workflow_dispatch: {}
 
 # Prevent overlapping runs.
