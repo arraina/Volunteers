@@ -352,7 +352,7 @@ const TasksTab: React.FC<{
   const [taskSearch, setTaskSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('all');
   const [eventFilter, setEventFilter] = useState('all');
-  const [creatorFilter, setCreatorFilter] = useState<'all' | 'mine'>('mine');
+  const [creatorFilter, setCreatorFilter] = useState<'all' | 'mine' | 'assigned'>('mine');
   const [taskSort, setTaskSort] = useState<'soonest' | 'latest' | 'title'>('soonest');
   const [undoBatchId, setUndoBatchId] = useState('');
 
@@ -370,7 +370,10 @@ const TasksTab: React.FC<{
       const matchesStatus = statusFilter === 'all' || effectiveTaskStatus(task) === statusFilter;
       const matchesEvent = eventFilter === 'all'
         || (eventFilter === '__none__' ? !task.eventId : task.eventId === eventFilter);
-      const matchesCreator = creatorFilter === 'all' || Boolean(uid && task.createdBy === uid);
+      const matchesCreator = creatorFilter === 'all'
+        || Boolean(uid && (creatorFilter === 'mine'
+          ? task.createdBy === uid
+          : task.assignedVolunteers.includes(uid)));
       return matchesSearch && matchesStatus && matchesEvent && matchesCreator;
     });
     return result.sort((a, b) => {
@@ -645,10 +648,11 @@ const TasksTab: React.FC<{
             </select>
           </label>
           <label>
-            <span>Created by</span>
+            <span>Task view</span>
             <select value={creatorFilter} onChange={(e) => setCreatorFilter(e.target.value as typeof creatorFilter)}>
-              <option value="all">All admins</option>
               <option value="mine">Created by me</option>
+              <option value="assigned">Assigned to me</option>
+              <option value="all">All tasks</option>
             </select>
           </label>
           <label>
