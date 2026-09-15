@@ -13,6 +13,7 @@ import {
 import { db } from '../config/firebase';
 import { createEvent, createTask, trashRecord } from '../helpers/store';
 import { TempleEvent, VolunteerTask, formatDate } from '../helpers/types';
+import AutoCommitDateInput from '../components/AutoCommitDateInput';
 
 interface Props {
   events: TempleEvent[];
@@ -433,7 +434,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
         <form className="action-entry" onSubmit={addActionItem}>
           <input aria-label="Action item" placeholder="Action item" value={action.title} onChange={(e) => setAction({ ...action, title: e.target.value })} required />
           <input aria-label="Action owner" placeholder="Owner" value={action.owner} onChange={(e) => setAction({ ...action, owner: e.target.value })} />
-          <input aria-label="Action due date" type="date" value={action.dueDate} onChange={(e) => setAction({ ...action, dueDate: e.target.value })} />
+          <AutoCommitDateInput aria-label="Action due date" type="date" value={action.dueDate} onValueChange={(value) => setAction({ ...action, dueDate: value })} />
           <input aria-label="Action notes" placeholder="Notes or link (optional)" value={action.notes} onChange={(e) => setAction({ ...action, notes: e.target.value })} />
           <button className="primary-btn" type="submit">Add action</button>
         </form>
@@ -476,7 +477,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
         <form className="stacked-form" onSubmit={addMeeting}>
           <h3>{editingMeetingId ? 'Edit meeting' : 'New meeting'}</h3>
           <input aria-label="Meeting title" placeholder="Meeting title" value={meeting.title} onChange={(e) => setMeeting({ ...meeting, title: e.target.value })} required />
-          <input type="datetime-local" value={meeting.meetingDate} onChange={(e) => setMeeting({ ...meeting, meetingDate: e.target.value })} />
+          <AutoCommitDateInput type="datetime-local" value={meeting.meetingDate} onValueChange={(value) => setMeeting({ ...meeting, meetingDate: value })} />
           <input aria-label="Meeting attendees" placeholder="Attendees" value={meeting.attendees} onChange={(e) => setMeeting({ ...meeting, attendees: e.target.value })} />
           <textarea aria-label="Discussion notes" placeholder="Discussion notes" value={meeting.notes} onChange={(e) => setMeeting({ ...meeting, notes: e.target.value })} />
           <textarea aria-label="Decisions made" placeholder="Decisions made" value={meeting.decisions} onChange={(e) => setMeeting({ ...meeting, decisions: e.target.value })} />
@@ -523,7 +524,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
       <p className="muted">Templates copy an event's task names, staffing, locations, and timing pattern. Choose when the new event should begin; each copied task is scheduled relative to that date and time.</p>
       {templates.length === 0 ? <div className="empty-state"><strong>No templates saved</strong><span>Select an event above and choose “Save as template.”</span></div> : <div className="stacked-form">
         <label className="field-label">New event start date and time</label>
-        <input type="datetime-local" value={templateDate} onChange={(e) => setTemplateDate(e.target.value)} />
+        <AutoCommitDateInput type="datetime-local" value={templateDate} onValueChange={setTemplateDate} />
         {templates.map((template) => <div className="task-card" key={template.id}>
           <strong>{template.name}</strong><p className="muted small">{template.tasks.length} task(s)</p>
           <button className="secondary-btn" onClick={() => createFromTemplate(template)}>Create event from this template</button>

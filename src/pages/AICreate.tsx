@@ -16,6 +16,7 @@ import {
   updateTaskManagementFields,
   updateTaskStatus,
 } from '../helpers/store';
+import AutoCommitDateInput from '../components/AutoCommitDateInput';
 
 interface EditableTask extends ParsedTask {
   startDateTime: string; // datetime-local value
@@ -336,10 +337,10 @@ const AICreateTab: React.FC<Props> = ({ uid, events, tasks: existingTasks, volun
               </div>
               <div>
                 <label className="field-label">Event date (optional)</label>
-                <input
+                <AutoCommitDateInput
                   type="date"
                   value={eventDate}
-                  onChange={(e) => setEventDate(e.target.value)}
+                  onValueChange={setEventDate}
                 />
               </div>
             </div>
@@ -372,10 +373,10 @@ const AICreateTab: React.FC<Props> = ({ uid, events, tasks: existingTasks, volun
                     <label className="field-label">
                       When{t.timeHint ? ` (AI hint: ${t.timeHint})` : ''}
                     </label>
-                    <input
+                    <AutoCommitDateInput
                       type="datetime-local"
                       value={t.startDateTime}
-                      onChange={(e) => updateTask(i, { startDateTime: e.target.value })}
+                      onValueChange={(value) => updateTask(i, { startDateTime: value })}
                     />
                     {t.startDateTime && new Date(t.startDateTime) < new Date() && (
                       <small className="field-hint" style={{ color: '#b45309' }}>

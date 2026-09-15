@@ -76,6 +76,7 @@ import {
 import { HourLog } from '../helpers/types';
 import AICreateTab from './AICreate';
 import EventWorkspace from './EventWorkspace';
+import AutoCommitDateInput from '../components/AutoCommitDateInput';
 import './AdminDashboard.css';
 
 type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'costs' | 'trash' | 'admins' | 'audit' | 'value';
@@ -508,17 +509,17 @@ const TasksTab: React.FC<{
             ))}
           </select>
           <label className="field-label">Start (Eastern Time — ET)</label>
-          <input
+          <AutoCommitDateInput
             type="datetime-local"
             value={form.startDateTime}
-            onChange={(e) => setForm({ ...form, startDateTime: e.target.value })}
+            onValueChange={(value) => setForm({ ...form, startDateTime: value })}
             required
           />
           <label className="field-label">End (optional, Eastern Time — ET)</label>
-          <input
+          <AutoCommitDateInput
             type="datetime-local"
             value={form.endDateTime}
-            onChange={(e) => setForm({ ...form, endDateTime: e.target.value })}
+            onValueChange={(value) => setForm({ ...form, endDateTime: value })}
           />
           <input
             type="text"
@@ -875,8 +876,8 @@ const OccurrenceRow: React.FC<{
       {editing && <form className="task-edit-form" onSubmit={saveTaskEdit}>
         <label><span>Task title</span><input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} required /></label>
         <label className="task-edit-wide"><span>Description</span><textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} /></label>
-        <label><span>Start (Eastern Time — ET)</span><input type="datetime-local" value={editForm.startDateTime} onChange={(e) => setEditForm({ ...editForm, startDateTime: e.target.value })} required /></label>
-        <label><span>End (optional, Eastern Time — ET)</span><input type="datetime-local" value={editForm.endDateTime} onChange={(e) => setEditForm({ ...editForm, endDateTime: e.target.value })} /></label>
+        <label><span>Start (Eastern Time — ET)</span><AutoCommitDateInput type="datetime-local" value={editForm.startDateTime} onValueChange={(value) => setEditForm({ ...editForm, startDateTime: value })} required /></label>
+        <label><span>End (optional, Eastern Time — ET)</span><AutoCommitDateInput type="datetime-local" value={editForm.endDateTime} onValueChange={(value) => setEditForm({ ...editForm, endDateTime: value })} /></label>
         <label><span>Location</span><input value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} /></label>
         <label><span>Volunteers needed</span><input type="number" min={Math.max(1, task.assignedVolunteers.length)} value={editForm.volunteersNeeded} onChange={(e) => setEditForm({ ...editForm, volunteersNeeded: e.target.value })} required /></label>
         <label className="task-edit-wide"><span>Reminder times (hours before the task)</span><input value={editForm.reminderHoursBefore} onChange={(e) => setEditForm({ ...editForm, reminderHoursBefore: e.target.value })} placeholder="72, 24" /><small className="field-hint">Maximum 2 reminders permitted. Each must be at least 24 hours before the task, and two reminders must be at least 24 hours apart. Sample format: 72, 24.</small></label>
@@ -2234,7 +2235,7 @@ const ReportsTab: React.FC<{
           <label><span>Task dates</span><select value={dateRange} onChange={(e) => setDateRange(e.target.value as typeof dateRange)}>
             <option value="7">Next 7 days</option><option value="30">Next 30 days</option><option value="90">Next 90 days</option><option value="custom">Custom dates</option>
           </select></label>
-          {dateRange === 'custom' && <><label><span>From</span><input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} /></label><label><span>To</span><input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} /></label></>}
+          {dateRange === 'custom' && <><label><span>From</span><AutoCommitDateInput type="date" value={customFrom} onValueChange={setCustomFrom} /></label><label><span>To</span><AutoCommitDateInput type="date" value={customTo} onValueChange={setCustomTo} /></label></>}
           <label><span>Event</span><select value={analyticsEvent} onChange={(e) => setAnalyticsEvent(e.target.value)}>
             <option value="all">All events</option>{events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
           </select></label>
