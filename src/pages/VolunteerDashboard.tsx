@@ -4,7 +4,6 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
 import {
-  NotificationChannel,
   VolunteerProfile,
   VolunteerTask,
   WEEKDAYS,
@@ -401,7 +400,7 @@ const ProfileTab: React.FC<{
   );
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [availability, setAvailability] = useState<string[]>(profile.availability);
-  const [prefs, setPrefs] = useState(profile.notificationPrefs);
+  const [prefs, setPrefs] = useState({ ...profile.notificationPrefs, email: true });
   const phoneValidation = validatePhoneNumber(phoneNumber);
   const toggle = (list: string[], value: string, setter: (v: string[]) => void) =>
     setter(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
@@ -417,7 +416,7 @@ const ProfileTab: React.FC<{
         lastName: lastName.trim(),
         phoneNumber: normalizedPhone,
         availability,
-        notificationPrefs: prefs,
+        notificationPrefs: { ...prefs, email: true },
       });
       sessionStorage.removeItem(`pendingPhone:${profile.uid}`);
       setMessage('Profile updated.');
@@ -478,28 +477,25 @@ const ProfileTab: React.FC<{
           contacts so you recognize temple reminders.
         </p>
         <div className="pref-rows">
-          {(['whatsapp', 'email'] as NotificationChannel[]).map((c) => (
-            <label key={c} className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={prefs[c]}
-                onChange={(e) => {
-                  const enabled = e.target.checked;
-                  if (
-                    c === 'whatsapp' &&
-                    !enabled &&
-                    !window.confirm(
-                      'Turning off WhatsApp will deactivate your volunteer profile. You will no longer receive task or service notifications. Do you want to continue?'
-                    )
-                  ) {
-                    return;
-                  }
-                  setPrefs({ ...prefs, [c]: enabled });
-                }}
-              />
-              {c === 'whatsapp' ? 'WhatsApp (required while active)' : 'Email'}
-            </label>
-          ))}
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={prefs.whatsapp}
+              onChange={(e) => {
+                const enabled = e.target.checked;
+                if (
+                  !enabled &&
+                  !window.confirm(
+                    'Turning off WhatsApp will deactivate your volunteer profile. You will no longer receive task or service notifications. Do you want to continue?'
+                  )
+                ) {
+                  return;
+                }
+                setPrefs({ ...prefs, whatsapp: enabled });
+              }}
+            />
+            WhatsApp (required while active)
+          </label>
         </div>
         <p className="muted small">
           Optional and informational only. If no days are selected, you can still sign up or be assigned to any task.

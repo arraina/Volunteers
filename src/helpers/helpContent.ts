@@ -123,7 +123,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'profile', title: 'Profile, availability, and reminder preferences', category: 'Volunteers', roles: ['volunteer', 'admin', 'owner'],
     summary: 'Keep contact details current and explain how availability and notification settings are used.',
     sections: [
-      { heading: 'Profile information', text: 'My Profile stores name, email, phone, typical available days, and reminder channels. Save changes after editing. Email is tied to the login account and is displayed as read-only to volunteers.' },
+      { heading: 'Profile information', text: 'My Profile stores name, email, phone, typical available days, and the WhatsApp reminder preference. Save changes after editing. Email is tied to the login account, displayed as read-only to volunteers, and does not have a reminder preference checkbox.' },
       { heading: 'Available days', text: 'Available days help coordinators understand when a volunteer usually prefers to serve. They do not automatically assign or block tasks. No selection means no usual-day preference was provided; the volunteer can still sign up or be assigned.' },
       { heading: 'WhatsApp requirement', text: 'WhatsApp reminders are enabled by default for active volunteers. Turning WhatsApp off displays a warning and makes the profile inactive, preventing new assignments and service notifications while preserving history.' },
       { heading: 'Temple reminder number', text: 'Automatic reminders come from the temple WhatsApp number +1 (973) 299-0970. Add it to your contacts. It is an automated sender and replies are not monitored.' },
