@@ -104,10 +104,9 @@ async function runReminderSender() {
     console.log('Email reminder channel is disabled because EMAIL_API_KEY and EMAIL_FROM are not configured.');
   }
 
-  const [tasksSnap, volunteersSnap, eventsSnap, stoppedSeriesSnap, whatsappSettingsSnap] = await Promise.all([
+  const [tasksSnap, volunteersSnap, stoppedSeriesSnap, whatsappSettingsSnap] = await Promise.all([
     db.collection('tasks').get(),
     db.collection('volunteers').get(),
-    db.collection('events').get(),
     db.collection('taskSeries').get(),
     db.collection('notificationSettings').doc('whatsapp').get(),
   ]);
@@ -251,61 +250,6 @@ async function runReminderSender() {
           processedAt: admin.firestore.FieldValue.serverTimestamp(),
           channels: results.map((r) => ({ channel: r.channel, ok: r.ok })),
         });
-      }
-    }
-  }
-
-  // Event-level WhatsApp reminders go only to participants assigned to at least
-  // one active task linked to that event. Per-event markers prevent duplicates.
-  for (const eventDoc of eventsSnap.docs) {
-    const event = { id: eventDoc.id, ...eventDoc.data() };
-    if (event.deleted === true || event.status === 'cancelled' || event.whatsappReminderEnabled !== true) continue;
-    const start = toDate(event.date);
-    if (!start || now >= start) continue;
-    const participants = new Set();
-    tasksSnap.docs.forEach((taskDoc) => {
-      const task = taskDoc.data();
-      if (task.deleted !== true && task.status !== 'cancelled' && task.eventId === event.id) {
-        (Array.isArray(task.assignedVolunteers) ? task.assignedVolunteers : []).forEach((id) => participants.add(id));
-      }
-    });
-    for (const hours of limitedReminderHours(event.reminderHoursBefore)) {
-      const dueAt = new Date(start.getTime() - hours * 3600 * 1000);
-      if (!(now >= dueAt && now.getTime() - dueAt.getTime() <= LOOKBACK_MS)) continue;
-      for (const volunteerId of participants) {
-        const volunteer = volunteers.get(volunteerId);
-        if (!volunteer || volunteer.whatsappOptOutAt || !volunteer.phoneNumber) continue;
-        const markerRef = db.collection('remindersSent').doc(`event_${event.id}_${volunteerId}_${hours}_v${Number(event.reminderVersion) || 0}`);
-        if ((await markerRef.get()).exists) continue;
-        const skipReason = whatsappPaused ? 'WhatsApp globally paused by Owner'
-          : whatsappSentToday >= DAILY_WHATSAPP_LIMIT ? `Daily WhatsApp limit of ${DAILY_WHATSAPP_LIMIT} reached` : '';
-        const params = [
-          volunteer.firstName || volunteer.name || 'Volunteer',
-          event.name,
-          `${start.toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short' })} ET`,
-          event.location || 'the temple',
-        ];
-        const result = skipReason
-          ? { ok: false, skipped: true, skipReason }
-          : await sendWhatsApp({ to: volunteer.phoneNumber, templateParams: params });
-        await db.collection('sentMessages').add({
-          eventId: event.id, volunteerId, channel: 'whatsapp', notificationType: 'event_reminder',
-          destination: volunteer.phoneNumber,
-          status: result.skipped ? 'skipped' : result.ok ? 'accepted' : 'failed',
-          providerId: result.id || null, failureReason: result.ok || result.skipped ? null : result.error || 'unknown',
-          skipReason: result.skipped ? result.skipReason : null, billingCategory: 'utility',
-          estimatedCostUsd: result.ok ? 0.0034 : 0,
-          ...(result.ok ? { acceptedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
-          sentAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        if (result.ok) {
-          sentCount += 1; whatsappSentToday += 1;
-          const alert = await sendDailyLimitAlertIfNeeded(db, whatsappSentToday, now, whatsappPaused);
-          whatsappSentToday = alert.count; sentCount += alert.sent; failCount += alert.failed;
-        }
-        else if (result.skipped) skippedCount += 1;
-        else failCount += 1;
-        await markerRef.set({ eventId: event.id, volunteerId, hours, processedAt: admin.firestore.FieldValue.serverTimestamp() });
       }
     }
   }

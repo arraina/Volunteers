@@ -59,6 +59,7 @@ export async function createEvent(input: {
   date?: Date | null;
   endDate?: Date | null;
   allDay?: boolean;
+  owner?: string;
   description?: string;
   location?: string;
   color?: string;
@@ -68,19 +69,16 @@ export async function createEvent(input: {
   createdBy?: string;
 }): Promise<string> {
   if (input.date) assertTaskStartNotPast(input.date);
-  const reminderHours = validateReminderHours(input.reminderHoursBefore || [24]);
   const ref = await addDoc(collection(db, 'events'), {
     name: input.name.trim(),
     date: input.date ? Timestamp.fromDate(input.date) : null,
     endDate: input.endDate ? Timestamp.fromDate(input.endDate) : null,
     allDay: input.allDay === true,
+    owner: (input.owner || input.createdBy || '').trim(),
     description: (input.description || '').trim(),
     location: (input.location || '').trim(),
     color: input.color || '#2f7d32',
     status: input.status || 'planned',
-    whatsappReminderEnabled: input.whatsappReminderEnabled === true,
-    reminderHoursBefore: reminderHours,
-    reminderVersion: 0,
     createdBy: input.createdBy || null,
     createdAt: serverTimestamp(),
   });
@@ -89,7 +87,7 @@ export async function createEvent(input: {
 
 export async function updateEventCalendarFields(
   eventId: string,
-  fields: Partial<Pick<TempleEvent, 'name' | 'date' | 'endDate' | 'allDay' | 'description' | 'location' | 'color' | 'status' | 'whatsappReminderEnabled' | 'reminderHoursBefore'>>
+  fields: Partial<Pick<TempleEvent, 'name' | 'date' | 'endDate' | 'allDay' | 'owner' | 'description' | 'location' | 'color' | 'status'>>
 ): Promise<void> {
   if (fields.date !== undefined) assertTaskStartNotPast(fields.date);
   const payload: Record<string, any> = { updatedAt: serverTimestamp() };
@@ -98,15 +96,12 @@ export async function updateEventCalendarFields(
   if (fields.endDate instanceof Date) payload.endDate = Timestamp.fromDate(fields.endDate);
   if (fields.endDate === undefined && Object.prototype.hasOwnProperty.call(fields, 'endDate')) payload.endDate = null;
   if (typeof fields.allDay === 'boolean') payload.allDay = fields.allDay;
+  if (typeof fields.owner === 'string' && fields.owner.trim()) payload.owner = fields.owner.trim();
   if (typeof fields.description === 'string') payload.description = fields.description.trim();
   if (typeof fields.location === 'string') payload.location = fields.location.trim();
   if (typeof fields.color === 'string') payload.color = fields.color;
   if (fields.status) payload.status = fields.status;
-  if (typeof fields.whatsappReminderEnabled === 'boolean') payload.whatsappReminderEnabled = fields.whatsappReminderEnabled;
-  if (fields.reminderHoursBefore) payload.reminderHoursBefore = validateReminderHours(fields.reminderHoursBefore);
-  if (fields.date !== undefined || fields.reminderHoursBefore !== undefined || fields.whatsappReminderEnabled !== undefined) {
-    payload.reminderVersion = increment(1);
-  }
+  if (fields.date !== undefined) payload.reminderVersion = increment(1);
   await updateDoc(doc(db, 'events', eventId), payload);
 }
 

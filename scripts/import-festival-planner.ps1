@@ -56,9 +56,10 @@ foreach ($festival in $festivals) {
   $fields = @{
     date = @{ timestampValue = Get-EasternTimestamp $festival.Start }
     allDay = @{ booleanValue = $true }
+    owner = @{ stringValue = 'shashikant.raina@gmail.com' }
     description = @{ stringValue = 'Imported from 2026 Festival Planner.xlsx, Sheet3.' }
   }
-  $mask = @('date', 'allDay', 'description')
+  $mask = @('date', 'allDay', 'owner', 'description')
   if ($festival.End) {
     $fields.endDate = @{ timestampValue = Get-EasternTimestamp $festival.End }
     $mask += 'endDate'
@@ -69,9 +70,6 @@ foreach ($festival in $festivals) {
     $fields.location = @{ stringValue = '' }
     $fields.color = @{ stringValue = '#2f7d32' }
     $fields.status = @{ stringValue = 'planned' }
-    $fields.whatsappReminderEnabled = @{ booleanValue = $false }
-    $fields.reminderHoursBefore = @{ arrayValue = @{ values = @(@{ integerValue = '24' }) } }
-    $fields.reminderVersion = @{ integerValue = '0' }
     $fields.createdBy = @{ stringValue = 'festival-planner-import' }
     $fields.createdAt = @{ timestampValue = [datetime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ') }
     $mask = @($fields.Keys)

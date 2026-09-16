@@ -86,6 +86,8 @@ export interface TempleEvent {
   endDate?: Date;
   /** Date-only calendar entry; its stored timestamp is used only for ordering. */
   allDay?: boolean;
+  /** Person accountable for planning and delivery of this event. */
+  owner?: string;
   description?: string;
   location?: string;
   color?: string;
@@ -315,6 +317,7 @@ export function normalizeEvent(id: string, data: Record<string, any>): TempleEve
     date: data.date ? firestoreTimestampToDate(data.date) : undefined,
     endDate: data.endDate ? firestoreTimestampToDate(data.endDate) : undefined,
     allDay: data.allDay === true,
+    owner: data.owner || '',
     description: data.description || '',
     location: data.location || '',
     color: data.color || '#2f7d32',
