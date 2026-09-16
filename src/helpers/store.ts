@@ -24,6 +24,7 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../config/firebase';
 import { normalizePhoneNumber } from './phone';
 import { validateReminderHours } from './reminderValidation';
+import { assertTaskStartNotPast } from './taskDateTime';
 export {
   MAX_REMINDERS_PER_TASK,
   MIN_REMINDER_LEAD_HOURS,
@@ -475,6 +476,7 @@ function occurrenceDoc(input: TaskInput, seriesId: string, start: Date, index: n
  * independently assignable. Returns the seriesId (or single task id).
  */
 export async function createTask(input: TaskInput): Promise<string> {
+  assertTaskStartNotPast(input.startDateTime);
   input = { ...input, reminderHoursBefore: validateReminderHours(input.reminderHoursBefore) };
   if (input.recurrence === 'none') {
     const ref = await addDoc(collection(db, 'tasks'), {
@@ -531,6 +533,7 @@ export async function updateTaskManagementFields(
   taskId: string,
   fields: TaskManagementFields
 ): Promise<void> {
+  if (fields.startDateTime !== undefined) assertTaskStartNotPast(fields.startDateTime);
   const patch: Record<string, any> = { updatedAt: serverTimestamp() };
   if (typeof fields.title === 'string' && fields.title.trim()) patch.title = fields.title.trim();
   if (typeof fields.description === 'string') patch.description = fields.description.trim();
@@ -561,6 +564,7 @@ export async function updateTaskManagementFieldsScoped(
   fields: TaskManagementFields,
   scope: SeriesScope
 ): Promise<void> {
+  if (fields.startDateTime !== undefined) assertTaskStartNotPast(fields.startDateTime);
   if (!task.seriesId || scope === 'one') {
     if (fields.volunteersNeeded !== undefined && fields.volunteersNeeded < task.assignedVolunteers.length) {
       throw new Error(`Volunteers needed cannot be below the ${task.assignedVolunteers.length} already assigned.`);

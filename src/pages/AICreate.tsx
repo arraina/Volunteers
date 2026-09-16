@@ -17,6 +17,7 @@ import {
   updateTaskStatus,
 } from '../helpers/store';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
+import { assertTaskStartNotPast, fromEasternDateTimeInput, toEasternDateTimeInput } from '../helpers/taskDateTime';
 
 interface EditableTask extends ParsedTask {
   startDateTime: string; // datetime-local value
@@ -160,6 +161,8 @@ const AICreateTab: React.FC<Props> = ({ uid, events, tasks: existingTasks, volun
       if (missingTimes.length > 0) {
         throw new Error('Please set a date/time for every task before creating.');
       }
+      const taskStarts = tasks.map((task) => fromEasternDateTimeInput(task.startDateTime));
+      taskStarts.forEach((start) => assertTaskStartNotPast(start));
 
       let eventId: string;
       let targetEventName: string;
@@ -179,10 +182,11 @@ const AICreateTab: React.FC<Props> = ({ uid, events, tasks: existingTasks, volun
         });
       }
 
-      for (const t of tasks) {
+      for (let index = 0; index < tasks.length; index += 1) {
+        const t = tasks[index];
         await createTask({
           title: t.title,
-          startDateTime: new Date(t.startDateTime),
+          startDateTime: taskStarts[index],
           location: t.location,
           skillsNeeded: [],
           volunteersNeeded: t.volunteersNeeded,
@@ -195,13 +199,9 @@ const AICreateTab: React.FC<Props> = ({ uid, events, tasks: existingTasks, volun
         });
       }
 
-      const pastCount = tasks.filter((t) => new Date(t.startDateTime) < new Date()).length;
-      const pastNote = pastCount
-        ? ` Note: ${pastCount} task(s) are dated in the past and may be hidden in the Tasks list — edit their date to a future time to see them.`
-        : '';
       const verb = mode === 'existing' ? 'Added' : 'Created';
       setDone(
-        `${verb} ${tasks.length} task(s) ${mode === 'existing' ? 'to' : 'under'} "${targetEventName}".${pastNote}`
+        `${verb} ${tasks.length} task(s) ${mode === 'existing' ? 'to' : 'under'} "${targetEventName}".`
       );
       setTasks(null);
       setText('');
@@ -377,12 +377,8 @@ const AICreateTab: React.FC<Props> = ({ uid, events, tasks: existingTasks, volun
                       type="datetime-local"
                       value={t.startDateTime}
                       onValueChange={(value) => updateTask(i, { startDateTime: value })}
+                      min={toEasternDateTimeInput(new Date())}
                     />
-                    {t.startDateTime && new Date(t.startDateTime) < new Date() && (
-                      <small className="field-hint" style={{ color: '#b45309' }}>
-                        This date is in the past — it won't show in the Tasks list.
-                      </small>
-                    )}
                   </div>
                   <div style={{ flex: 1 }}>
                     <label className="field-label">Location</label>

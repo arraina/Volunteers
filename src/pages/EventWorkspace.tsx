@@ -14,6 +14,7 @@ import { db } from '../config/firebase';
 import { createEvent, createTask, trashRecord } from '../helpers/store';
 import { TempleEvent, VolunteerTask, formatDate } from '../helpers/types';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
+import { assertTaskStartNotPast, fromEasternDateTimeInput, toEasternDateTimeInput } from '../helpers/taskDateTime';
 
 interface Props {
   events: TempleEvent[];
@@ -324,7 +325,9 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
 
   const createFromTemplate = async (template: EventTemplate) => {
     if (!templateDate) return setError('Choose a date and time for the new event.');
-    const base = new Date(templateDate);
+    const base = fromEasternDateTimeInput(templateDate);
+    try { assertTaskStartNotPast(base); }
+    catch (error) { setError(error instanceof Error ? error.message : 'Choose a current or future date and time.'); return; }
     const newEventId = await createEvent({ name: template.name, date: base, description: template.description, createdBy: uid });
     for (const task of template.tasks) {
       const start = new Date(base.getTime() + task.offsetMs);
@@ -524,7 +527,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
       <p className="muted">Templates copy an event's task names, staffing, locations, and timing pattern. Choose when the new event should begin; each copied task is scheduled relative to that date and time.</p>
       {templates.length === 0 ? <div className="empty-state"><strong>No templates saved</strong><span>Select an event above and choose “Save as template.”</span></div> : <div className="stacked-form">
         <label className="field-label">New event start date and time</label>
-        <AutoCommitDateInput type="datetime-local" value={templateDate} onValueChange={setTemplateDate} />
+        <AutoCommitDateInput type="datetime-local" value={templateDate} onValueChange={setTemplateDate} min={toEasternDateTimeInput(new Date())} />
         {templates.map((template) => <div className="task-card" key={template.id}>
           <strong>{template.name}</strong><p className="muted small">{template.tasks.length} task(s)</p>
           <button className="secondary-btn" onClick={() => createFromTemplate(template)}>Create event from this template</button>

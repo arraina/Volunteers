@@ -77,6 +77,7 @@ import { HourLog } from '../helpers/types';
 import AICreateTab from './AICreate';
 import EventWorkspace from './EventWorkspace';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
+import { assertTaskStartNotPast, fromEasternDateTimeInput, toEasternDateTimeInput } from '../helpers/taskDateTime';
 import './AdminDashboard.css';
 
 type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'costs' | 'trash' | 'admins' | 'audit' | 'value';
@@ -115,41 +116,11 @@ const emptyVolunteerForm = {
   whatsappOptIn: true,
 };
 
-const EASTERN_TIME_ZONE = 'America/New_York';
-
-// datetime-local has no timezone. Treat its wall-clock value as Eastern Time
-// regardless of the administrator's device timezone.
-const fromEasternDateTimeInput = (value: string): Date => {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
-  if (!match) return new Date(NaN);
-  const [, year, month, day, hour, minute] = match.map(Number);
-  const wallClockUtc = Date.UTC(year, month - 1, day, hour, minute);
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: EASTERN_TIME_ZONE,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(new Date(wallClockUtc));
-  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((item) => item.type === type)?.value);
-  const representedUtc = Date.UTC(part('year'), part('month') - 1, part('day'), part('hour'), part('minute'));
-  return new Date(wallClockUtc - (representedUtc - wallClockUtc));
-};
-
-const toDateTimeInput = (date?: Date) => {
-  if (!date) return '';
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: EASTERN_TIME_ZONE,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || '';
-  return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`;
-};
-
 const taskEditValues = (task: VolunteerTask) => ({
   title: task.title,
   description: task.description || '',
-  startDateTime: toDateTimeInput(task.startDateTime),
-  endDateTime: toDateTimeInput(task.endDateTime),
+  startDateTime: toEasternDateTimeInput(task.startDateTime),
+  endDateTime: toEasternDateTimeInput(task.endDateTime),
   location: task.location || '',
   volunteersNeeded: String(task.volunteersNeeded),
   reminderHoursBefore: task.reminderHoursBefore.join(', '),
@@ -431,14 +402,18 @@ const TasksTab: React.FC<{
       const needed = Math.max(1, parseInt(form.volunteersNeeded, 10) || 1);
       const reminderHours = validateReminderHours(Array.from(new Set(form.reminderHoursBefore
         .split(',')
-        .map((s) => Number(s.trim()))
-        .filter((n) => Number.isFinite(n) && n > 0)))
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map(Number)
+        .filter(Number.isFinite)))
         .sort((a, b) => b - a));
 
+      const startDateTime = fromEasternDateTimeInput(form.startDateTime);
+      assertTaskStartNotPast(startDateTime);
       await createTask({
         title: form.title,
         description: form.description,
-        startDateTime: fromEasternDateTimeInput(form.startDateTime),
+        startDateTime,
         endDateTime: form.endDateTime ? fromEasternDateTimeInput(form.endDateTime) : null,
         location: form.location,
         skillsNeeded: [],
@@ -516,6 +491,7 @@ const TasksTab: React.FC<{
             type="datetime-local"
             value={form.startDateTime}
             onValueChange={(value) => setForm({ ...form, startDateTime: value })}
+            min={toEasternDateTimeInput(new Date())}
             required
           />
           <label className="field-label">End (optional, Eastern Time — ET)</label>
@@ -583,7 +559,7 @@ const TasksTab: React.FC<{
             value={form.reminderHoursBefore}
             onChange={(e) => setForm({ ...form, reminderHoursBefore: e.target.value })}
           />
-          <small className="field-hint">Maximum 2 reminders permitted. Each must be at least 24 hours before the task, and two reminders must be at least 24 hours apart. Sample format: 72, 24.</small>
+          <small className="field-hint">One reminder may be any positive number of hours before the task. If you set two reminders, they must be at least 24 hours apart. Sample formats: 2 or 48, 24.</small>
           <button type="submit" disabled={saving} className="primary-btn">
             {saving ? 'Saving…' : 'Create Task'}
           </button>
@@ -801,6 +777,7 @@ const OccurrenceRow: React.FC<{
   const [savingEdit, setSavingEdit] = useState(false);
   const [editForm, setEditForm] = useState(() => taskEditValues(task));
   const status = effectiveTaskStatus(task);
+  const isHistoricalTask = task.startDateTime < new Date();
   const assignmentClosed = status === 'filled' || status === 'completed' || status === 'cancelled' || openSlots(task) === 0;
 
   const saveTaskEdit = async (event: React.FormEvent) => {
@@ -811,13 +788,20 @@ const OccurrenceRow: React.FC<{
     const needed = Number.parseInt(editForm.volunteersNeeded, 10);
     let reminders: number[];
     try { reminders = validateReminderHours(Array.from(new Set(editForm.reminderHoursBefore.split(',')
-      .map((value) => Number(value.trim()))
-      .filter((value) => Number.isFinite(value) && value > 0)))
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map(Number)
+      .filter(Number.isFinite)))
       .sort((a, b) => b - a)); }
     catch (error) { setError(error instanceof Error ? error.message : 'Invalid reminder schedule.'); return; }
     if (!editForm.title.trim() || Number.isNaN(start.getTime())) {
       setError('Task title and a valid start date/time are required.');
       return;
+    }
+    const startChanged = editForm.startDateTime !== toEasternDateTimeInput(task.startDateTime);
+    if (startChanged) {
+      try { assertTaskStartNotPast(start); }
+      catch (error) { setError(error instanceof Error ? error.message : 'Task start date and time cannot be in the past.'); return; }
     }
     if (end && (Number.isNaN(end.getTime()) || end <= start)) {
       setError('End date/time must be after the start date/time.');
@@ -829,8 +813,7 @@ const OccurrenceRow: React.FC<{
     }
     const scope = await askScope('Edit task');
     if (!scope) return;
-    const startChanged = editForm.startDateTime !== toDateTimeInput(task.startDateTime);
-    const endChanged = editForm.endDateTime !== toDateTimeInput(task.endDateTime);
+    const endChanged = editForm.endDateTime !== toEasternDateTimeInput(task.endDateTime);
     const normalizedCurrentReminders = task.reminderHoursBefore.filter((value) => value > 0).join(',');
     const normalizedNewReminders = reminders.join(',');
     setSavingEdit(true);
@@ -880,11 +863,11 @@ const OccurrenceRow: React.FC<{
       {editing && <form className="task-edit-form" onSubmit={saveTaskEdit}>
         <label><span>Task title</span><input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} required /></label>
         <label className="task-edit-wide"><span>Description</span><textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} /></label>
-        <label><span>Start (Eastern Time — ET)</span><AutoCommitDateInput type="datetime-local" value={editForm.startDateTime} onValueChange={(value) => setEditForm({ ...editForm, startDateTime: value })} required /></label>
-        <label><span>End (optional, Eastern Time — ET)</span><AutoCommitDateInput type="datetime-local" value={editForm.endDateTime} onValueChange={(value) => setEditForm({ ...editForm, endDateTime: value })} /></label>
+        <label><span>Start (Eastern Time — ET)</span><AutoCommitDateInput type="datetime-local" value={editForm.startDateTime} onValueChange={(value) => setEditForm({ ...editForm, startDateTime: value })} min={toEasternDateTimeInput(new Date())} disabled={isHistoricalTask} required />{isHistoricalTask && <small className="field-hint">Historical task times are locked. Other task details can still be edited.</small>}</label>
+        <label><span>End (optional, Eastern Time — ET)</span><AutoCommitDateInput type="datetime-local" value={editForm.endDateTime} onValueChange={(value) => setEditForm({ ...editForm, endDateTime: value })} disabled={isHistoricalTask} /></label>
         <label><span>Location</span><input value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} /></label>
         <label><span>Volunteers needed</span><input type="number" min={Math.max(1, task.assignedVolunteers.length)} value={editForm.volunteersNeeded} onChange={(e) => setEditForm({ ...editForm, volunteersNeeded: e.target.value })} required /></label>
-        <label className="task-edit-wide"><span>Reminder times (hours before the task)</span><input value={editForm.reminderHoursBefore} onChange={(e) => setEditForm({ ...editForm, reminderHoursBefore: e.target.value })} placeholder="72, 24" /><small className="field-hint">Maximum 2 reminders permitted. Each must be at least 24 hours before the task, and two reminders must be at least 24 hours apart. Sample format: 72, 24.</small></label>
+        <label className="task-edit-wide"><span>Reminder times (hours before the task)</span><input value={editForm.reminderHoursBefore} onChange={(e) => setEditForm({ ...editForm, reminderHoursBefore: e.target.value })} placeholder="48, 24" /><small className="field-hint">One reminder may be any positive number of hours before the task. If you set two reminders, they must be at least 24 hours apart. Sample formats: 2 or 48, 24.</small></label>
         <div className="task-edit-actions task-edit-wide"><button className="primary-btn" disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</button><button type="button" className="secondary-btn" onClick={() => { setEditForm(taskEditValues(task)); setEditing(false); }}>Cancel edit</button></div>
       </form>}
       <div className="task-actions">

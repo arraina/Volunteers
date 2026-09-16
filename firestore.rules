@@ -63,6 +63,18 @@ service cloud.firestore {
               || request.resource.data.reminderHoursBefore[1] - request.resource.data.reminderHoursBefore[0] >= 24)));
     }
 
+    // Permit a brief submission delay while preventing newly created or
+    // rescheduled tasks from being placed in the past.
+    function hasCurrentOrFutureTaskStart() {
+      return request.resource.data.startDateTime is timestamp
+        && request.resource.data.startDateTime >= request.time - duration.value(2, 'm');
+    }
+
+    function keepsOrHasCurrentTaskStart() {
+      return request.resource.data.startDateTime == resource.data.startDateTime
+        || hasCurrentOrFutureTaskStart();
+    }
+
     function isSelfSignup() {
       return resource.data.status != 'cancelled'
         && resource.data.startDateTime > request.time
@@ -150,7 +162,7 @@ service cloud.firestore {
     // ----- tasks -----
     match /tasks/{taskId} {
       allow read: if verifiedUser();
-      allow create: if isAdmin() && hasValidReminderSchedule();
+      allow create: if isAdmin() && hasValidReminderSchedule() && hasCurrentOrFutureTaskStart();
       allow delete: if isOwner();
       // Admins can update anything. Volunteers may only self-add/remove
       // themselves on the assignedVolunteers array of an open task.
@@ -160,7 +172,7 @@ service cloud.firestore {
             'deleted', 'deletedAt', 'deletedBy', 'deletedBatchId', 'deletedScope'
           ])
           || (resource.data.deleted != true && request.resource.data.deleted == true)
-        ))) && hasValidReminderSchedule())
+        ))) && hasValidReminderSchedule() && keepsOrHasCurrentTaskStart())
         || (verifiedUser() && (isSelfSignup() || isSelfWithdrawal()));
     }
 
