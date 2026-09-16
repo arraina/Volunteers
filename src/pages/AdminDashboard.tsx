@@ -177,7 +177,7 @@ const AdminDashboard: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!isOwner && (tab === 'calendar' || tab === 'announcements' || tab === 'history' || tab === 'reports')) {
+    if (!isOwner && (tab === 'announcements' || tab === 'history' || tab === 'reports')) {
       setTab('tasks');
     }
   }, [isOwner, tab]);
@@ -229,9 +229,9 @@ const AdminDashboard: React.FC = () => {
         <button className={tab === 'events' ? 'active' : ''} onClick={() => setTab('events')}>
           Event Workspace
         </button>
-        {isOwner && <button className={tab === 'calendar' ? 'active' : ''} onClick={() => setTab('calendar')}>
+        <button className={tab === 'calendar' ? 'active' : ''} onClick={() => setTab('calendar')}>
           Event Calendar
-        </button>}
+        </button>
         <button
           className={tab === 'volunteers' ? 'active' : ''}
           onClick={() => setTab('volunteers')}
@@ -294,7 +294,7 @@ const AdminDashboard: React.FC = () => {
           />
         )}
         {tab === 'events' && <EventWorkspace uid={user?.uid} events={events} tasks={tasks} setError={setError} />}
-        {tab === 'calendar' && isOwner && <EventCalendar uid={user?.uid} events={events} tasks={tasks} setError={setError} />}
+        {tab === 'calendar' && <EventCalendar uid={user?.uid} events={events} tasks={tasks} setError={setError} canManage={isOwner} />}
         {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} uid={user?.uid} setError={setError} />}
         {tab === 'announcements' && isOwner && (
           <AnnouncementsTab uid={user?.uid} setError={setError} />

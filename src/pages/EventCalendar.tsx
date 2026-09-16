@@ -14,6 +14,7 @@ interface Props {
   tasks: VolunteerTask[];
   uid?: string;
   setError: (message: string) => void;
+  canManage: boolean;
 }
 
 const COLORS = ['#2f7d32', '#2563eb', '#9333ea', '#dc2626', '#d97706', '#0891b2'];
@@ -33,7 +34,7 @@ function parseReminders(value: string): number[] {
   return value.split(',').map((item) => item.trim()).filter(Boolean).map(Number);
 }
 
-const EventCalendar: React.FC<Props> = ({ events, tasks, uid, setError }) => {
+const EventCalendar: React.FC<Props> = ({ events, tasks, uid, setError, canManage }) => {
   const [view, setView] = useState<CalendarView>('month');
   const [cursor, setCursor] = useState(startOfDay(new Date()));
   const [form, setForm] = useState(emptyForm);
@@ -158,23 +159,23 @@ const EventCalendar: React.FC<Props> = ({ events, tasks, uid, setError }) => {
   const days = view === 'month' ? Array.from({ length: 42 }, (_, index) => addDays(gridStart, index))
     : view === 'week' ? Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)) : [cursor];
 
-  return <div className="event-calendar-page">
-    <div className="panel-head analytics-heading"><div><h2>Event Calendar</h2><p className="muted small">Plan events, detect conflicts, and manage participant WhatsApp reminders.</p></div><button className="primary-btn" onClick={() => { resetForm(); setForm({ ...emptyForm, start: toEasternDateTimeInput(new Date(Date.now() + 3_600_000)) }); }}>Add event</button></div>
+  return <div className={`event-calendar-page${canManage ? '' : ' read-only'}`}>
+    <div className="panel-head analytics-heading"><div><h2>Event Calendar</h2><p className="muted small">{canManage ? 'Plan events, detect conflicts, and manage participant WhatsApp reminders.' : 'View the event schedule and detected conflicts.'}</p></div>{canManage && <button className="primary-btn" onClick={() => { resetForm(); setForm({ ...emptyForm, start: toEasternDateTimeInput(new Date(Date.now() + 3_600_000)) }); }}>Add event</button>}</div>
     {message && <div className="success-message">{message}</div>}
 
-    <section className="panel calendar-ai">
+    {canManage && <section className="panel calendar-ai">
       <div className="panel-head"><div><h2>AI event planner</h2><p className="muted small">Describe event additions, changes, or deletions. Nothing is applied until you approve the preview.</p></div></div>
       <div className="ai-calendar-input"><textarea value={aiText} onChange={(event) => setAiText(event.target.value)} placeholder='Example: "Add Rath Yatra on October 18 from 10 AM to 4 PM at the temple, remind participants 48 and 24 hours before"' /><button className="primary-btn" disabled={aiBusy || !isAiConfigured} onClick={parseAi}>{aiBusy ? 'Planning…' : 'Preview changes'}</button></div>
       {!isAiConfigured && <p className="muted small">Configure the existing AI endpoint to enable this planner.</p>}
       {aiPlan && <div className="ai-plan"><strong>{aiPlan.summary}</strong><ol>{aiPlan.actions.map((action, index) => <li key={index}>{action.type.replace(/_/g, ' ')}: {action.type === 'create_event' ? action.event.name : events.find((item) => item.id === action.eventId)?.name || action.eventId}</li>)}</ol><div className="row"><button className="primary-btn" disabled={aiBusy || !aiPlan.actions.length} onClick={applyAi}>Approve and apply</button><button className="secondary-btn" onClick={() => setAiPlan(null)}>Discard</button></div></div>}
-    </section>
+    </section>}
 
     <div className="calendar-layout">
       <section className="panel calendar-main">
         <div className="calendar-toolbar"><div className="row"><button className="secondary-btn" onClick={() => move(-1)}>‹</button><button className="secondary-btn" onClick={() => setCursor(startOfDay(new Date()))}>Today</button><button className="secondary-btn" onClick={() => move(1)}>›</button></div><h2>{view === 'year' ? cursor.getFullYear() : cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric', ...(view === 'day' ? { day: 'numeric' } : {}) })}</h2><div className="view-switch">{(['year', 'month', 'week', 'day'] as CalendarView[]).map((item) => <button key={item} className={view === item ? 'active' : ''} onClick={() => setView(item)}>{item}</button>)}</div></div>
         <input className="calendar-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search events, location, or description" />
         {view === 'year' ? <div className="year-grid">{Array.from({ length: 12 }, (_, month) => <button key={month} className="year-month" onClick={() => { setCursor(new Date(cursor.getFullYear(), month, 1)); setView('month'); }}><strong>{new Date(cursor.getFullYear(), month, 1).toLocaleDateString('en-US', { month: 'long' })}</strong><span>{visibleEvents.filter((event) => event.date!.getFullYear() === cursor.getFullYear() && event.date!.getMonth() === month).length} event(s)</span></button>)}</div>
-          : <div className={`calendar-grid calendar-${view}`}>{days.map((day) => <div key={day.toISOString()} className={`calendar-day ${sameDay(day, new Date()) ? 'today' : ''} ${view === 'month' && day.getMonth() !== cursor.getMonth() ? 'outside' : ''}`}><button className="day-number" onClick={() => { setCursor(day); setView('day'); }}>{day.toLocaleDateString('en-US', { weekday: view === 'month' ? undefined : 'short', day: 'numeric', month: view === 'month' ? undefined : 'short' })}</button><div className="day-events">{visibleEvents.filter((event) => sameDay(event.date!, day)).map((event) => <button key={event.id} className={`calendar-event status-${event.status}`} style={{ borderLeftColor: event.color }} onClick={() => setForEdit(event)}><strong>{event.date!.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} {event.name}</strong>{view !== 'month' && <span>{event.location || 'Location not set'}</span>}</button>)}</div></div>)}</div>}
+          : <div className={`calendar-grid calendar-${view}`}>{days.map((day) => <div key={day.toISOString()} className={`calendar-day ${sameDay(day, new Date()) ? 'today' : ''} ${view === 'month' && day.getMonth() !== cursor.getMonth() ? 'outside' : ''}`}><button className="day-number" onClick={() => { setCursor(day); setView('day'); }}>{day.toLocaleDateString('en-US', { weekday: view === 'month' ? undefined : 'short', day: 'numeric', month: view === 'month' ? undefined : 'short' })}</button><div className="day-events">{visibleEvents.filter((event) => sameDay(event.date!, day)).map((event) => <button key={event.id} className={`calendar-event status-${event.status}`} style={{ borderLeftColor: event.color }} onClick={() => canManage && setForEdit(event)}><strong>{event.date!.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} {event.name}</strong>{view !== 'month' && <span>{event.location || 'Location not set'}</span>}</button>)}</div></div>)}</div>}
       </section>
 
       <aside className="calendar-sidebar">
