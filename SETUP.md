@@ -92,8 +92,8 @@ repository secrets are:
 | `FIREBASE_SERVICE_ACCOUNT` | Full JSON of a Firebase service account key (Project Settings → Service accounts → Generate new private key) |
 | `WHATSAPP_ACCESS_TOKEN` | Permanent Meta system-user token |
 | `WHATSAPP_PHONE_NUMBER_ID` | Meta WhatsApp phone number ID |
-| `WHATSAPP_TEMPLATE_NAME` | Approved template name (e.g. `task_reminder`) |
-| `WHATSAPP_TEMPLATE_LANG` | Template language (e.g. `en_US`) |
+| `WHATSAPP_TEMPLATE_NAME` | Approved template name (`task_reminder_hk_v3`) |
+| `WHATSAPP_TEMPLATE_LANG` | Approved template language (`en`) |
 | `EMAIL_API_KEY` | Resend API key (optional) |
 | `EMAIL_FROM` | Verified from address (optional) |
 

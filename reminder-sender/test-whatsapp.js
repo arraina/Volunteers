@@ -13,8 +13,8 @@
 //   node test-whatsapp.js hello +15551234567
 //
 //   # 2) Your real reminder template (4 body variables):
-//   export WHATSAPP_TEMPLATE_NAME="task_reminder"
-//   export WHATSAPP_TEMPLATE_LANG="en_US"
+//   export WHATSAPP_TEMPLATE_NAME="task_reminder_hk_v3"
+//   export WHATSAPP_TEMPLATE_LANG="en"
 //   node test-whatsapp.js reminder +15551234567
 //
 // The recipient must have opted in / messaged your business number, or be on
