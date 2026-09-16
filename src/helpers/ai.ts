@@ -48,8 +48,8 @@ export interface TaskManagementPlan {
 }
 
 export type EventCalendarAction =
-  | { type: 'create_event'; event: { name: string; date: string; endDate?: string | null; owner?: string; description?: string; location?: string; status?: 'planned' | 'confirmed' } }
-  | { type: 'update_event'; eventId: string; changes: { name?: string; date?: string; endDate?: string | null; owner?: string; description?: string; location?: string; status?: 'planned' | 'confirmed' | 'cancelled' } }
+  | { type: 'create_event'; event: { name: string; date: string; endDate?: string | null; description?: string; location?: string; status?: 'planned' | 'confirmed' } }
+  | { type: 'update_event'; eventId: string; changes: { name?: string; date?: string; endDate?: string | null; description?: string; location?: string; status?: 'planned' | 'confirmed' | 'cancelled' } }
   | { type: 'delete_event'; eventId: string };
 
 export interface EventCalendarPlan {
@@ -269,8 +269,8 @@ export async function parseEventCalendarRequest(
   const system = `You translate an Owner request into safe event-calendar actions.
 Return ONLY valid minified JSON matching {"summary":string,"actions":Action[]}.
 Action is one of:
-{"type":"create_event","event":{"name":string,"date":ISO-8601 string,"endDate"?:ISO-8601 string|null,"owner"?:string,"description"?:string,"location"?:string,"status"?:"planned"|"confirmed"}}
-{"type":"update_event","eventId":string,"changes":{"name"?:string,"date"?:ISO-8601 string,"endDate"?:ISO-8601 string|null,"owner"?:string,"description"?:string,"location"?:string,"status"?:"planned"|"confirmed"|"cancelled"}}
+{"type":"create_event","event":{"name":string,"date":ISO-8601 string,"endDate"?:ISO-8601 string|null,"description"?:string,"location"?:string,"status"?:"planned"|"confirmed"}}
+{"type":"update_event","eventId":string,"changes":{"name"?:string,"date"?:ISO-8601 string,"endDate"?:ISO-8601 string|null,"description"?:string,"location"?:string,"status"?:"planned"|"confirmed"|"cancelled"}}
 {"type":"delete_event","eventId":string}
 Use IDs only from the catalog for update/delete. Never invent IDs. Resolve relative dates in America/New_York. Do not delete when ambiguous; return no actions and explain. Two reminders must be at least 24 hours apart.`;
   const now = new Date();

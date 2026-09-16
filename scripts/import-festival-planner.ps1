@@ -56,7 +56,7 @@ foreach ($festival in $festivals) {
   $fields = @{
     date = @{ timestampValue = Get-EasternTimestamp $festival.Start }
     allDay = @{ booleanValue = $true }
-    owner = @{ stringValue = 'shashikant.raina@gmail.com' }
+    owner = @{ stringValue = '' }
     description = @{ stringValue = 'Imported from 2026 Festival Planner.xlsx, Sheet3.' }
   }
   $mask = @('date', 'allDay', 'owner', 'description')

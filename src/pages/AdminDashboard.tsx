@@ -294,7 +294,7 @@ const AdminDashboard: React.FC = () => {
           />
         )}
         {tab === 'events' && <EventWorkspace uid={user?.uid} events={events} tasks={tasks} setError={setError} />}
-        {tab === 'calendar' && <EventCalendar uid={user?.uid} currentUserEmail={user?.email || ''} events={events} tasks={tasks} setError={setError} canManage={isOwner} />}
+        {tab === 'calendar' && <EventCalendar uid={user?.uid} events={events} tasks={tasks} volunteers={volunteers} setError={setError} canManage={isOwner} />}
         {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} uid={user?.uid} setError={setError} />}
         {tab === 'announcements' && isOwner && (
           <AnnouncementsTab uid={user?.uid} setError={setError} />

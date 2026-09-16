@@ -74,7 +74,7 @@ export async function createEvent(input: {
     date: input.date ? Timestamp.fromDate(input.date) : null,
     endDate: input.endDate ? Timestamp.fromDate(input.endDate) : null,
     allDay: input.allDay === true,
-    owner: (input.owner || input.createdBy || '').trim(),
+    owner: (input.owner || '').trim(),
     description: (input.description || '').trim(),
     location: (input.location || '').trim(),
     color: input.color || '#2f7d32',
@@ -96,7 +96,7 @@ export async function updateEventCalendarFields(
   if (fields.endDate instanceof Date) payload.endDate = Timestamp.fromDate(fields.endDate);
   if (fields.endDate === undefined && Object.prototype.hasOwnProperty.call(fields, 'endDate')) payload.endDate = null;
   if (typeof fields.allDay === 'boolean') payload.allDay = fields.allDay;
-  if (typeof fields.owner === 'string' && fields.owner.trim()) payload.owner = fields.owner.trim();
+  if (typeof fields.owner === 'string') payload.owner = fields.owner.trim();
   if (typeof fields.description === 'string') payload.description = fields.description.trim();
   if (typeof fields.location === 'string') payload.location = fields.location.trim();
   if (typeof fields.color === 'string') payload.color = fields.color;
