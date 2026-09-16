@@ -2093,6 +2093,12 @@ const ReportsTab: React.FC<{
   );
   const failedMessages = scopedMessages.filter((message) => message.status === 'failed');
   const activeVolunteers = scopedVolunteers.filter((volunteer) => volunteer.participationStatus !== 'inactive');
+  const whatsappOptOutVolunteers = [...volunteers]
+    .filter((volunteer) => volunteer.whatsappOptIn === false || Boolean(volunteer.whatsappOptOutAt))
+    .sort((a, b) =>
+      (b.whatsappOptOutAt?.getTime() || 0) - (a.whatsappOptOutAt?.getTime() || 0) ||
+      a.name.localeCompare(b.name)
+    );
   const totalHours = scopedLogs.reduce((sum, log) => sum + (log.hours || 0), 0);
 
   const whatsappDeliveryIssues = useMemo(() => {
@@ -2263,7 +2269,30 @@ const ReportsTab: React.FC<{
         <div className="stat-card"><span className="stat-num">{activeVolunteers.length}</span><span className="stat-label">Active volunteers</span></div>
         <div className="stat-card"><span className="stat-num">{totalHours.toFixed(1)}</span><span className="stat-label">Hours recorded</span></div>
         <div className="stat-card"><span className="stat-num">{failedMessages.length}</span><span className="stat-label">Reminder failures</span></div>
+        <div className="stat-card"><span className="stat-num">{whatsappOptOutVolunteers.length}</span><span className="stat-label">WhatsApp turned off</span></div>
       </div>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>WhatsApp reminders turned off</h2>
+            <p className="muted small">All volunteers who opted out of WhatsApp reminders. This list is not limited by the task-date filters above.</p>
+          </div>
+          <span className="admin-tag">{whatsappOptOutVolunteers.length} volunteer{whatsappOptOutVolunteers.length === 1 ? '' : 's'}</span>
+        </div>
+        {whatsappOptOutVolunteers.length === 0
+          ? <p className="success-text">No volunteers have turned off WhatsApp reminders.</p>
+          : <div className="table-scroll"><table className="report-table">
+              <thead><tr><th>Volunteer</th><th>Email</th><th>Phone</th><th>Turned off</th><th>Status</th></tr></thead>
+              <tbody>{whatsappOptOutVolunteers.map((volunteer) => <tr key={volunteer.uid}>
+                <td><strong>{volunteer.name || 'Unnamed volunteer'}</strong></td>
+                <td>{volunteer.email || '—'}</td>
+                <td>{volunteer.phoneNumber || '—'}</td>
+                <td>{volunteer.whatsappOptOutAt?.toLocaleString() || 'Date not recorded'}</td>
+                <td><span className="admin-tag">{volunteer.participationStatus || 'inactive'}</span></td>
+              </tr>)}</tbody>
+            </table></div>}
+      </section>
 
       <section className="panel service-capacity">
         <div className="panel-head"><div><h2>Free-service capacity</h2><p className="muted small">Current no-cost limits and the best usage signal available inside this application.</p></div></div>

@@ -232,7 +232,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'analytics', title: 'Analytics, filters, and planning decisions', category: 'Reports', roles: ['admin', 'owner'],
     summary: 'Use dashboard metrics and filters to identify coverage, participation, and planning needs.',
     sections: [
-      { heading: 'Filters', text: 'The Admin Tasks view defaults to Created by me to reduce noise. Search by task or event text and filter by status or event; choose All admins for the shared list. Analytics has separate date, event, channel, and volunteer filters.' },
+      { heading: 'Filters', text: 'The Admin Tasks view defaults to Created by me to reduce noise. Search by task or event text and filter by status or event; choose All admins for the shared list. Analytics has separate date, event, channel, and volunteer filters. Its WhatsApp reminders turned off section always shows every volunteer who opted out, regardless of the selected task-date filters.' },
       { heading: 'Planning', text: 'Use open places and fill rates to identify staffing gaps, participation and hours to understand engagement, and event feedback to improve repeat events. Treat low activity as a prompt for outreach, not a judgment about a volunteer.' },
       { heading: 'Free-service capacity', text: 'The capacity table lists the current official free limits for supporting services. App-record estimates include a usage percentage and forecast where possible. Provider-only measurements are clearly identified and link to the corresponding service dashboard instead of showing a guessed value.' },
     ], keywords: ['analytics', 'dashboard', 'filter', 'search', 'coverage', 'hours', 'planning'],
