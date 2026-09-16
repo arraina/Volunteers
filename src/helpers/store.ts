@@ -58,6 +58,7 @@ export async function createEvent(input: {
   name: string;
   date?: Date | null;
   endDate?: Date | null;
+  allDay?: boolean;
   description?: string;
   location?: string;
   color?: string;
@@ -72,6 +73,7 @@ export async function createEvent(input: {
     name: input.name.trim(),
     date: input.date ? Timestamp.fromDate(input.date) : null,
     endDate: input.endDate ? Timestamp.fromDate(input.endDate) : null,
+    allDay: input.allDay === true,
     description: (input.description || '').trim(),
     location: (input.location || '').trim(),
     color: input.color || '#2f7d32',
@@ -87,7 +89,7 @@ export async function createEvent(input: {
 
 export async function updateEventCalendarFields(
   eventId: string,
-  fields: Partial<Pick<TempleEvent, 'name' | 'date' | 'endDate' | 'description' | 'location' | 'color' | 'status' | 'whatsappReminderEnabled' | 'reminderHoursBefore'>>
+  fields: Partial<Pick<TempleEvent, 'name' | 'date' | 'endDate' | 'allDay' | 'description' | 'location' | 'color' | 'status' | 'whatsappReminderEnabled' | 'reminderHoursBefore'>>
 ): Promise<void> {
   if (fields.date !== undefined) assertTaskStartNotPast(fields.date);
   const payload: Record<string, any> = { updatedAt: serverTimestamp() };
@@ -95,6 +97,7 @@ export async function updateEventCalendarFields(
   if (fields.date instanceof Date) payload.date = Timestamp.fromDate(fields.date);
   if (fields.endDate instanceof Date) payload.endDate = Timestamp.fromDate(fields.endDate);
   if (fields.endDate === undefined && Object.prototype.hasOwnProperty.call(fields, 'endDate')) payload.endDate = null;
+  if (typeof fields.allDay === 'boolean') payload.allDay = fields.allDay;
   if (typeof fields.description === 'string') payload.description = fields.description.trim();
   if (typeof fields.location === 'string') payload.location = fields.location.trim();
   if (typeof fields.color === 'string') payload.color = fields.color;

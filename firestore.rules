@@ -77,7 +77,7 @@ service cloud.firestore {
 
     function eventCalendarFieldsChanged() {
       return request.resource.data.diff(resource.data).affectedKeys().hasAny([
-        'date', 'endDate', 'location', 'color', 'status',
+        'date', 'endDate', 'allDay', 'location', 'color', 'status',
         'whatsappReminderEnabled', 'reminderHoursBefore'
       ]);
     }
