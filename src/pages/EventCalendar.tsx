@@ -159,7 +159,7 @@ const EventCalendar: React.FC<Props> = ({ events, tasks, volunteers, uid, setErr
     : view === 'week' ? Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)) : [cursor];
 
   return <div className={`event-calendar-page${canManage ? '' : ' read-only'}`}>
-    <div className="panel-head analytics-heading"><div><h2>Event Calendar</h2><p className="muted small">{canManage ? 'Plan accountable events and detect scheduling conflicts. Reminders are managed on linked tasks.' : 'View the event schedule, owners, and detected conflicts.'}</p></div>{canManage && <button className="primary-btn" onClick={() => { resetForm(); setForm({ ...emptyForm, start: toEasternDateTimeInput(new Date(Date.now() + 3_600_000)) }); }}>Add event</button>}</div>
+    <div className="panel-head analytics-heading"><div><h2>Event Calendar</h2><p className="muted small">{canManage ? 'Plan accountable events and detect scheduling conflicts. Reminders are managed on linked tasks.' : 'View the event schedule, owners, and detected conflicts.'}</p></div></div>
     {message && <div className="success-message">{message}</div>}
 
     {canManage && <section className="panel calendar-ai">
