@@ -57,17 +57,54 @@ import {
 export async function createEvent(input: {
   name: string;
   date?: Date | null;
+  endDate?: Date | null;
   description?: string;
+  location?: string;
+  color?: string;
+  status?: TempleEvent['status'];
+  whatsappReminderEnabled?: boolean;
+  reminderHoursBefore?: number[];
   createdBy?: string;
 }): Promise<string> {
+  if (input.date) assertTaskStartNotPast(input.date);
+  const reminderHours = validateReminderHours(input.reminderHoursBefore || [24]);
   const ref = await addDoc(collection(db, 'events'), {
     name: input.name.trim(),
     date: input.date ? Timestamp.fromDate(input.date) : null,
+    endDate: input.endDate ? Timestamp.fromDate(input.endDate) : null,
     description: (input.description || '').trim(),
+    location: (input.location || '').trim(),
+    color: input.color || '#2f7d32',
+    status: input.status || 'planned',
+    whatsappReminderEnabled: input.whatsappReminderEnabled === true,
+    reminderHoursBefore: reminderHours,
+    reminderVersion: 0,
     createdBy: input.createdBy || null,
     createdAt: serverTimestamp(),
   });
   return ref.id;
+}
+
+export async function updateEventCalendarFields(
+  eventId: string,
+  fields: Partial<Pick<TempleEvent, 'name' | 'date' | 'endDate' | 'description' | 'location' | 'color' | 'status' | 'whatsappReminderEnabled' | 'reminderHoursBefore'>>
+): Promise<void> {
+  if (fields.date !== undefined) assertTaskStartNotPast(fields.date);
+  const payload: Record<string, any> = { updatedAt: serverTimestamp() };
+  if (typeof fields.name === 'string' && fields.name.trim()) payload.name = fields.name.trim();
+  if (fields.date instanceof Date) payload.date = Timestamp.fromDate(fields.date);
+  if (fields.endDate instanceof Date) payload.endDate = Timestamp.fromDate(fields.endDate);
+  if (fields.endDate === undefined && Object.prototype.hasOwnProperty.call(fields, 'endDate')) payload.endDate = null;
+  if (typeof fields.description === 'string') payload.description = fields.description.trim();
+  if (typeof fields.location === 'string') payload.location = fields.location.trim();
+  if (typeof fields.color === 'string') payload.color = fields.color;
+  if (fields.status) payload.status = fields.status;
+  if (typeof fields.whatsappReminderEnabled === 'boolean') payload.whatsappReminderEnabled = fields.whatsappReminderEnabled;
+  if (fields.reminderHoursBefore) payload.reminderHoursBefore = validateReminderHours(fields.reminderHoursBefore);
+  if (fields.date !== undefined || fields.reminderHoursBefore !== undefined || fields.whatsappReminderEnabled !== undefined) {
+    payload.reminderVersion = increment(1);
+  }
+  await updateDoc(doc(db, 'events', eventId), payload);
 }
 
 export function subscribeEvents(cb: (e: TempleEvent[]) => void) {

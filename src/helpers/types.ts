@@ -83,7 +83,14 @@ export interface TempleEvent {
   name: string;
   /** Optional overall event date (individual tasks carry their own times). */
   date?: Date;
+  endDate?: Date;
   description?: string;
+  location?: string;
+  color?: string;
+  status?: 'planned' | 'confirmed' | 'cancelled';
+  whatsappReminderEnabled?: boolean;
+  reminderHoursBefore?: number[];
+  reminderVersion?: number;
   lessonsLearned?: string;
   planningDoc?: {
     purpose?: string;
@@ -304,7 +311,14 @@ export function normalizeEvent(id: string, data: Record<string, any>): TempleEve
     id,
     name: data.name || '',
     date: data.date ? firestoreTimestampToDate(data.date) : undefined,
+    endDate: data.endDate ? firestoreTimestampToDate(data.endDate) : undefined,
     description: data.description || '',
+    location: data.location || '',
+    color: data.color || '#2f7d32',
+    status: ['planned', 'confirmed', 'cancelled'].includes(data.status) ? data.status : 'planned',
+    whatsappReminderEnabled: data.whatsappReminderEnabled === true,
+    reminderHoursBefore: Array.isArray(data.reminderHoursBefore) ? data.reminderHoursBefore : [24],
+    reminderVersion: typeof data.reminderVersion === 'number' ? data.reminderVersion : 0,
     lessonsLearned: data.lessonsLearned || '',
     planningDoc: data.planningDoc || undefined,
     planningUpdatedAt: data.planningUpdatedAt ? firestoreTimestampToDate(data.planningUpdatedAt) : undefined,

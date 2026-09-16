@@ -75,6 +75,13 @@ service cloud.firestore {
         || hasCurrentOrFutureTaskStart();
     }
 
+    function eventCalendarFieldsChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'date', 'endDate', 'location', 'color', 'status',
+        'whatsappReminderEnabled', 'reminderHoursBefore'
+      ]);
+    }
+
     function isSelfSignup() {
       return resource.data.status != 'cancelled'
         && resource.data.startDateTime > request.time
@@ -198,7 +205,8 @@ service cloud.firestore {
     match /events/{id} {
       allow read: if verifiedUser();
       allow create: if isAdmin();
-      allow update: if adminMayUpdateWithTrash();
+      allow update: if adminMayUpdateWithTrash()
+        && (!eventCalendarFieldsChanged() || isOwner());
       allow delete: if isOwner();
     }
 

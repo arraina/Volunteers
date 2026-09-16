@@ -76,11 +76,12 @@ import {
 import { HourLog } from '../helpers/types';
 import AICreateTab from './AICreate';
 import EventWorkspace from './EventWorkspace';
+import EventCalendar from './EventCalendar';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
 import { assertTaskStartNotPast, fromEasternDateTimeInput, toEasternDateTimeInput } from '../helpers/taskDateTime';
 import './AdminDashboard.css';
 
-type Tab = 'tasks' | 'ai' | 'events' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'costs' | 'trash' | 'admins' | 'audit' | 'value';
+type Tab = 'tasks' | 'ai' | 'events' | 'calendar' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'costs' | 'trash' | 'admins' | 'audit' | 'value';
 
 const STATUS_OPTIONS: TaskStatus[] = ['open', 'filled', 'completed', 'cancelled'];
 
@@ -176,7 +177,7 @@ const AdminDashboard: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!isOwner && (tab === 'announcements' || tab === 'history' || tab === 'reports')) {
+    if (!isOwner && (tab === 'calendar' || tab === 'announcements' || tab === 'history' || tab === 'reports')) {
       setTab('tasks');
     }
   }, [isOwner, tab]);
@@ -228,6 +229,9 @@ const AdminDashboard: React.FC = () => {
         <button className={tab === 'events' ? 'active' : ''} onClick={() => setTab('events')}>
           Event Workspace
         </button>
+        {isOwner && <button className={tab === 'calendar' ? 'active' : ''} onClick={() => setTab('calendar')}>
+          Event Calendar
+        </button>}
         <button
           className={tab === 'volunteers' ? 'active' : ''}
           onClick={() => setTab('volunteers')}
@@ -290,6 +294,7 @@ const AdminDashboard: React.FC = () => {
           />
         )}
         {tab === 'events' && <EventWorkspace uid={user?.uid} events={events} tasks={tasks} setError={setError} />}
+        {tab === 'calendar' && isOwner && <EventCalendar uid={user?.uid} events={events} tasks={tasks} setError={setError} />}
         {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} uid={user?.uid} setError={setError} />}
         {tab === 'announcements' && isOwner && (
           <AnnouncementsTab uid={user?.uid} setError={setError} />

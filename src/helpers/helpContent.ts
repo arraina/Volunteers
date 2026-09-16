@@ -211,6 +211,16 @@ export const HELP_ARTICLES: HelpArticle[] = [
     ], keywords: ['feedback', 'comments', 'lessons', 'improvements', 'event'],
   },
   {
+    id: 'event-calendar', title: 'Owner Event Calendar and AI planner', category: 'Owner', roles: ['owner'],
+    summary: 'Plan upcoming events across calendar views, detect conflicts, and configure participant reminders.',
+    sections: [
+      { heading: 'Calendar views', text: 'Use year, month, week, or day view to review upcoming events. Search by event name, location, or description, and select an event to edit its schedule, status, color, and details.' },
+      { heading: 'Conflict alerts', text: 'The calendar flags overlapping event times, matching-location collisions, and linked tasks that fall outside their event window. Resolve alerts before confirming the schedule.' },
+      { heading: 'WhatsApp reminders', text: 'Enable event reminders and choose one or two lead times. Reminders go only to WhatsApp-enabled volunteers assigned to active tasks linked to that event. One lead time may be any positive number of hours; two must be at least 24 hours apart.' },
+      { heading: 'AI event planner', text: 'Describe an event addition, change, or deletion in plain language. Review the proposed actions and approve them before anything is saved. Ambiguous deletes are rejected.' },
+    ], keywords: ['event calendar', 'year', 'month', 'week', 'day', 'event conflict', 'event reminder', 'ai event'],
+  },
+  {
     id: 'ai-create', title: 'Using the AI Task Assistant', category: 'Administration', roles: ['admin', 'owner'],
     summary: 'Create plans or safely update task details and assignments using plain language.',
     sections: [

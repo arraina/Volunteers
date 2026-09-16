@@ -47,6 +47,16 @@ export interface TaskManagementPlan {
   actions: TaskManagementAction[];
 }
 
+export type EventCalendarAction =
+  | { type: 'create_event'; event: { name: string; date: string; endDate?: string | null; description?: string; location?: string; status?: 'planned' | 'confirmed'; whatsappReminderEnabled?: boolean; reminderHoursBefore?: number[] } }
+  | { type: 'update_event'; eventId: string; changes: { name?: string; date?: string; endDate?: string | null; description?: string; location?: string; status?: 'planned' | 'confirmed' | 'cancelled'; whatsappReminderEnabled?: boolean; reminderHoursBefore?: number[] } }
+  | { type: 'delete_event'; eventId: string };
+
+export interface EventCalendarPlan {
+  summary: string;
+  actions: EventCalendarAction[];
+}
+
 const PROXY_ENDPOINT = process.env.REACT_APP_AI_ENDPOINT || '';
 const GEMINI_KEY = process.env.REACT_APP_GEMINI_API_KEY || '';
 // `gemini-flash-latest` always resolves to the current fast Flash model, so the
@@ -246,4 +256,33 @@ Use only IDs present in the supplied catalogs. Match names, email addresses, eve
     return false;
   }) as TaskManagementAction[];
   return { summary: String(raw.summary || 'Review the proposed changes.'), actions };
+}
+
+export async function parseEventCalendarRequest(
+  text: string,
+  events: Array<{ id: string; name: string; date?: Date; location?: string }>
+): Promise<EventCalendarPlan> {
+  if (!isAiConfigured) throw new Error('AI event calendar management is not configured.');
+  const catalog = events.map((event) => ({
+    id: event.id, name: event.name, date: event.date?.toISOString(), location: event.location || '',
+  }));
+  const system = `You translate an Owner request into safe event-calendar actions.
+Return ONLY valid minified JSON matching {"summary":string,"actions":Action[]}.
+Action is one of:
+{"type":"create_event","event":{"name":string,"date":ISO-8601 string,"endDate"?:ISO-8601 string|null,"description"?:string,"location"?:string,"status"?:"planned"|"confirmed","whatsappReminderEnabled"?:boolean,"reminderHoursBefore"?:positive number[]}}
+{"type":"update_event","eventId":string,"changes":{"name"?:string,"date"?:ISO-8601 string,"endDate"?:ISO-8601 string|null,"description"?:string,"location"?:string,"status"?:"planned"|"confirmed"|"cancelled","whatsappReminderEnabled"?:boolean,"reminderHoursBefore"?:positive number[]}}
+{"type":"delete_event","eventId":string}
+Use IDs only from the catalog for update/delete. Never invent IDs. Resolve relative dates in America/New_York. Do not delete when ambiguous; return no actions and explain. Two reminders must be at least 24 hours apart.`;
+  const now = new Date();
+  const prompt = `CURRENT DATE/TIME: ${now.toISOString()} (${now.toLocaleString('en-US', { timeZone: 'America/New_York' })} Eastern)\nREQUEST:\n${text}\n\nEVENTS:\n${JSON.stringify(catalog)}`;
+  const raw = extractJson(await generateWithResilience(prompt, system));
+  if (!raw || !Array.isArray(raw.actions)) throw new Error('AI response was not an event calendar plan.');
+  const ids = new Set(events.map((event) => event.id));
+  const actions = raw.actions.filter((action: any) => {
+    if (action?.type === 'create_event') return action.event && typeof action.event.name === 'string' && typeof action.event.date === 'string';
+    if (action?.type === 'update_event') return ids.has(action.eventId) && action.changes && typeof action.changes === 'object';
+    if (action?.type === 'delete_event') return ids.has(action.eventId);
+    return false;
+  }) as EventCalendarAction[];
+  return { summary: String(raw.summary || 'Review the proposed event changes.'), actions };
 }
