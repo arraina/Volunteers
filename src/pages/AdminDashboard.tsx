@@ -299,7 +299,7 @@ const AdminDashboard: React.FC = () => {
         {tab === 'announcements' && isOwner && (
           <AnnouncementsTab uid={user?.uid} setError={setError} />
         )}
-        {tab === 'history' && isOwner && <HistoryTab volunteers={volunteers} setError={setError} />}
+        {tab === 'history' && isOwner && <HistoryTab volunteers={volunteers} events={events} setError={setError} />}
         {tab === 'reports' && isOwner && <ReportsTab volunteers={volunteers} tasks={tasks} events={events} />}
         {tab === 'costs' && <CostTab events={events} uid={user?.uid} isOwner={isOwner} whatsappSettings={whatsappSettings} />}
         {tab === 'trash' && <TrashTab tasks={deletedTasks} records={deletedRecords} isOwner={isOwner} setError={setError} />}
@@ -338,9 +338,25 @@ const TasksTab: React.FC<{
     return map;
   }, [volunteers]);
 
+  const activeTasks = useMemo(() => {
+    const now = new Date();
+    return tasks.filter((task) => (task.endDateTime || task.startDateTime) >= now);
+  }, [tasks]);
+  const activeEvents = useMemo(() => {
+    const now = new Date();
+    return events.filter((event) => {
+      if (!event.date) return false;
+      if (event.allDay) {
+        const lastDate = event.endDate || event.date;
+        return new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate() + 1) > now;
+      }
+      return (event.endDate || event.date) >= now;
+    });
+  }, [events]);
+
   const filteredTasks = useMemo(() => {
     const q = taskSearch.trim().toLowerCase();
-    const result = tasks.filter((task) => {
+    const result = activeTasks.filter((task) => {
       const matchesSearch = !q || [task.title, task.description, task.location, task.eventName]
         .some((value) => value?.toLowerCase().includes(q));
       const matchesStatus = statusFilter === 'all' || effectiveTaskStatus(task) === statusFilter;
@@ -357,16 +373,16 @@ const TasksTab: React.FC<{
       const delta = a.startDateTime.getTime() - b.startDateTime.getTime();
       return taskSort === 'latest' ? -delta : delta;
     });
-  }, [tasks, taskSearch, statusFilter, eventFilter, creatorFilter, taskSort, uid]);
+  }, [activeTasks, taskSearch, statusFilter, eventFilter, creatorFilter, taskSort, uid]);
 
   const taskStats = useMemo(() => ({
-    total: tasks.length,
-    open: tasks.filter((task) => effectiveTaskStatus(task) === 'open').length,
-    needsPeople: tasks.filter((task) =>
+    total: activeTasks.length,
+    open: activeTasks.filter((task) => effectiveTaskStatus(task) === 'open').length,
+    needsPeople: activeTasks.filter((task) =>
       !['cancelled', 'completed'].includes(effectiveTaskStatus(task)) && openSlots(task) > 0
     ).length,
-    assigned: tasks.reduce((sum, task) => sum + task.assignedVolunteers.length, 0),
-  }), [tasks]);
+    assigned: activeTasks.reduce((sum, task) => sum + task.assignedVolunteers.length, 0),
+  }), [activeTasks]);
 
   // Group tasks first by event (standalone tasks fall under "Ungrouped"),
   // then group each event's tasks into recurring series.
@@ -485,7 +501,7 @@ const TasksTab: React.FC<{
             onChange={(e) => setForm({ ...form, eventId: e.target.value })}
           >
             <option value="">— none (standalone task) —</option>
-            {events.map((ev) => (
+            {activeEvents.map((ev) => (
               <option key={ev.id} value={ev.id}>
                 {ev.name}
               </option>
@@ -597,7 +613,7 @@ const TasksTab: React.FC<{
         <div className="panel-head results-heading">
           <div>
             <h2>Tasks</h2>
-            <p className="muted small">{filteredTasks.length} of {tasks.length} occurrences shown</p>
+            <p className="muted small">{filteredTasks.length} of {activeTasks.length} current or upcoming occurrences shown</p>
           </div>
           {(taskSearch || statusFilter !== 'all' || eventFilter !== 'all' || creatorFilter !== 'all') && (
             <button className="link-btn" onClick={() => {
@@ -625,7 +641,7 @@ const TasksTab: React.FC<{
             <select value={eventFilter} onChange={(e) => setEventFilter(e.target.value)}>
               <option value="all">All events</option>
               <option value="__none__">Standalone</option>
-              {events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
+              {activeEvents.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
             </select>
           </label>
           <label>
@@ -1524,8 +1540,9 @@ const AnnouncementsTab: React.FC<{ uid?: string; setError: (s: string) => void }
 
 const HistoryTab: React.FC<{
   volunteers: VolunteerProfile[];
+  events: TempleEvent[];
   setError: (s: string) => void;
-}> = ({ volunteers, setError }) => {
+}> = ({ volunteers, events, setError }) => {
   const [pastTasks, setPastTasks] = useState<VolunteerTask[] | null>(null);
 
   const volunteerById = useMemo(() => {
@@ -1550,7 +1567,17 @@ const HistoryTab: React.FC<{
       string,
       { key: string; name: string; date?: Date; tasks: VolunteerTask[] }
     >();
+    const now = new Date();
+    for (const event of events) {
+      if (!event.date) continue;
+      const lastDate = event.endDate || event.date;
+      const isPast = event.allDay
+        ? new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate() + 1) <= now
+        : lastDate < now;
+      if (isPast) groups.set(event.id, { key: event.id, name: event.name, date: lastDate, tasks: [] });
+    }
     for (const task of pastTasks) {
+      if ((task.endDateTime || task.startDateTime) >= now) continue;
       const key = task.eventId || `__standalone__`;
       const name = task.eventId ? task.eventName || 'Event' : 'Other tasks';
       if (!groups.has(key)) {
@@ -1566,7 +1593,7 @@ const HistoryTab: React.FC<{
     );
     arr.sort((a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0));
     return arr;
-  }, [pastTasks]);
+  }, [pastTasks, events]);
 
   if (pastTasks === null) {
     return (
@@ -1581,7 +1608,7 @@ const HistoryTab: React.FC<{
     <section className="panel">
       <h2>Past events &amp; tasks</h2>
       <p className="muted small">Events and tasks whose date has already passed.</p>
-      {eventGroups.length === 0 && <p className="muted">No past tasks yet.</p>}
+      {eventGroups.length === 0 && <p className="muted">No past events or tasks yet.</p>}
 
       <div className="task-list">
         {eventGroups.map((group) => (

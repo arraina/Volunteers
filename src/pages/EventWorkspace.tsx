@@ -114,7 +114,17 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
   const [actionSearch, setActionSearch] = useState('');
 
   const visibleEvents = useMemo(
-    () => events.filter((item) => creatorFilter === 'all' || Boolean(uid && item.createdBy === uid)),
+    () => {
+      const now = new Date();
+      return events.filter((item) => {
+        if (!item.date) return false;
+        const lastDate = item.endDate || item.date;
+        const currentOrFuture = item.allDay
+          ? new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate() + 1) > now
+          : lastDate >= now;
+        return currentOrFuture && (creatorFilter === 'all' || Boolean(uid && item.createdBy === uid));
+      });
+    },
     [events, creatorFilter, uid]
   );
 
