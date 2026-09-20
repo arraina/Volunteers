@@ -87,7 +87,7 @@ import { assertTaskStartNotPast, fromEasternDateTimeInput, toEasternDateTimeInpu
 import './AdminDashboard.css';
 
 type Tab = 'tasks' | 'ai' | 'events' | 'calendar' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'costs' | 'trash' | 'admins' | 'audit' | 'value';
-type TaskWorkspaceView = 'browse' | 'assigned' | 'create' | 'manage';
+type TaskWorkspaceView = 'browse' | 'assigned' | 'manage';
 type VolunteerWorkspaceView = 'directory' | 'invitations';
 
 const STATUS_OPTIONS: TaskStatus[] = ['open', 'filled', 'completed', 'cancelled'];
@@ -256,8 +256,7 @@ const AdminDashboard: React.FC = () => {
           <div className="nav-menu">
             <button className={tab === 'tasks' && taskWorkspaceView === 'browse' ? 'active' : ''} onClick={(event) => chooseTaskView('browse', event)}>Browse &amp; Sign Up</button>
             <button className={tab === 'tasks' && taskWorkspaceView === 'assigned' ? 'active' : ''} onClick={(event) => chooseTaskView('assigned', event)}>My Assignments</button>
-            <button className={tab === 'tasks' && taskWorkspaceView === 'create' ? 'active' : ''} onClick={(event) => chooseTaskView('create', event)}>Create Task</button>
-            <button className={tab === 'tasks' && taskWorkspaceView === 'manage' ? 'active' : ''} onClick={(event) => chooseTaskView('manage', event)}>Manage Tasks</button>
+            <button className={tab === 'tasks' && taskWorkspaceView === 'manage' ? 'active' : ''} onClick={(event) => chooseTaskView('manage', event)}>Create &amp; Manage</button>
             <button className={tab === 'ai' ? 'active' : ''} onClick={(event) => chooseTab('ai', event)}>Create with AI</button>
           </div>
         </details>
@@ -539,8 +538,8 @@ const TasksTab: React.FC<{
   };
 
   return (
-    <div className={view === 'create' ? 'task-create-layout' : 'task-workspace-layout'}>
-      {view === 'create' && <section className="panel task-create-panel">
+    <div className={view === 'manage' ? 'two-col' : 'task-workspace-layout'}>
+      {view === 'manage' && <section className="panel">
         <h2>Create Task</h2>
         <form onSubmit={handleCreate} className="stacked-form">
           <input
@@ -649,7 +648,7 @@ const TasksTab: React.FC<{
         </form>
       </section>}
 
-      {view !== 'create' && <section className="panel results-panel">
+      <section className="panel results-panel">
         {selfServiceMessage && <div className="undo-banner" role="status">
           <span>{selfServiceMessage}</span>
           <button className="link-btn" onClick={() => setSelfServiceMessage('')}>Dismiss</button>
@@ -763,7 +762,7 @@ const TasksTab: React.FC<{
             </div>
           </div>
         ))}
-      </section>}
+      </section>
     </div>
   );
 };
