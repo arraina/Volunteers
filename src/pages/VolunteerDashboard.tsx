@@ -7,7 +7,6 @@ import {
   VolunteerProfile,
   VolunteerTask,
   TempleEvent,
-  RecurrenceFrequency,
   WEEKDAYS,
   effectiveTaskStatus,
   formatDate,
@@ -414,8 +413,8 @@ const VolunteerDashboard: React.FC = () => {
 };
 
 const emptyCreatorForm = {
-  title: '', description: '', eventId: '', startDateTime: '', endDateTime: '', location: '',
-  volunteersNeeded: '1', recurrence: 'none' as RecurrenceFrequency, horizonWeeks: '52', reminderHoursBefore: '24',
+  title: '', description: '', startDateTime: '', endDateTime: '', location: '',
+  volunteersNeeded: '1', reminderHoursBefore: '24',
 };
 
 const VolunteerTaskManagement: React.FC<{
@@ -432,7 +431,6 @@ const VolunteerTaskManagement: React.FC<{
   const [assignmentChoice, setAssignmentChoice] = useState<Record<string, string>>({});
   const [assignmentBusy, setAssignmentBusy] = useState('');
   const createdTasks = useMemo(() => tasks.filter((task) => task.createdBy === profile.uid && task.startDateTime > new Date()), [tasks, profile.uid]);
-  const activeEvents = useMemo(() => events.filter((event) => event.date && (event.endDate || event.date) >= new Date()), [events]);
   const directoryById = useMemo(() => new Map(directory.map((item) => [item.uid, item.name])), [directory]);
 
   const submit = async (event: React.FormEvent) => {
@@ -446,12 +444,6 @@ const VolunteerTaskManagement: React.FC<{
       if (end && end <= start) throw new Error('End time must be after the start time.');
       const reminder = Number(form.reminderHoursBefore);
       if (!Number.isFinite(reminder) || reminder <= 0) throw new Error('Enter one reminder time greater than zero.');
-      const selectedEvent = activeEvents.find((item) => item.id === form.eventId);
-      if (selectedEvent?.date) {
-        const eventEnd = selectedEvent.endDate || selectedEvent.date;
-        const permittedEnd = new Date(eventEnd.getTime() + 24 * 60 * 60 * 1000);
-        if (start > permittedEnd) throw new Error('A linked task cannot start more than one day after the event ends.');
-      }
       if (editingTaskId) {
         await updateTaskManagementFields(editingTaskId, {
           title: form.title, description: form.description, startDateTime: start, endDateTime: end,
@@ -460,11 +452,9 @@ const VolunteerTaskManagement: React.FC<{
         });
       } else {
         await createTask({
-          title: form.title, description: form.description, eventId: selectedEvent?.id,
-          eventName: selectedEvent?.name, startDateTime: start, endDateTime: end,
+          title: form.title, description: form.description, startDateTime: start, endDateTime: end,
           location: form.location, volunteersNeeded: Math.max(1, Number(form.volunteersNeeded) || 1),
-          openForSignup: true, recurrence: form.recurrence, reminderHoursBefore: [reminder],
-          horizonWeeks: Math.max(1, Number(form.horizonWeeks) || 52), createdBy: profile.uid,
+          openForSignup: true, recurrence: 'none', reminderHoursBefore: [reminder], createdBy: profile.uid,
         });
       }
       setForm(emptyCreatorForm);
@@ -480,10 +470,10 @@ const VolunteerTaskManagement: React.FC<{
     }).format(date).replace(' ', 'T') : '';
     setEditingTaskId(task.id);
     setForm({
-      title: task.title, description: task.description || '', eventId: task.eventId || '',
+      title: task.title, description: task.description || '',
       startDateTime: easternValue(task.startDateTime), endDateTime: easternValue(task.endDateTime),
       location: task.location || '', volunteersNeeded: String(task.volunteersNeeded),
-      recurrence: task.recurrence, horizonWeeks: '52', reminderHoursBefore: String(task.reminderHoursBefore[0] || 24),
+      reminderHoursBefore: String(task.reminderHoursBefore[0] || 24),
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -501,21 +491,14 @@ const VolunteerTaskManagement: React.FC<{
   return <div className="two-col volunteer-create-layout">
     <section className="panel">
       <h2>{editingTaskId ? 'Edit Task' : 'Create Task'}</h2>
-      <p className="muted small">Tasks publish immediately. Volunteer-created tasks support one WhatsApp reminder for each assigned or signed-up person.</p>
+      <p className="muted small">Create standalone, one-time tasks. They publish immediately and support one WhatsApp reminder for each assigned or signed-up person.</p>
       <form className="stacked-form" onSubmit={submit}>
         <input placeholder="Task title" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-        <label><span>Event (optional)</span><select disabled={Boolean(editingTaskId)} value={form.eventId} onChange={(e) => setForm({ ...form, eventId: e.target.value })}>
-          <option value="">— standalone task —</option>{activeEvents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select></label>
         <label><span>Start (Eastern Time — ET)</span><input type="datetime-local" required value={form.startDateTime} onChange={(e) => setForm({ ...form, startDateTime: e.target.value })} /></label>
         <label><span>End (optional, Eastern Time — ET)</span><input type="datetime-local" value={form.endDateTime} onChange={(e) => setForm({ ...form, endDateTime: e.target.value })} /></label>
         <input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
         <label><span>Volunteers needed</span><input type="number" min="1" required value={form.volunteersNeeded} onChange={(e) => setForm({ ...form, volunteersNeeded: e.target.value })} /></label>
-        <label><span>Repeats</span><select disabled={Boolean(editingTaskId)} value={form.recurrence} onChange={(e) => setForm({ ...form, recurrence: e.target.value as RecurrenceFrequency })}>
-          <option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option>
-        </select></label>
-        {form.recurrence !== 'none' && <label><span>Generate ahead (weeks)</span><input type="number" min="1" max="520" value={form.horizonWeeks} onChange={(e) => setForm({ ...form, horizonWeeks: e.target.value })} /></label>}
         <label><span>One reminder (hours before task)</span><input type="number" min="1" step="1" required value={form.reminderHoursBefore} onChange={(e) => setForm({ ...form, reminderHoursBefore: e.target.value })} /></label>
         <button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : editingTaskId ? 'Save Changes' : 'Publish Task'}</button>
         {editingTaskId && <button type="button" className="secondary-btn" onClick={() => { setEditingTaskId(''); setForm(emptyCreatorForm); }}>Cancel editing</button>}

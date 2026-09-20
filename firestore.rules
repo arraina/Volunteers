@@ -73,6 +73,10 @@ service cloud.firestore {
     function isVolunteerCreatedTask() {
       return verifiedUser()
         && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.eventId == null
+        && request.resource.data.eventName == null
+        && request.resource.data.recurrence == 'none'
+        && request.resource.data.seriesId == null
         && hasSingleReminder()
         && hasCurrentOrFutureTaskStart();
     }
@@ -81,6 +85,10 @@ service cloud.firestore {
       return verifiedUser()
         && resource.data.createdBy == request.auth.uid
         && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.eventId == resource.data.eventId
+        && request.resource.data.eventName == resource.data.eventName
+        && request.resource.data.recurrence == resource.data.recurrence
+        && request.resource.data.seriesId == resource.data.seriesId
         && request.resource.data.deleted != true
         && hasSingleReminder()
         && keepsOrHasCurrentTaskStart();
