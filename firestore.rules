@@ -63,6 +63,29 @@ service cloud.firestore {
               || request.resource.data.reminderHoursBefore[1] - request.resource.data.reminderHoursBefore[0] >= 24)));
     }
 
+    function hasSingleReminder() {
+      return request.resource.data.reminderHoursBefore is list
+        && request.resource.data.reminderHoursBefore.size() == 1
+        && request.resource.data.reminderHoursBefore[0] is number
+        && request.resource.data.reminderHoursBefore[0] > 0;
+    }
+
+    function isVolunteerCreatedTask() {
+      return verifiedUser()
+        && request.resource.data.createdBy == request.auth.uid
+        && hasSingleReminder()
+        && hasCurrentOrFutureTaskStart();
+    }
+
+    function volunteerMayUpdateOwnTask() {
+      return verifiedUser()
+        && resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.deleted != true
+        && hasSingleReminder()
+        && keepsOrHasCurrentTaskStart();
+    }
+
     // Permit a brief submission delay while preventing newly created or
     // rescheduled tasks from being placed in the past.
     function hasCurrentOrFutureTaskStart() {
@@ -168,7 +191,8 @@ service cloud.firestore {
     // ----- tasks -----
     match /tasks/{taskId} {
       allow read: if verifiedUser();
-      allow create: if isAdmin() && hasValidReminderSchedule() && hasCurrentOrFutureTaskStart();
+      allow create: if (isAdmin() && hasValidReminderSchedule() && hasCurrentOrFutureTaskStart())
+        || isVolunteerCreatedTask();
       allow delete: if isOwner();
       // Admins can update anything. Volunteers may only self-add/remove
       // themselves on the assignedVolunteers array of an open task.
@@ -179,6 +203,7 @@ service cloud.firestore {
           ])
           || (resource.data.deleted != true && request.resource.data.deleted == true)
         ))) && hasValidReminderSchedule() && keepsOrHasCurrentTaskStart())
+        || volunteerMayUpdateOwnTask()
         || (verifiedUser() && (isSelfSignup() || isSelfWithdrawal()));
     }
 

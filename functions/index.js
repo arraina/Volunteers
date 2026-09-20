@@ -65,6 +65,57 @@ exports.createOfflineVolunteer = onCall({ region: 'us-central1', maxInstances: 4
   return { volunteerId: ref.id, invitationStatus: 'waiting_for_template' };
 });
 
+exports.getVolunteerDirectory = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  if (!request.auth || request.auth.token.email_verified !== true) {
+    throw new HttpsError('unauthenticated', 'A verified portal account is required.');
+  }
+  const snapshot = await db.collection('volunteers').get();
+  return {
+    volunteers: snapshot.docs
+      .filter((item) => {
+        const data = item.data();
+        return data.deleted !== true && data.participationStatus !== 'inactive'
+          && data.whatsappOptIn === true && Boolean(data.phoneNumber);
+      })
+      .map((item) => ({ uid: item.id, name: item.data().name || `${item.data().firstName || ''} ${item.data().lastName || ''}`.trim() || 'Volunteer' }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  };
+});
+
+exports.manageVolunteerTaskAssignment = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  if (!request.auth || request.auth.token.email_verified !== true) {
+    throw new HttpsError('unauthenticated', 'A verified portal account is required.');
+  }
+  const taskId = String(request.data?.taskId || '').trim();
+  const volunteerId = String(request.data?.volunteerId || '').trim();
+  const action = request.data?.action === 'remove' ? 'remove' : 'add';
+  if (!taskId || !volunteerId) throw new HttpsError('invalid-argument', 'Task and volunteer are required.');
+  const taskRef = db.doc(`tasks/${taskId}`);
+  const volunteerRef = db.doc(`volunteers/${volunteerId}`);
+  await db.runTransaction(async (transaction) => {
+    const [task, volunteer] = await Promise.all([transaction.get(taskRef), transaction.get(volunteerRef)]);
+    if (!task.exists) throw new HttpsError('not-found', 'Task was not found.');
+    const taskData = task.data();
+    const callerAdmin = await db.doc(`admins/${request.auth.uid}`).get();
+    if (taskData.createdBy !== request.auth.uid && callerAdmin.data()?.isAdmin !== true) {
+      throw new HttpsError('permission-denied', 'Only the task creator or an administrator can manage assignments.');
+    }
+    if (!volunteer.exists || volunteer.data().deleted === true || volunteer.data().participationStatus === 'inactive'
+      || volunteer.data().whatsappOptIn !== true || !volunteer.data().phoneNumber) {
+      throw new HttpsError('failed-precondition', 'This volunteer is not active for task assignments.');
+    }
+    const assigned = Array.isArray(taskData.assignedVolunteers) ? taskData.assignedVolunteers : [];
+    if (action === 'add') {
+      if (assigned.includes(volunteerId)) return;
+      if (assigned.length >= (taskData.volunteersNeeded || 1)) throw new HttpsError('failed-precondition', 'This task is already full.');
+      transaction.update(taskRef, { assignedVolunteers: admin.firestore.FieldValue.arrayUnion(volunteerId), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    } else {
+      transaction.update(taskRef, { assignedVolunteers: admin.firestore.FieldValue.arrayRemove(volunteerId), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    }
+  });
+  return { updated: true };
+});
+
 exports.setPortalInviteSending = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
   await requireAdmin(request, true);
   const enabled = request.data?.enabled === true;

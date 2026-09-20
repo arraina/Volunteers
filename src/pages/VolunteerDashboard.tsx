@@ -6,6 +6,8 @@ import { useAuth } from '../helpers/useAuth';
 import {
   VolunteerProfile,
   VolunteerTask,
+  TempleEvent,
+  RecurrenceFrequency,
   WEEKDAYS,
   effectiveTaskStatus,
   formatDate,
@@ -14,21 +16,29 @@ import {
 } from '../helpers/types';
 import {
   assignVolunteerToTask,
+  createTask,
   checkIn,
   checkOut,
   getPastTasks,
   getVolunteer,
   removeVolunteerFromTask,
+  subscribeEvents,
   subscribeTasks,
   updateVolunteer,
+  getVolunteerDirectory,
+  manageVolunteerTaskAssignment,
+  VolunteerDirectoryEntry,
+  updateTaskManagementFields,
+  updateTaskStatus,
 } from '../helpers/store';
+import { fromEasternDateTimeInput } from '../helpers/taskDateTime';
 import { normalizePhoneNumber, validatePhoneNumber } from '../helpers/phone';
 import { findTaskScheduleConflicts } from '../helpers/scheduleConflicts';
 import '../pages/AdminDashboard.css';
 import './VolunteerDashboard.css';
 import EventFeedback from './EventFeedback';
 
-type Tab = 'open' | 'mine' | 'past' | 'feedback' | 'profile';
+type Tab = 'open' | 'mine' | 'create' | 'past' | 'feedback' | 'profile';
 
 const VolunteerDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -36,6 +46,8 @@ const VolunteerDashboard: React.FC = () => {
   const [tab, setTab] = useState<Tab>('open');
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
   const [tasks, setTasks] = useState<VolunteerTask[]>([]);
+  const [events, setEvents] = useState<TempleEvent[]>([]);
+  const [directory, setDirectory] = useState<VolunteerDirectoryEntry[]>([]);
   const [historicalTasks, setHistoricalTasks] = useState<VolunteerTask[]>([]);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -52,7 +64,9 @@ const VolunteerDashboard: React.FC = () => {
     getVolunteer(user.uid).then(setProfile);
     getPastTasks().then(setHistoricalTasks).catch(() => setHistoricalTasks([]));
     const unsub = subscribeTasks(setTasks);
-    return unsub;
+    const unsubEvents = subscribeEvents(setEvents);
+    getVolunteerDirectory().then(setDirectory).catch(() => setDirectory([]));
+    return () => { unsub(); unsubEvents(); };
   }, [user]);
 
   const reload = async () => {
@@ -209,6 +223,9 @@ const VolunteerDashboard: React.FC = () => {
         <button className={tab === 'mine' ? 'active' : ''} onClick={() => setTab('mine')}>
           My Upcoming Tasks ({myTasks.length})
         </button>
+        <button className={tab === 'create' ? 'active' : ''} onClick={() => setTab('create')}>
+          Create &amp; Manage Tasks
+        </button>
         <button className={tab === 'past' ? 'active' : ''} onClick={() => setTab('past')}>
           Past Tasks ({pastTasks.length})
         </button>
@@ -339,6 +356,17 @@ const VolunteerDashboard: React.FC = () => {
           <ProfileTab profile={profile} onSaved={reload} setError={setError} setMessage={setMessage} />
         )}
 
+        {tab === 'create' && (
+          <VolunteerTaskManagement
+            profile={profile}
+            tasks={tasks}
+            events={events}
+            directory={directory}
+            setError={setError}
+            setMessage={setMessage}
+          />
+        )}
+
         {tab === 'past' && (
           <section className="panel">
             <div className="panel-head results-heading">
@@ -367,6 +395,135 @@ const VolunteerDashboard: React.FC = () => {
       </div>
     </div>
   );
+};
+
+const emptyCreatorForm = {
+  title: '', description: '', eventId: '', startDateTime: '', endDateTime: '', location: '',
+  volunteersNeeded: '1', recurrence: 'none' as RecurrenceFrequency, horizonWeeks: '52', reminderHoursBefore: '24',
+};
+
+const VolunteerTaskManagement: React.FC<{
+  profile: VolunteerProfile;
+  tasks: VolunteerTask[];
+  events: TempleEvent[];
+  directory: VolunteerDirectoryEntry[];
+  setError: (value: string) => void;
+  setMessage: (value: string) => void;
+}> = ({ profile, tasks, events, directory, setError, setMessage }) => {
+  const [form, setForm] = useState(emptyCreatorForm);
+  const [saving, setSaving] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState('');
+  const [assignmentChoice, setAssignmentChoice] = useState<Record<string, string>>({});
+  const [assignmentBusy, setAssignmentBusy] = useState('');
+  const createdTasks = useMemo(() => tasks.filter((task) => task.createdBy === profile.uid && task.startDateTime > new Date()), [tasks, profile.uid]);
+  const activeEvents = useMemo(() => events.filter((event) => event.date && (event.endDate || event.date) >= new Date()), [events]);
+  const directoryById = useMemo(() => new Map(directory.map((item) => [item.uid, item.name])), [directory]);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(''); setMessage(''); setSaving(true);
+    try {
+      const start = fromEasternDateTimeInput(form.startDateTime);
+      const end = form.endDateTime ? fromEasternDateTimeInput(form.endDateTime) : null;
+      if (!form.title.trim()) throw new Error('Task title is required.');
+      if (!Number.isFinite(start.getTime())) throw new Error('Enter a valid start date and time.');
+      if (end && end <= start) throw new Error('End time must be after the start time.');
+      const reminder = Number(form.reminderHoursBefore);
+      if (!Number.isFinite(reminder) || reminder <= 0) throw new Error('Enter one reminder time greater than zero.');
+      const selectedEvent = activeEvents.find((item) => item.id === form.eventId);
+      if (selectedEvent?.date) {
+        const eventEnd = selectedEvent.endDate || selectedEvent.date;
+        const permittedEnd = new Date(eventEnd.getTime() + 24 * 60 * 60 * 1000);
+        if (start > permittedEnd) throw new Error('A linked task cannot start more than one day after the event ends.');
+      }
+      if (editingTaskId) {
+        await updateTaskManagementFields(editingTaskId, {
+          title: form.title, description: form.description, startDateTime: start, endDateTime: end,
+          location: form.location, volunteersNeeded: Math.max(1, Number(form.volunteersNeeded) || 1),
+          reminderHoursBefore: [reminder], openForSignup: true,
+        });
+      } else {
+        await createTask({
+          title: form.title, description: form.description, eventId: selectedEvent?.id,
+          eventName: selectedEvent?.name, startDateTime: start, endDateTime: end,
+          location: form.location, volunteersNeeded: Math.max(1, Number(form.volunteersNeeded) || 1),
+          openForSignup: true, recurrence: form.recurrence, reminderHoursBefore: [reminder],
+          horizonWeeks: Math.max(1, Number(form.horizonWeeks) || 52), createdBy: profile.uid,
+        });
+      }
+      setForm(emptyCreatorForm);
+      setEditingTaskId('');
+      setMessage(editingTaskId ? 'Task updated.' : 'Task published. Other volunteers, Admins, and the Owner can sign up immediately.');
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not create the task.'); }
+    finally { setSaving(false); }
+  };
+
+  const editTask = (task: VolunteerTask) => {
+    const easternValue = (date?: Date) => date ? new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).format(date).replace(' ', 'T') : '';
+    setEditingTaskId(task.id);
+    setForm({
+      title: task.title, description: task.description || '', eventId: task.eventId || '',
+      startDateTime: easternValue(task.startDateTime), endDateTime: easternValue(task.endDateTime),
+      location: task.location || '', volunteersNeeded: String(task.volunteersNeeded),
+      recurrence: task.recurrence, horizonWeeks: '52', reminderHoursBefore: String(task.reminderHoursBefore[0] || 24),
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const changeAssignment = async (task: VolunteerTask, volunteerId: string, action: 'add' | 'remove') => {
+    setAssignmentBusy(`${task.id}:${volunteerId}`); setError('');
+    try {
+      await manageVolunteerTaskAssignment(task.id, volunteerId, action);
+      setMessage(action === 'add' ? 'Volunteer assigned.' : 'Volunteer removed from the task.');
+      if (action === 'add') setAssignmentChoice((current) => ({ ...current, [task.id]: '' }));
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not update the assignment.'); }
+    finally { setAssignmentBusy(''); }
+  };
+
+  return <div className="two-col volunteer-create-layout">
+    <section className="panel">
+      <h2>{editingTaskId ? 'Edit Task' : 'Create Task'}</h2>
+      <p className="muted small">Tasks publish immediately. Volunteer-created tasks support one WhatsApp reminder for each assigned or signed-up person.</p>
+      <form className="stacked-form" onSubmit={submit}>
+        <input placeholder="Task title" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+        <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        <label><span>Event (optional)</span><select disabled={Boolean(editingTaskId)} value={form.eventId} onChange={(e) => setForm({ ...form, eventId: e.target.value })}>
+          <option value="">— standalone task —</option>{activeEvents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select></label>
+        <label><span>Start (Eastern Time — ET)</span><input type="datetime-local" required value={form.startDateTime} onChange={(e) => setForm({ ...form, startDateTime: e.target.value })} /></label>
+        <label><span>End (optional, Eastern Time — ET)</span><input type="datetime-local" value={form.endDateTime} onChange={(e) => setForm({ ...form, endDateTime: e.target.value })} /></label>
+        <input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+        <label><span>Volunteers needed</span><input type="number" min="1" required value={form.volunteersNeeded} onChange={(e) => setForm({ ...form, volunteersNeeded: e.target.value })} /></label>
+        <label><span>Repeats</span><select disabled={Boolean(editingTaskId)} value={form.recurrence} onChange={(e) => setForm({ ...form, recurrence: e.target.value as RecurrenceFrequency })}>
+          <option value="none">Does not repeat</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option>
+        </select></label>
+        {form.recurrence !== 'none' && <label><span>Generate ahead (weeks)</span><input type="number" min="1" max="520" value={form.horizonWeeks} onChange={(e) => setForm({ ...form, horizonWeeks: e.target.value })} /></label>}
+        <label><span>One reminder (hours before task)</span><input type="number" min="1" step="1" required value={form.reminderHoursBefore} onChange={(e) => setForm({ ...form, reminderHoursBefore: e.target.value })} /></label>
+        <button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : editingTaskId ? 'Save Changes' : 'Publish Task'}</button>
+        {editingTaskId && <button type="button" className="secondary-btn" onClick={() => { setEditingTaskId(''); setForm(emptyCreatorForm); }}>Cancel editing</button>}
+      </form>
+    </section>
+    <section className="panel">
+      <h2>Tasks Created by Me ({createdTasks.length})</h2>
+      {createdTasks.length === 0 && <div className="empty-state"><strong>No upcoming tasks created</strong><span>Create a task using the form.</span></div>}
+      <div className="task-list">{createdTasks.map((task) => <div className="task-card" key={task.id}>
+        <div className="task-card-head"><div><h3>{task.title}</h3><p className="muted">{formatDate(task.startDateTime)}{task.location ? ` · ${task.location}` : ''}</p></div><span>{task.assignedVolunteers.length}/{task.volunteersNeeded}</span></div>
+        <p className="muted small">Reminder: {task.reminderHoursBefore[0]} hour(s) before</p>
+        <label><span>Assign a volunteer</span><select value={assignmentChoice[task.id] || ''} onChange={(e) => setAssignmentChoice({ ...assignmentChoice, [task.id]: e.target.value })}>
+          <option value="">Choose volunteer…</option>{directory.filter((item) => !task.assignedVolunteers.includes(item.uid)).map((item) => <option key={item.uid} value={item.uid}>{item.name}</option>)}
+        </select></label>
+        <button className="secondary-btn" disabled={!assignmentChoice[task.id] || Boolean(assignmentBusy)} onClick={() => changeAssignment(task, assignmentChoice[task.id], 'add')}>Assign</button>
+        <div className="task-actions"><button className="link-btn" onClick={() => editTask(task)}>Edit task</button><button className="link-btn danger" onClick={async () => {
+          if (!window.confirm(`Cancel “${task.title}”?`)) return;
+          try { await updateTaskStatus(task.id, 'cancelled'); setMessage('Task cancelled.'); }
+          catch (err) { setError(err instanceof Error ? err.message : 'Could not cancel the task.'); }
+        }}>Cancel task</button></div>
+        {task.assignedVolunteers.length > 0 && <div className="assigned-volunteer-list">{task.assignedVolunteers.map((id) => <div className="row" key={id}><span>{directoryById.get(id) || 'Assigned volunteer'}</span><button className="link-btn danger" disabled={Boolean(assignmentBusy)} onClick={() => changeAssignment(task, id, 'remove')}>Remove</button></div>)}</div>}
+      </div>)}</div>
+    </section>
+  </div>;
 };
 
 const VolunteerTaskFilters: React.FC<{

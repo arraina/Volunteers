@@ -921,6 +921,26 @@ export async function removeVolunteerFromTask(
   });
 }
 
+export interface VolunteerDirectoryEntry {
+  uid: string;
+  name: string;
+}
+
+export async function getVolunteerDirectory(): Promise<VolunteerDirectoryEntry[]> {
+  const call = httpsCallable<Record<string, never>, { volunteers: VolunteerDirectoryEntry[] }>(functions, 'getVolunteerDirectory');
+  const result = await call({});
+  return result.data.volunteers;
+}
+
+export async function manageVolunteerTaskAssignment(
+  taskId: string,
+  volunteerId: string,
+  action: 'add' | 'remove'
+): Promise<void> {
+  const call = httpsCallable<{ taskId: string; volunteerId: string; action: 'add' | 'remove' }, { updated: boolean }>(functions, 'manageVolunteerTaskAssignment');
+  await call({ taskId, volunteerId, action });
+}
+
 // ---------------------------------------------------------------------------
 // Reminders (write-only from client; consumed by the scheduled sender)
 // ---------------------------------------------------------------------------
