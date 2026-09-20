@@ -37,8 +37,9 @@ import { findTaskScheduleConflicts } from '../helpers/scheduleConflicts';
 import '../pages/AdminDashboard.css';
 import './VolunteerDashboard.css';
 import EventFeedback from './EventFeedback';
+import EventCalendar from './EventCalendar';
 
-type Tab = 'open' | 'mine' | 'create' | 'past' | 'feedback' | 'profile';
+type Tab = 'open' | 'mine' | 'create' | 'calendar' | 'past' | 'feedback' | 'profile';
 
 const VolunteerDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -226,6 +227,9 @@ const VolunteerDashboard: React.FC = () => {
         <button className={tab === 'create' ? 'active' : ''} onClick={() => setTab('create')}>
           Create &amp; Manage Tasks
         </button>
+        <button className={tab === 'calendar' ? 'active' : ''} onClick={() => setTab('calendar')}>
+          Event Calendar
+        </button>
         <button className={tab === 'past' ? 'active' : ''} onClick={() => setTab('past')}>
           Past Tasks ({pastTasks.length})
         </button>
@@ -364,6 +368,18 @@ const VolunteerDashboard: React.FC = () => {
             directory={directory}
             setError={setError}
             setMessage={setMessage}
+          />
+        )}
+
+        {tab === 'calendar' && (
+          <EventCalendar
+            events={events}
+            tasks={tasks}
+            volunteers={[profile]}
+            ownerNames={Object.fromEntries(directory.map((item) => [item.uid, item.name]))}
+            uid={profile.uid}
+            setError={setError}
+            canManage={false}
           />
         )}
 

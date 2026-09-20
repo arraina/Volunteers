@@ -16,6 +16,7 @@ interface Props {
   uid?: string;
   setError: (message: string) => void;
   canManage: boolean;
+  ownerNames?: Record<string, string>;
 }
 
 const COLORS = ['#2f7d32', '#2563eb', '#9333ea', '#dc2626', '#d97706', '#0891b2'];
@@ -31,7 +32,7 @@ const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.g
 const eventEnd = (event: TempleEvent) => event.endDate || new Date((event.date?.getTime() || 0) + 60 * 60_000);
 const volunteerName = (volunteer: VolunteerProfile) => volunteer.name || `${volunteer.firstName} ${volunteer.lastName}`.trim() || volunteer.email;
 
-const EventCalendar: React.FC<Props> = ({ events, tasks, volunteers, uid, setError, canManage }) => {
+const EventCalendar: React.FC<Props> = ({ events, tasks, volunteers, uid, setError, canManage, ownerNames }) => {
   const [view, setView] = useState<CalendarView>('month');
   const [cursor, setCursor] = useState(startOfDay(new Date()));
   const [form, setForm] = useState(emptyForm);
@@ -44,7 +45,7 @@ const EventCalendar: React.FC<Props> = ({ events, tasks, volunteers, uid, setErr
   const [aiBusy, setAiBusy] = useState(false);
 
   const datedEvents = useMemo(() => events.filter((event) => event.date).sort((a, b) => a.date!.getTime() - b.date!.getTime()), [events]);
-  const ownerName = (event: TempleEvent) => volunteers.find((volunteer) => volunteer.uid === event.owner)?.name || volunteers.find((volunteer) => volunteer.uid === event.owner)?.email || 'Not assigned';
+  const ownerName = (event: TempleEvent) => (event.owner ? ownerNames?.[event.owner] : '') || volunteers.find((volunteer) => volunteer.uid === event.owner)?.name || volunteers.find((volunteer) => volunteer.uid === event.owner)?.email || 'Not assigned';
   const eventLabel = (event: TempleEvent) => `${event.name}${event.date ? ` — ${event.allDay ? event.date.toLocaleDateString() : event.date.toLocaleString()}` : ''} · Owner: ${ownerName(event)}`;
   const visibleEvents = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -193,7 +194,7 @@ const EventCalendar: React.FC<Props> = ({ events, tasks, volunteers, uid, setErr
           </form>
         </section>
         <section className="panel"><h2>Conflict alerts ({conflicts.length})</h2>{!conflicts.length ? <p className="success-text">No scheduling conflicts detected.</p> : <ul className="attention-list">{conflicts.map((conflict) => <li key={conflict.key}><strong>{conflict.first.name}{conflict.second ? ` / ${conflict.second.name}` : ''}</strong><br />{conflict.reason}</li>)}</ul>}</section>
-        <section className="panel"><h2>Upcoming</h2><ul className="attention-list">{datedEvents.filter((event) => event.date! >= new Date() && event.status !== 'cancelled').slice(0, 8).map((event) => <li key={event.id}><button className="link-btn" onClick={() => setForEdit(event)}>{eventLabel(event)}</button></li>)}</ul></section>
+        <section className="panel"><h2>Upcoming</h2><ul className="attention-list">{datedEvents.filter((event) => event.date! >= new Date() && event.status !== 'cancelled').slice(0, 8).map((event) => <li key={event.id}><button className="link-btn" onClick={() => canManage && setForEdit(event)}>{eventLabel(event)}</button></li>)}</ul></section>
       </aside>
     </div>
   </div>;
