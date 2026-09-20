@@ -15,6 +15,7 @@ import {
 } from '../helpers/types';
 import {
   assignVolunteerToTask,
+  assertVolunteerPhoneAvailable,
   createTask,
   checkIn,
   checkOut,
@@ -568,6 +569,7 @@ const ProfileTab: React.FC<{
     try {
       if (!firstName.trim() || !lastName.trim()) throw new Error('Name is required.');
       const normalizedPhone = normalizePhoneNumber(phoneNumber, true);
+      await assertVolunteerPhoneAvailable(normalizedPhone, profile.uid);
       await updateVolunteer(profile.uid, {
         firstName: firstName.trim(),
         lastName: lastName.trim(),

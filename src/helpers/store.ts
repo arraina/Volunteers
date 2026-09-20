@@ -215,6 +215,15 @@ export async function createOfflineVolunteer(input: VolunteerInput): Promise<str
   return result.data.volunteerId;
 }
 
+export async function assertVolunteerPhoneAvailable(phoneNumber: string, excludeUid = ''): Promise<void> {
+  const normalizedPhone = normalizePhoneNumber(phoneNumber, true);
+  const call = httpsCallable<{ phoneNumber: string; excludeUid: string }, { available: boolean }>(
+    functions,
+    'assertVolunteerPhoneAvailable'
+  );
+  await call({ phoneNumber: normalizedPhone, excludeUid });
+}
+
 export interface PortalInviteSettings {
   enabled: boolean;
   templateName: string;

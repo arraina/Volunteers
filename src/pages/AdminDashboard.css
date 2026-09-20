@@ -145,6 +145,44 @@
   margin-top: 1rem;
 }
 
+.duplicate-volunteer-alert {
+  grid-column: 1 / -1;
+  border-color: #f0b45a;
+  background: #fffaf0;
+}
+
+.duplicate-volunteer-alert h2 {
+  color: #8a4b08;
+}
+
+.duplicate-phone-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.duplicate-phone-group {
+  background: #fff;
+  border: 1px solid #f4d39d;
+  border-radius: 8px;
+  padding: 0.7rem 0.85rem;
+}
+
+.duplicate-phone-group ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.duplicate-tag {
+  background: #fff0d5;
+  border-radius: 999px;
+  color: #8a4b08;
+  font-size: 0.68rem;
+  font-weight: 700;
+  margin-left: 0.4rem;
+  padding: 0.15rem 0.45rem;
+  text-transform: uppercase;
+}
+
 .two-col {
   display: grid;
   grid-template-columns: minmax(300px, 1fr) 2fr;

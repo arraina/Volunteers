@@ -26,6 +26,7 @@ import {
 } from '../helpers/types';
 import {
   assignVolunteerToTask,
+  assertVolunteerPhoneAvailable,
   createAnnouncement,
   createOfflineVolunteer,
   createInvitedVolunteerProfile,
@@ -84,6 +85,7 @@ import EventWorkspace from './EventWorkspace';
 import EventCalendar from './EventCalendar';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
 import { assertTaskStartNotPast, fromEasternDateTimeInput, toEasternDateTimeInput } from '../helpers/taskDateTime';
+import { normalizePhoneNumber } from '../helpers/phone';
 import './AdminDashboard.css';
 
 type Tab = 'tasks' | 'ai' | 'events' | 'calendar' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'costs' | 'trash' | 'admins' | 'audit' | 'value';
@@ -145,6 +147,7 @@ function temporaryPassword(): string {
 }
 
 async function createVolunteerInvitation(input: typeof emptyVolunteerForm): Promise<void> {
+  await assertVolunteerPhoneAvailable(input.phoneNumber);
   const inviteApp = initializeApp(firebaseConfig, `volunteer-invite-${Date.now()}-${crypto.randomUUID()}`);
   const inviteAuth = getAuth(inviteApp);
   let invitedUser: Awaited<ReturnType<typeof createUserWithEmailAndPassword>>['user'] | null = null;
@@ -1289,6 +1292,26 @@ const VolunteersTab: React.FC<{
     || (v.invitationStatus === 'sent' && Boolean(v.invitationExpiresAt && v.invitationExpiresAt.getTime() <= Date.now()))
   ));
 
+  const duplicatePhoneGroups = useMemo(() => {
+    const byPhone = new Map<string, VolunteerProfile[]>();
+    volunteers.forEach((volunteer) => {
+      if (!volunteer.phoneNumber) return;
+      let phoneKey: string;
+      try { phoneKey = normalizePhoneNumber(volunteer.phoneNumber, true); }
+      catch { phoneKey = volunteer.phoneNumber.replace(/\D/g, ''); }
+      if (!phoneKey) return;
+      byPhone.set(phoneKey, [...(byPhone.get(phoneKey) || []), volunteer]);
+    });
+    return Array.from(byPhone.entries())
+      .filter(([, matches]) => matches.length > 1)
+      .sort(([first], [second]) => first.localeCompare(second));
+  }, [volunteers]);
+
+  const duplicateVolunteerIds = useMemo(
+    () => new Set(duplicatePhoneGroups.flatMap(([, matches]) => matches.map((volunteer) => volunteer.uid))),
+    [duplicatePhoneGroups]
+  );
+
   const toggleInviteSending = async () => {
     if (!isOwner) return;
     if (!inviteSettings.enabled && !window.confirm('Enable portal invitations only after Meta shows volunteer_portal_invite_v1 as Approved. Continue?')) return;
@@ -1353,6 +1376,7 @@ const VolunteersTab: React.FC<{
 
   const saveEdit = async (uid: string) => {
     try {
+      await assertVolunteerPhoneAvailable(editForm.phoneNumber, uid);
       await updateVolunteer(uid, {
         firstName: editForm.firstName,
         lastName: editForm.lastName,
@@ -1399,7 +1423,8 @@ const VolunteersTab: React.FC<{
           continue;
         }
         try {
-          await createVolunteerInvitation(row);
+          if (row.email) await createVolunteerInvitation(row);
+          else await createOfflineVolunteer(row);
           added += 1;
         } catch {
           skipped += 1;
@@ -1494,6 +1519,20 @@ const VolunteersTab: React.FC<{
 
   return (
     <div className="two-col">
+      {isOwner && duplicatePhoneGroups.length > 0 && <section className="panel duplicate-volunteer-alert" role="alert">
+        <h2>Duplicate volunteer phone numbers ({duplicatePhoneGroups.length})</h2>
+        <p className="muted small">Phone number is the volunteer identity key. Review these records and keep only the correct profile before assigning more tasks.</p>
+        <div className="duplicate-phone-list">
+          {duplicatePhoneGroups.map(([phone, matches]) => <div key={phone} className="duplicate-phone-group">
+            <strong>{phone}</strong>
+            <ul>
+              {matches.map((volunteer) => <li key={volunteer.uid}>
+                {volunteer.name} · {volunteer.email || 'no email'} · {volunteer.invitationStatus?.replaceAll('_', ' ') || 'active'}
+              </li>)}
+            </ul>
+          </div>)}
+        </div>
+      </section>}
       <section className="panel">
         <h2>Add Volunteer</h2>
         <p className="quota-notice">
@@ -1631,6 +1670,7 @@ const VolunteersTab: React.FC<{
                   <div>
                     <strong>{v.name}</strong>
                     {v.isAdmin && <span className="admin-tag">admin</span>}
+                    {isOwner && duplicateVolunteerIds.has(v.uid) && <span className="duplicate-tag">duplicate phone</span>}
                     <p className="muted small">
                       {v.email || 'Email not added'} · {v.phoneNumber || 'no phone'} · {v.totalHours}h
                       {v.invitationStatus && v.invitationStatus !== 'active' ? ` · Invite: ${v.invitationStatus.replaceAll('_', ' ')}` : ''}

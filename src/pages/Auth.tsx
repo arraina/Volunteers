@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
@@ -9,7 +10,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { getUserAdminRole } from '../helpers/types';
-import { createVolunteerProfile, getVolunteer, recordLoginAudit, updateVolunteer } from '../helpers/store';
+import { assertVolunteerPhoneAvailable, createVolunteerProfile, getVolunteer, recordLoginAudit, updateVolunteer } from '../helpers/store';
 import { normalizePhoneNumber, validatePhoneNumber } from '../helpers/phone';
 import './Auth.css';
 
@@ -80,6 +81,12 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
       if (!normalizedEmail) throw new Error('Email is required.');
       if (password.length < 6) throw new Error('Password must be at least 6 characters.');
       const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+      try {
+        await assertVolunteerPhoneAvailable(phone);
+      } catch (phoneError) {
+        await deleteUser(credential.user).catch(() => undefined);
+        throw phoneError;
+      }
       await updateProfile(credential.user, { displayName: `${fn} ${ln}` });
       await createVolunteerProfile(credential.user.uid, {
         firstName: fn,

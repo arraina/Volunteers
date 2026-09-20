@@ -65,6 +65,21 @@ exports.createOfflineVolunteer = onCall({ region: 'us-central1', maxInstances: 4
   return { volunteerId: ref.id, invitationStatus: 'waiting_for_template' };
 });
 
+exports.assertVolunteerPhoneAvailable = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in before checking a volunteer phone number.');
+  const phoneNumber = normalizePhone(request.data?.phoneNumber);
+  const excludeUid = String(request.data?.excludeUid || '');
+  const matches = await db.collection('volunteers').where('phoneNumber', '==', phoneNumber).get();
+  const duplicate = matches.docs.find((snapshot) => snapshot.id !== excludeUid && snapshot.data().deleted !== true);
+  if (duplicate) {
+    throw new HttpsError(
+      'already-exists',
+      'A volunteer with this phone number already exists. Use the existing profile or ask the Owner to resolve the duplicate.'
+    );
+  }
+  return { available: true, phoneNumber };
+});
+
 exports.getVolunteerDirectory = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
   if (!request.auth || request.auth.token.email_verified !== true) {
     throw new HttpsError('unauthenticated', 'A verified portal account is required.');
