@@ -1,4 +1,4 @@
-const { randomUUID } = require('crypto');
+const { createHash, randomBytes, randomUUID } = require('crypto');
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const { onDocumentWrittenWithAuthContext } = require('firebase-functions/v2/firestore');
@@ -7,8 +7,164 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 const db = admin.firestore();
 const whatsappWebhookVerifyToken = defineSecret('WHATSAPP_WEBHOOK_VERIFY_TOKEN');
+const whatsappAccessToken = defineSecret('WHATSAPP_ACCESS_TOKEN');
+
+const PORTAL_INVITE_TEMPLATE = 'volunteer_portal_invite_v1';
+const PORTAL_INVITE_LANGUAGE = 'en';
+const WHATSAPP_PHONE_NUMBER_ID = '1279758458557456';
+const PORTAL_INVITE_TTL_DAYS = 7;
+const PORTAL_URL = 'https://arraina.github.io/Volunteers/claim';
 
 const WHATSAPP_STATUS_RANK = { accepted: 0, sent: 1, delivered: 2, read: 3 };
+
+function normalizePhone(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length < 8 || digits.length > 15 || digits.startsWith('0')) {
+    throw new HttpsError('invalid-argument', 'Enter a valid international phone number including country code.');
+  }
+  return `+${digits}`;
+}
+
+function tokenHash(token) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+async function requireAdmin(request, ownerOnly = false) {
+  if (!request.auth || request.auth.token.email_verified !== true) {
+    throw new HttpsError('unauthenticated', 'A verified administrator account is required.');
+  }
+  const snapshot = await db.doc(`admins/${request.auth.uid}`).get();
+  const data = snapshot.data() || {};
+  if (!snapshot.exists || data.isAdmin !== true) throw new HttpsError('permission-denied', 'Administrator access is required.');
+  if (ownerOnly && data.role !== 'owner' && data.bootstrap !== true) {
+    throw new HttpsError('permission-denied', 'Owner access is required.');
+  }
+}
+
+exports.createOfflineVolunteer = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  await requireAdmin(request);
+  const firstName = String(request.data?.firstName || '').trim();
+  const lastName = String(request.data?.lastName || '').trim();
+  const email = String(request.data?.email || '').trim().toLowerCase();
+  const phoneNumber = normalizePhone(request.data?.phoneNumber);
+  if (!firstName || !lastName) throw new HttpsError('invalid-argument', 'First and last name are required.');
+  if (email) throw new HttpsError('invalid-argument', 'Use the existing email invitation flow when an email is supplied.');
+  const duplicate = await db.collection('volunteers').where('phoneNumber', '==', phoneNumber).limit(1).get();
+  if (!duplicate.empty) throw new HttpsError('already-exists', 'A volunteer with this phone number already exists.');
+  const ref = db.collection('volunteers').doc();
+  await ref.set({
+    firstName, lastName, name: `${firstName} ${lastName}`.trim(), email: '', phoneNumber,
+    skills: [], availability: [], notificationPrefs: { whatsapp: true, email: false },
+    whatsappOptIn: true, whatsappOptInAt: admin.firestore.FieldValue.serverTimestamp(),
+    whatsappOptOutAt: null, whatsappOptInSource: 'admin-confirmed', participationStatus: 'active',
+    invitationStatus: 'waiting_for_template', portalRegistrationStatus: 'unclaimed',
+    invitationSendCount: 0, totalHours: 0, createdBy: request.auth.uid,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    joinedDate: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { volunteerId: ref.id, invitationStatus: 'waiting_for_template' };
+});
+
+exports.setPortalInviteSending = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
+  await requireAdmin(request, true);
+  const enabled = request.data?.enabled === true;
+  await db.doc('notificationSettings/portalInvitations').set({
+    enabled, templateName: PORTAL_INVITE_TEMPLATE, language: PORTAL_INVITE_LANGUAGE,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: request.auth.uid,
+  }, { merge: true });
+  return { enabled };
+});
+
+async function sendPortalTemplate(phoneNumber, params) {
+  const response = await fetch(`https://graph.facebook.com/v21.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${whatsappAccessToken.value()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: phoneNumber.replace(/^\+/, ''), type: 'template', template: {
+      name: PORTAL_INVITE_TEMPLATE, language: { code: PORTAL_INVITE_LANGUAGE },
+      components: [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }],
+    }}),
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body?.error?.message || `Meta returned HTTP ${response.status}`);
+  return body.messages?.[0]?.id || '';
+}
+
+exports.sendPortalInvites = onCall(
+  { region: 'us-central1', maxInstances: 1, secrets: [whatsappAccessToken], timeoutSeconds: 120 },
+  async (request) => {
+    await requireAdmin(request, true);
+    const settings = await db.doc('notificationSettings/portalInvitations').get();
+    if (settings.data()?.enabled !== true) {
+      throw new HttpsError('failed-precondition', `Sending is disabled until ${PORTAL_INVITE_TEMPLATE} is approved and enabled.`);
+    }
+    const requestedIds = Array.isArray(request.data?.volunteerIds) ? request.data.volunteerIds.slice(0, 50) : [];
+    const snapshots = requestedIds.length
+      ? await Promise.all(requestedIds.map((id) => db.doc(`volunteers/${String(id)}`).get()))
+      : (await db.collection('volunteers').where('invitationStatus', '==', 'waiting_for_template').limit(50).get()).docs;
+    const results = [];
+    for (const snapshot of snapshots) {
+      if (!snapshot.exists) continue;
+      const volunteer = snapshot.data();
+      if (volunteer.email || volunteer.deleted === true || volunteer.whatsappOptIn !== true || !volunteer.phoneNumber) continue;
+      const token = randomBytes(32).toString('base64url');
+      const hash = tokenHash(token);
+      const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + PORTAL_INVITE_TTL_DAYS * 86400000);
+      const link = `${PORTAL_URL}?invite=${encodeURIComponent(token)}`;
+      try {
+        const providerId = await sendPortalTemplate(volunteer.phoneNumber, [volunteer.firstName || volunteer.name || 'Volunteer', link, expiresAt.toDate().toLocaleDateString('en-US', { timeZone: 'America/New_York' })]);
+        const inviteRef = db.doc(`portalInvites/${hash}`);
+        const messageRef = db.collection('sentMessages').doc();
+        const batch = db.batch();
+        batch.set(inviteRef, { volunteerId: snapshot.id, tokenHash: hash, status: 'active', createdAt: admin.firestore.FieldValue.serverTimestamp(), expiresAt, sentBy: request.auth.uid, providerId });
+        batch.update(snapshot.ref, { invitationStatus: 'sent', invitationLastSentAt: admin.firestore.FieldValue.serverTimestamp(), invitationExpiresAt: expiresAt, invitationSendCount: admin.firestore.FieldValue.increment(1), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        batch.set(messageRef, { channel: 'whatsapp', type: 'portal_invitation', volunteerId: snapshot.id, destination: volunteer.phoneNumber, templateName: PORTAL_INVITE_TEMPLATE, providerId, status: 'accepted', sentAt: admin.firestore.FieldValue.serverTimestamp(), acceptedAt: admin.firestore.FieldValue.serverTimestamp() });
+        await batch.commit();
+        results.push({ volunteerId: snapshot.id, sent: true });
+      } catch (error) {
+        await snapshot.ref.update({ invitationStatus: 'failed', invitationFailureReason: String(error.message || error), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        results.push({ volunteerId: snapshot.id, sent: false, error: String(error.message || error) });
+      }
+    }
+    return { attempted: results.length, sent: results.filter((item) => item.sent).length, failed: results.filter((item) => !item.sent).length };
+  }
+);
+
+exports.getPortalInvite = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  const token = String(request.data?.token || '');
+  if (token.length < 20) throw new HttpsError('invalid-argument', 'This invitation link is invalid.');
+  const invite = await db.doc(`portalInvites/${tokenHash(token)}`).get();
+  const data = invite.data();
+  if (!invite.exists || data.status !== 'active' || data.expiresAt?.toMillis() <= Date.now()) throw new HttpsError('failed-precondition', 'This invitation link is invalid or expired. Ask the Owner to send a new one.');
+  const volunteer = await db.doc(`volunteers/${data.volunteerId}`).get();
+  if (!volunteer.exists) throw new HttpsError('not-found', 'Volunteer profile was not found.');
+  return { name: volunteer.data().name || volunteer.data().firstName || 'Volunteer', expiresAt: data.expiresAt.toMillis() };
+});
+
+exports.claimPortalInvite = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
+  const token = String(request.data?.token || '');
+  const email = String(request.data?.email || '').trim().toLowerCase();
+  const password = String(request.data?.password || '');
+  if (!/^\S+@\S+\.\S+$/.test(email)) throw new HttpsError('invalid-argument', 'Enter a valid email address.');
+  if (password.length < 6) throw new HttpsError('invalid-argument', 'Password must be at least 6 characters.');
+  const inviteRef = db.doc(`portalInvites/${tokenHash(token)}`);
+  const invite = await inviteRef.get();
+  const data = invite.data();
+  if (!invite.exists || data.status !== 'active' || data.expiresAt?.toMillis() <= Date.now()) throw new HttpsError('failed-precondition', 'This invitation link is invalid or expired.');
+  const volunteerRef = db.doc(`volunteers/${data.volunteerId}`);
+  const volunteer = await volunteerRef.get();
+  if (!volunteer.exists || volunteer.data().email) throw new HttpsError('failed-precondition', 'This volunteer profile has already been claimed.');
+  try {
+    await admin.auth().createUser({ uid: data.volunteerId, email, password, displayName: volunteer.data().name || '' });
+  } catch (error) {
+    if (error.code === 'auth/email-already-exists') throw new HttpsError('already-exists', 'This email is already used by another account.');
+    throw new HttpsError('internal', 'The portal account could not be created.');
+  }
+  const batch = db.batch();
+  batch.update(volunteerRef, { email, 'notificationPrefs.email': true, invitationStatus: 'invited', portalRegistrationStatus: 'email_verification_pending', updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+  batch.update(inviteRef, { status: 'used', usedAt: admin.firestore.FieldValue.serverTimestamp(), claimedEmail: email });
+  await batch.commit();
+  return { volunteerId: data.volunteerId, email };
+});
 
 /** Receive Meta's WhatsApp message-status callbacks and update the original record. */
 exports.whatsappStatusWebhook = onRequest(

@@ -27,6 +27,7 @@ import {
 import {
   assignVolunteerToTask,
   createAnnouncement,
+  createOfflineVolunteer,
   createInvitedVolunteerProfile,
   createTask,
   AdminAccess,
@@ -49,6 +50,10 @@ import {
   groupTasksBySeries,
   removeVolunteerFromTask,
   recordInvitationSent,
+  sendPortalInvites,
+  setPortalInviteSending,
+  subscribePortalInviteSettings,
+  PortalInviteSettings,
   SeriesScope,
   subscribeTasks,
   subscribeDeletedTasks,
@@ -295,7 +300,7 @@ const AdminDashboard: React.FC = () => {
         )}
         {tab === 'events' && <EventWorkspace uid={user?.uid} events={events} tasks={tasks} setError={setError} />}
         {tab === 'calendar' && <EventCalendar uid={user?.uid} events={events} tasks={tasks} volunteers={volunteers} setError={setError} canManage={isOwner} />}
-        {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} uid={user?.uid} setError={setError} />}
+        {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} uid={user?.uid} isOwner={isOwner} setError={setError} />}
         {tab === 'announcements' && isOwner && (
           <AnnouncementsTab uid={user?.uid} setError={setError} />
         )}
@@ -1141,14 +1146,19 @@ const TrashTab: React.FC<{
 const VolunteersTab: React.FC<{
   volunteers: VolunteerProfile[];
   uid?: string;
+  isOwner: boolean;
   setError: (s: string) => void;
-}> = ({ volunteers, uid, setError }) => {
+}> = ({ volunteers, uid, isOwner, setError }) => {
   const [form, setForm] = useState(emptyVolunteerForm);
   const [editing, setEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(emptyVolunteerForm);
   const [search, setSearch] = useState('');
   const [volunteerSort, setVolunteerSort] = useState<'name' | 'hours' | 'newest'>('name');
   const [resendingInvitation, setResendingInvitation] = useState<string | null>(null);
+  const [inviteSettings, setInviteSettings] = useState<PortalInviteSettings>({ enabled: false, templateName: 'volunteer_portal_invite_v1', language: 'en' });
+  const [inviteBusy, setInviteBusy] = useState(false);
+
+  useEffect(() => subscribePortalInviteSettings(setInviteSettings), []);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1157,17 +1167,44 @@ const VolunteersTab: React.FC<{
       if (
         !form.firstName.trim() ||
         !form.lastName.trim() ||
-        !form.email.trim() ||
         !form.phoneNumber.trim()
       ) {
-        throw new Error('First name, last name, email, and phone are required.');
+        throw new Error('First name, last name, and phone are required.');
       }
-      await createVolunteerInvitation({ ...form, whatsappOptIn: true });
+      if (form.email.trim()) await createVolunteerInvitation({ ...form, whatsappOptIn: true });
+      else await createOfflineVolunteer({ ...form, whatsappOptIn: true });
       setForm(emptyVolunteerForm);
-      window.alert('Volunteer added. A login invitation was sent by email.');
+      window.alert(form.email.trim()
+        ? 'Volunteer added. A login invitation was sent by email.'
+        : 'Volunteer added and queued for a WhatsApp portal invitation. They can be assigned to tasks now.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add volunteer.');
     }
+  };
+
+  const pendingInvites = volunteers.filter((v) => !v.email && (
+    ['waiting_for_template', 'failed'].includes(v.invitationStatus || '')
+    || (v.invitationStatus === 'sent' && Boolean(v.invitationExpiresAt && v.invitationExpiresAt.getTime() <= Date.now()))
+  ));
+
+  const toggleInviteSending = async () => {
+    if (!isOwner) return;
+    if (!inviteSettings.enabled && !window.confirm('Enable portal invitations only after Meta shows volunteer_portal_invite_v1 as Approved. Continue?')) return;
+    setInviteBusy(true);
+    try { await setPortalInviteSending(!inviteSettings.enabled); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Could not change invitation settings.'); }
+    finally { setInviteBusy(false); }
+  };
+
+  const sendPendingInvites = async () => {
+    if (!window.confirm(`Send WhatsApp portal invitations to ${pendingInvites.length} queued volunteer(s)?`)) return;
+    setInviteBusy(true);
+    setError('');
+    try {
+      const result = await sendPortalInvites(pendingInvites.map((v) => v.uid));
+      window.alert(`Sent ${result.sent} invitation(s).${result.failed ? ` ${result.failed} failed.` : ''}`);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not send invitations.'); }
+    finally { setInviteBusy(false); }
   };
 
   const resendInvitation = async (volunteer: VolunteerProfile) => {
@@ -1236,7 +1273,6 @@ const VolunteersTab: React.FC<{
         if (
           !row.firstName ||
           !row.lastName ||
-          !row.email ||
           !row.phoneNumber ||
           !row.whatsappOptIn
         ) {
@@ -1316,10 +1352,9 @@ const VolunteersTab: React.FC<{
           <input
             type="email"
             aria-label="Volunteer email"
-            placeholder="Email"
+            placeholder="Email (optional)"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
-            required
           />
           <input
             type="tel"
@@ -1330,12 +1365,28 @@ const VolunteersTab: React.FC<{
             required
           />
           <button type="submit" className="primary-btn">
-            Add Volunteer &amp; Send Invitation
+            {form.email.trim() ? 'Add Volunteer & Send Email Invitation' : 'Add Volunteer & Queue Portal Invite'}
           </button>
         </form>
         <p className="muted small">
-          Volunteers can also register themselves from the login page.
+          Without an email, the volunteer can be assigned immediately. Their WhatsApp portal invite stays queued until the Owner enables the approved template.
         </p>
+        {isOwner && <div className="portal-invite-panel">
+          <h3>Portal invitation queue</h3>
+          <p><strong>{pendingInvites.length}</strong> waiting · Template <code>{inviteSettings.templateName}</code></p>
+          <p className={`invite-state ${inviteSettings.enabled ? 'enabled' : ''}`}>
+            Sending is {inviteSettings.enabled ? 'enabled' : 'disabled'}
+          </p>
+          <div className="row">
+            <button type="button" className="secondary-btn" disabled={inviteBusy} onClick={toggleInviteSending}>
+              {inviteSettings.enabled ? 'Disable sending' : 'Mark approved & enable'}
+            </button>
+            <button type="button" className="primary-btn" disabled={inviteBusy || !inviteSettings.enabled || pendingInvites.length === 0} onClick={sendPendingInvites}>
+              {inviteBusy ? 'Working...' : 'Send all pending'}
+            </button>
+          </div>
+          <small>Links expire 7 days after sending. Failed invitations stay visible and can be retried.</small>
+        </div>}
       </section>
 
       <section className="panel">
@@ -1352,8 +1403,7 @@ const VolunteersTab: React.FC<{
           </div>
         </div>
         <p className="muted small">
-          CSV columns: first name, last name, email, phone, WhatsApp consent (defaults to yes; use no to skip).
-          Each valid row receives a login invitation.
+          CSV columns: first name, last name, email (optional), phone, WhatsApp consent. Email-less rows are queued for the portal invite.
         </p>
         <p className="results-count">{filtered.length} of {volunteers.length} volunteers shown</p>
         <input
@@ -1395,7 +1445,7 @@ const VolunteersTab: React.FC<{
                     value={editForm.email}
                     disabled
                   />
-                  <small className="field-hint">Login email cannot be changed here. The volunteer must continue using this email to sign in.</small>
+                  <small className="field-hint">{v.email ? 'Login email cannot be changed here.' : 'Email will be added by the volunteer through their secure portal invitation.'}</small>
                   <input
                     aria-label="Volunteer phone number"
                     value={editForm.phoneNumber}
@@ -1416,7 +1466,8 @@ const VolunteersTab: React.FC<{
                     <strong>{v.name}</strong>
                     {v.isAdmin && <span className="admin-tag">admin</span>}
                     <p className="muted small">
-                      {v.email} · {v.phoneNumber || 'no phone'} · {v.totalHours}h
+                      {v.email || 'Email not added'} · {v.phoneNumber || 'no phone'} · {v.totalHours}h
+                      {v.invitationStatus && v.invitationStatus !== 'active' ? ` · Invite: ${v.invitationStatus.replaceAll('_', ' ')}` : ''}
                     </p>
                   </div>
                   <div className="row">

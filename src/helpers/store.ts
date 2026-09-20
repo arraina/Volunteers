@@ -209,6 +209,36 @@ export async function recordInvitationSent(uid: string): Promise<void> {
   );
 }
 
+export async function createOfflineVolunteer(input: VolunteerInput): Promise<string> {
+  const call = httpsCallable<VolunteerInput, { volunteerId: string }>(functions, 'createOfflineVolunteer');
+  const result = await call(input);
+  return result.data.volunteerId;
+}
+
+export interface PortalInviteSettings {
+  enabled: boolean;
+  templateName: string;
+  language: string;
+}
+
+export function subscribePortalInviteSettings(cb: (settings: PortalInviteSettings) => void) {
+  return onSnapshot(doc(db, 'notificationSettings', 'portalInvitations'), (snapshot) => {
+    const data = snapshot.data();
+    cb({ enabled: data?.enabled === true, templateName: data?.templateName || 'volunteer_portal_invite_v1', language: data?.language || 'en' });
+  });
+}
+
+export async function setPortalInviteSending(enabled: boolean): Promise<void> {
+  const call = httpsCallable<{ enabled: boolean }, { enabled: boolean }>(functions, 'setPortalInviteSending');
+  await call({ enabled });
+}
+
+export async function sendPortalInvites(volunteerIds?: string[]): Promise<{ attempted: number; sent: number; failed: number }> {
+  const call = httpsCallable<{ volunteerIds?: string[] }, { attempted: number; sent: number; failed: number }>(functions, 'sendPortalInvites');
+  const result = await call(volunteerIds ? { volunteerIds } : {});
+  return result.data;
+}
+
 function buildVolunteerDoc(input: VolunteerInput) {
   const firstName = input.firstName.trim();
   const lastName = input.lastName.trim();

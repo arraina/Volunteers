@@ -269,6 +269,11 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Invitation tokens are hashed and may only be read or mutated by Cloud Functions.
+    match /portalInvites/{id} {
+      allow read, write: if false;
+    }
+
     // Itemized operating expenses. Admins may record/edit/soft-delete costs;
     // restoration and permanent deletion follow the Owner-only Trash workflow.
     match /costEntries/{id} {

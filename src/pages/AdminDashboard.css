@@ -1280,3 +1280,17 @@
     border-right: 0;
   }
 }
+
+.portal-invite-panel {
+  background: #f6fbf6;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.portal-invite-panel h3 { margin: 0 0 0.45rem; }
+.portal-invite-panel p { margin: 0.35rem 0; }
+.portal-invite-panel .row { margin: 0.8rem 0; flex-wrap: wrap; }
+.invite-state { color: #9a6700; font-weight: 700; }
+.invite-state.enabled { color: var(--green-700); }

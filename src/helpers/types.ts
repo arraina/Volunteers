@@ -63,7 +63,10 @@ export interface VolunteerProfile {
   whatsappOptOutAt?: Date;
   whatsappOptInSource?: 'self' | 'admin-confirmed';
   /** Invitations do not restrict assignment or reminder delivery. */
-  invitationStatus?: 'invited' | 'active';
+  invitationStatus?: 'waiting_for_template' | 'sent' | 'failed' | 'invited' | 'active';
+  portalRegistrationStatus?: 'unclaimed' | 'email_verification_pending' | 'active';
+  invitationExpiresAt?: Date;
+  invitationFailureReason?: string;
   invitationLastSentAt?: Date;
   invitationSendCount?: number;
   participationStatus?: 'active' | 'inactive';
@@ -294,6 +297,9 @@ export function normalizeVolunteer(uid: string, data: Record<string, any>): Volu
     whatsappOptOutAt: data.whatsappOptOutAt?.toDate?.(),
     whatsappOptInSource: data.whatsappOptInSource,
     invitationStatus: data.invitationStatus,
+    portalRegistrationStatus: data.portalRegistrationStatus,
+    invitationExpiresAt: data.invitationExpiresAt?.toDate?.(),
+    invitationFailureReason: data.invitationFailureReason || undefined,
     invitationLastSentAt: data.invitationLastSentAt?.toDate?.(),
     invitationSendCount:
       typeof data.invitationSendCount === 'number' ? data.invitationSendCount : 0,
