@@ -28,7 +28,6 @@ import {
   manageVolunteerTaskAssignment,
   VolunteerDirectoryEntry,
   updateTaskManagementFields,
-  updateTaskStatus,
   trashOwnTask,
 } from '../helpers/store';
 import { fromEasternDateTimeInput, toEasternDateTimeInput } from '../helpers/taskDateTime';
@@ -517,10 +516,6 @@ const VolunteerTaskManagement: React.FC<{
         </select></label>
         <button className="secondary-btn" disabled={!assignmentChoice[task.id] || Boolean(assignmentBusy)} onClick={() => changeAssignment(task, assignmentChoice[task.id], 'add')}>Assign</button>
         <div className="task-actions"><button className="link-btn" onClick={() => editTask(task)}>Edit task</button><button className="link-btn danger" onClick={async () => {
-          if (!window.confirm(`Cancel “${task.title}”?`)) return;
-          try { await updateTaskStatus(task.id, 'cancelled'); setMessage('Task cancelled.'); }
-          catch (err) { setError(err instanceof Error ? err.message : 'Could not cancel the task.'); }
-        }}>Cancel task</button><button className="link-btn danger" onClick={async () => {
           if (!window.confirm(`Delete “${task.title}”? It will be moved to Trash and removed from volunteer task lists.`)) return;
           try { await trashOwnTask(task.id, profile.uid); setMessage('Task moved to Trash.'); }
           catch (err) { setError(err instanceof Error ? err.message : 'Could not delete the task.'); }
