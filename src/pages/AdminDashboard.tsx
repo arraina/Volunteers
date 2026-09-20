@@ -209,6 +209,18 @@ const AdminDashboard: React.FC = () => {
     navigate('/login');
   };
 
+  const chooseTab = (nextTab: Tab, event: React.MouseEvent<HTMLButtonElement>) => {
+    setTab(nextTab);
+    const group = event.currentTarget.closest('details');
+    if (group instanceof HTMLDetailsElement) group.open = false;
+  };
+
+  const taskTabs: Tab[] = ['tasks', 'ai'];
+  const eventTabs: Tab[] = ['calendar', 'events'];
+  const peopleTabs: Tab[] = ['volunteers', 'admins'];
+  const reportTabs: Tab[] = ['reports', 'costs', 'value'];
+  const moreTabs: Tab[] = ['announcements', 'history', 'trash', 'audit'];
+
   return (
     <div className="admin-dashboard">
       <header className="dashboard-header">
@@ -224,53 +236,46 @@ const AdminDashboard: React.FC = () => {
         </div>
       </header>
 
-      <nav className="tab-bar">
-        <button className={tab === 'tasks' ? 'active' : ''} onClick={() => setTab('tasks')}>
-          Tasks
-        </button>
-        <button className={tab === 'ai' ? 'active' : ''} onClick={() => setTab('ai')}>
-          AI Create
-        </button>
-        <button className={tab === 'events' ? 'active' : ''} onClick={() => setTab('events')}>
-          Event Workspace
-        </button>
-        <button className={tab === 'calendar' ? 'active' : ''} onClick={() => setTab('calendar')}>
-          Event Calendar
-        </button>
-        <button
-          className={tab === 'volunteers' ? 'active' : ''}
-          onClick={() => setTab('volunteers')}
-        >
-          Volunteers
-        </button>
-        {isOwner && <button
-          className={tab === 'announcements' ? 'active' : ''}
-          onClick={() => setTab('announcements')}
-        >
-          Announcements
-        </button>}
-        {isOwner && <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
-          History
-        </button>}
-        {isOwner && <button className={tab === 'reports' ? 'active' : ''} onClick={() => setTab('reports')}>
-          Analytics
-        </button>}
-        <button className={tab === 'costs' ? 'active' : ''} onClick={() => setTab('costs')}>
-          Costs
-        </button>
-        <button className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')}>
-          Trash ({trashCount})
-        </button>
-        {isOwner && <button className={tab === 'admins' ? 'active' : ''} onClick={() => setTab('admins')}>
-          Admin Management
-        </button>}
-        {isOwner && <button className={tab === 'audit' ? 'active' : ''} onClick={() => setTab('audit')}>
-          Audit
-        </button>}
-        {isOwner && <button className={tab === 'value' ? 'active' : ''} onClick={() => setTab('value')}>
-          App Value
-        </button>}
-        <button onClick={() => navigate('/help')}>Help</button>
+      <nav className="tab-bar" aria-label="Admin navigation">
+        <details className={`nav-group ${taskTabs.includes(tab) ? 'active' : ''}`}>
+          <summary>Tasks</summary>
+          <div className="nav-menu">
+            <button className={tab === 'tasks' ? 'active' : ''} onClick={(event) => chooseTab('tasks', event)}>Task Workspace</button>
+            <button className={tab === 'ai' ? 'active' : ''} onClick={(event) => chooseTab('ai', event)}>AI Create</button>
+          </div>
+        </details>
+        <details className={`nav-group ${eventTabs.includes(tab) ? 'active' : ''}`}>
+          <summary>Events</summary>
+          <div className="nav-menu">
+            <button className={tab === 'calendar' ? 'active' : ''} onClick={(event) => chooseTab('calendar', event)}>Event Calendar</button>
+            <button className={tab === 'events' ? 'active' : ''} onClick={(event) => chooseTab('events', event)}>Event Workspace</button>
+          </div>
+        </details>
+        <details className={`nav-group ${peopleTabs.includes(tab) ? 'active' : ''}`}>
+          <summary>People</summary>
+          <div className="nav-menu">
+            <button className={tab === 'volunteers' ? 'active' : ''} onClick={(event) => chooseTab('volunteers', event)}>Volunteers</button>
+            {isOwner && <button className={tab === 'admins' ? 'active' : ''} onClick={(event) => chooseTab('admins', event)}>Admin Management</button>}
+          </div>
+        </details>
+        <details className={`nav-group ${reportTabs.includes(tab) ? 'active' : ''}`}>
+          <summary>Reports</summary>
+          <div className="nav-menu">
+            {isOwner && <button className={tab === 'reports' ? 'active' : ''} onClick={(event) => chooseTab('reports', event)}>Analytics</button>}
+            <button className={tab === 'costs' ? 'active' : ''} onClick={(event) => chooseTab('costs', event)}>Costs</button>
+            {isOwner && <button className={tab === 'value' ? 'active' : ''} onClick={(event) => chooseTab('value', event)}>App Value</button>}
+          </div>
+        </details>
+        <details className={`nav-group ${moreTabs.includes(tab) ? 'active' : ''}`}>
+          <summary>More{trashCount ? ` (${trashCount})` : ''}</summary>
+          <div className="nav-menu nav-menu-right">
+            {isOwner && <button className={tab === 'announcements' ? 'active' : ''} onClick={(event) => chooseTab('announcements', event)}>Announcements</button>}
+            {isOwner && <button className={tab === 'history' ? 'active' : ''} onClick={(event) => chooseTab('history', event)}>History</button>}
+            <button className={tab === 'trash' ? 'active' : ''} onClick={(event) => chooseTab('trash', event)}>Trash ({trashCount})</button>
+            {isOwner && <button className={tab === 'audit' ? 'active' : ''} onClick={(event) => chooseTab('audit', event)}>Audit</button>}
+            <button onClick={() => navigate('/help')}>Help</button>
+          </div>
+        </details>
       </nav>
 
       <div className="dashboard-content">
@@ -336,6 +341,7 @@ const TasksTab: React.FC<{
   const [creatorFilter, setCreatorFilter] = useState<'all' | 'mine' | 'assigned'>('mine');
   const [taskSort, setTaskSort] = useState<'soonest' | 'latest' | 'title'>('soonest');
   const [undoBatchId, setUndoBatchId] = useState('');
+  const [selfServiceMessage, setSelfServiceMessage] = useState('');
 
   const volunteerById = useMemo(() => {
     const map = new Map<string, VolunteerProfile>();
@@ -476,6 +482,27 @@ const TasksTab: React.FC<{
     }
   };
 
+  const handleSelfSignup = async (task: VolunteerTask) => {
+    if (!uid) throw new Error('You must be signed in to join a task.');
+    if (!volunteerById.has(uid)) {
+      throw new Error('Your account does not have a volunteer profile yet. Ask the Owner to add one before signing up.');
+    }
+    await handleAssign(task, uid);
+    setSelfServiceMessage(`You signed up for ${task.title}.`);
+  };
+
+  const handleSelfWithdraw = async (task: VolunteerTask) => {
+    if (!uid) throw new Error('You must be signed in to withdraw.');
+    if (!window.confirm(`Withdraw from "${task.title}"?`)) return;
+    try {
+      await removeVolunteerFromTask(task, uid);
+      setSelfServiceMessage(`You withdrew from ${task.title}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to withdraw from task.');
+      throw err;
+    }
+  };
+
   const handleTrash = async (task: VolunteerTask, scope: SeriesScope) => {
     const batchId = await trashTaskScoped(task, scope, uid);
     setUndoBatchId(batchId);
@@ -593,6 +620,10 @@ const TasksTab: React.FC<{
       </section>
 
       <section className="panel results-panel">
+        {selfServiceMessage && <div className="undo-banner" role="status">
+          <span>{selfServiceMessage}</span>
+          <button className="link-btn" onClick={() => setSelfServiceMessage('')}>Dismiss</button>
+        </div>}
         {undoBatchId && (
           <div className="undo-banner" role="status">
             <span>Task moved to Trash. It can be restored for 30 days.</span>
@@ -692,6 +723,9 @@ const TasksTab: React.FC<{
                   onAssign={handleAssign}
                   onRemove={removeVolunteerFromTask}
                   onTrash={handleTrash}
+                  selfUid={uid}
+                  onSelfSignup={handleSelfSignup}
+                  onSelfWithdraw={handleSelfWithdraw}
                   setError={setError}
                 />
               ))}
@@ -711,8 +745,11 @@ const SeriesCard: React.FC<{
   onAssign: (task: VolunteerTask, volunteerId: string) => Promise<void>;
   onRemove: (task: VolunteerTask, volunteerId: string) => void;
   onTrash: (task: VolunteerTask, scope: SeriesScope) => Promise<void>;
+  selfUid?: string;
+  onSelfSignup: (task: VolunteerTask) => Promise<void>;
+  onSelfWithdraw: (task: VolunteerTask) => Promise<void>;
   setError: (s: string) => void;
-}> = ({ group, volunteers, volunteerById, onAssign, onRemove, onTrash, setError }) => {
+}> = ({ group, volunteers, volunteerById, onAssign, onRemove, onTrash, selfUid, onSelfSignup, onSelfWithdraw, setError }) => {
   const isSeries = group.recurrence !== 'none' && !!group.seriesId;
   const [expanded, setExpanded] = useState(!isSeries);
   const [scopeRequest, setScopeRequest] = useState<{
@@ -766,6 +803,9 @@ const SeriesCard: React.FC<{
               onAssign={onAssign}
               onRemove={onRemove}
               onTrash={onTrash}
+              selfUid={selfUid}
+              onSelfSignup={onSelfSignup}
+              onSelfWithdraw={onSelfWithdraw}
               askScope={askScope}
               setError={setError}
             />
@@ -794,17 +834,26 @@ const OccurrenceRow: React.FC<{
   onAssign: (task: VolunteerTask, volunteerId: string) => Promise<void>;
   onRemove: (task: VolunteerTask, volunteerId: string) => void;
   onTrash: (task: VolunteerTask, scope: SeriesScope) => Promise<void>;
+  selfUid?: string;
+  onSelfSignup: (task: VolunteerTask) => Promise<void>;
+  onSelfWithdraw: (task: VolunteerTask) => Promise<void>;
   askScope: (verb: string) => Promise<SeriesScope | null>;
   setError: (s: string) => void;
-}> = ({ task, volunteers, volunteerById, onAssign, onRemove, onTrash, askScope, setError }) => {
+}> = ({ task, volunteers, volunteerById, onAssign, onRemove, onTrash, selfUid, onSelfSignup, onSelfWithdraw, askScope, setError }) => {
   const [assigning, setAssigning] = useState(false);
   const [assignmentMessage, setAssignmentMessage] = useState('');
   const [editing, setEditing] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [selfServiceBusy, setSelfServiceBusy] = useState(false);
   const [editForm, setEditForm] = useState(() => taskEditValues(task));
   const status = effectiveTaskStatus(task);
   const isHistoricalTask = task.startDateTime < new Date();
-  const assignmentClosed = status === 'filled' || status === 'completed' || status === 'cancelled' || openSlots(task) === 0;
+  const assignmentClosed = task.startDateTime <= new Date()
+    || status === 'filled'
+    || status === 'completed'
+    || status === 'cancelled'
+    || openSlots(task) === 0;
+  const selfAssigned = Boolean(selfUid && task.assignedVolunteers.includes(selfUid));
 
   const saveTaskEdit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -897,6 +946,24 @@ const OccurrenceRow: React.FC<{
         <div className="task-edit-actions task-edit-wide"><button className="primary-btn" disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</button><button type="button" className="secondary-btn" onClick={() => { setEditForm(taskEditValues(task)); setEditing(false); }}>Cancel edit</button></div>
       </form>}
       <div className="task-actions">
+        {selfUid && (selfAssigned || !assignmentClosed) && <button
+          className={selfAssigned ? 'secondary-btn' : 'primary-btn'}
+          disabled={selfServiceBusy}
+          onClick={async () => {
+            setSelfServiceBusy(true);
+            setError('');
+            try {
+              if (selfAssigned) await onSelfWithdraw(task);
+              else await onSelfSignup(task);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Could not update your signup.');
+            } finally {
+              setSelfServiceBusy(false);
+            }
+          }}
+        >
+          {selfServiceBusy ? 'Updating…' : selfAssigned ? 'Withdraw myself' : 'Sign me up'}
+        </button>}
         <select
           defaultValue=""
           disabled={assigning || assignmentClosed}

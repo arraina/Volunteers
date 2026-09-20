@@ -59,33 +59,71 @@
 
 .tab-bar {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.4rem;
   padding: 0 1.5rem;
   background: #fff;
   border-bottom: 1px solid #e2e8f0;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x proximity;
-  scrollbar-width: thin;
-  -webkit-overflow-scrolling: touch;
+  overflow: visible;
 }
 
-.tab-bar button {
-  background: none;
-  border: none;
-  padding: 0.85rem 1rem;
-  cursor: pointer;
+.nav-group {
+  position: relative;
+}
+
+.nav-group summary {
   color: #64748b;
-  font-weight: 500;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  padding: 0.9rem 1rem 0.8rem;
   border-bottom: 3px solid transparent;
-  flex: 0 0 auto;
-  scroll-snap-align: start;
   white-space: nowrap;
 }
 
-.tab-bar button.active {
+.nav-group summary::-webkit-details-marker { display: none; }
+.nav-group summary::after { content: ' ▾'; font-size: 0.75rem; }
+.nav-group.active summary { color: var(--primary-dark); border-bottom-color: var(--primary); }
+.nav-group[open] summary { background: #f8fafc; }
+
+.nav-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  min-width: 210px;
+  padding: 0.4rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+}
+
+.nav-menu-right { left: auto; right: 0; }
+
+.tab-bar .nav-menu button {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 7px;
+  padding: 0.7rem 0.8rem;
+  cursor: pointer;
+  color: #64748b;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.tab-bar .nav-menu button:hover,
+.tab-bar .nav-menu button.active {
+  background: #f0f7f0;
   color: var(--primary-dark);
-  border-bottom-color: var(--primary);
+}
+
+@media (max-width: 600px) {
+  .tab-bar { padding: 0 0.5rem; justify-content: space-between; }
+  .nav-group summary { padding-inline: 0.55rem; font-size: 0.9rem; }
+  .nav-menu { min-width: 180px; }
 }
 
 .dashboard-content {
