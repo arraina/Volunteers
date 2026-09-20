@@ -29,14 +29,16 @@ import {
   VolunteerDirectoryEntry,
   updateTaskManagementFields,
   updateTaskStatus,
+  trashOwnTask,
 } from '../helpers/store';
-import { fromEasternDateTimeInput } from '../helpers/taskDateTime';
+import { fromEasternDateTimeInput, toEasternDateTimeInput } from '../helpers/taskDateTime';
 import { normalizePhoneNumber, validatePhoneNumber } from '../helpers/phone';
 import { findTaskScheduleConflicts } from '../helpers/scheduleConflicts';
 import '../pages/AdminDashboard.css';
 import './VolunteerDashboard.css';
 import EventFeedback from './EventFeedback';
 import EventCalendar from './EventCalendar';
+import AutoCommitDateInput from '../components/AutoCommitDateInput';
 
 type Tab = 'open' | 'mine' | 'create' | 'calendar' | 'past' | 'feedback' | 'profile';
 
@@ -495,8 +497,8 @@ const VolunteerTaskManagement: React.FC<{
       <form className="stacked-form" onSubmit={submit}>
         <input placeholder="Task title" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
         <textarea placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-        <label><span>Start (Eastern Time — ET)</span><input type="datetime-local" required value={form.startDateTime} onChange={(e) => setForm({ ...form, startDateTime: e.target.value })} /></label>
-        <label><span>End (optional, Eastern Time — ET)</span><input type="datetime-local" value={form.endDateTime} onChange={(e) => setForm({ ...form, endDateTime: e.target.value })} /></label>
+        <label><span>Start (Eastern Time — ET)</span><AutoCommitDateInput type="datetime-local" required value={form.startDateTime} min={toEasternDateTimeInput(new Date())} onValueChange={(value) => setForm({ ...form, startDateTime: value })} /></label>
+        <label><span>End (optional, Eastern Time — ET)</span><AutoCommitDateInput type="datetime-local" value={form.endDateTime} onValueChange={(value) => setForm({ ...form, endDateTime: value })} /></label>
         <input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
         <label><span>Volunteers needed</span><input type="number" min="1" required value={form.volunteersNeeded} onChange={(e) => setForm({ ...form, volunteersNeeded: e.target.value })} /></label>
         <label><span>One reminder (hours before task)</span><input type="number" min="1" step="1" required value={form.reminderHoursBefore} onChange={(e) => setForm({ ...form, reminderHoursBefore: e.target.value })} /></label>
@@ -518,7 +520,11 @@ const VolunteerTaskManagement: React.FC<{
           if (!window.confirm(`Cancel “${task.title}”?`)) return;
           try { await updateTaskStatus(task.id, 'cancelled'); setMessage('Task cancelled.'); }
           catch (err) { setError(err instanceof Error ? err.message : 'Could not cancel the task.'); }
-        }}>Cancel task</button></div>
+        }}>Cancel task</button><button className="link-btn danger" onClick={async () => {
+          if (!window.confirm(`Delete “${task.title}”? It will be moved to Trash and removed from volunteer task lists.`)) return;
+          try { await trashOwnTask(task.id, profile.uid); setMessage('Task moved to Trash.'); }
+          catch (err) { setError(err instanceof Error ? err.message : 'Could not delete the task.'); }
+        }}>Delete task</button></div>
         {task.assignedVolunteers.length > 0 && <div className="assigned-volunteer-list">{task.assignedVolunteers.map((id) => <div className="row" key={id}><span>{directoryById.get(id) || 'Assigned volunteer'}</span><button className="link-btn danger" disabled={Boolean(assignmentBusy)} onClick={() => changeAssignment(task, id, 'remove')}>Remove</button></div>)}</div>}
       </div>)}</div>
     </section>

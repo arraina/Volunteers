@@ -582,6 +582,16 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus): Prom
   await updateDoc(doc(db, 'tasks', taskId), { status, updatedAt: serverTimestamp() });
 }
 
+/** Move a volunteer-created task to Trash. Security rules verify ownership. */
+export async function trashOwnTask(taskId: string, volunteerId: string): Promise<void> {
+  await updateDoc(doc(db, 'tasks', taskId), {
+    deleted: true,
+    deletedAt: serverTimestamp(),
+    deletedBy: volunteerId,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export interface TaskManagementFields {
   title?: string;
   description?: string;

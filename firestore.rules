@@ -94,6 +94,17 @@ service cloud.firestore {
         && keepsOrHasCurrentTaskStart();
     }
 
+    function volunteerMayTrashOwnTask() {
+      return verifiedUser()
+        && resource.data.createdBy == request.auth.uid
+        && resource.data.deleted != true
+        && request.resource.data.deleted == true
+        && request.resource.data.deletedBy == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'deleted', 'deletedAt', 'deletedBy', 'updatedAt'
+        ]);
+    }
+
     // Permit a brief submission delay while preventing newly created or
     // rescheduled tasks from being placed in the past.
     function hasCurrentOrFutureTaskStart() {
@@ -212,6 +223,7 @@ service cloud.firestore {
           || (resource.data.deleted != true && request.resource.data.deleted == true)
         ))) && hasValidReminderSchedule() && keepsOrHasCurrentTaskStart())
         || volunteerMayUpdateOwnTask()
+        || volunteerMayTrashOwnTask()
         || (verifiedUser() && (isSelfSignup() || isSelfWithdrawal()));
     }
 
