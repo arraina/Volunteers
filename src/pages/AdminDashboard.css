@@ -132,6 +132,28 @@
   margin: 0 auto;
 }
 
+.task-workspace-layout {
+  display: block;
+}
+
+.task-create-layout {
+  display: flex;
+  justify-content: center;
+}
+
+.task-create-panel {
+  width: min(100%, 720px);
+}
+
+.invitation-queue-page {
+  max-width: 980px;
+  margin-inline: auto;
+}
+
+.invitation-list {
+  margin-top: 1rem;
+}
+
 .two-col {
   display: grid;
   grid-template-columns: minmax(300px, 1fr) 2fr;

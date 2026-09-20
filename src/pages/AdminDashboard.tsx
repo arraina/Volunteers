@@ -87,6 +87,8 @@ import { assertTaskStartNotPast, fromEasternDateTimeInput, toEasternDateTimeInpu
 import './AdminDashboard.css';
 
 type Tab = 'tasks' | 'ai' | 'events' | 'calendar' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'costs' | 'trash' | 'admins' | 'audit' | 'value';
+type TaskWorkspaceView = 'browse' | 'assigned' | 'create' | 'manage';
+type VolunteerWorkspaceView = 'directory' | 'invitations';
 
 const STATUS_OPTIONS: TaskStatus[] = ['open', 'filled', 'completed', 'cancelled'];
 
@@ -169,6 +171,8 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user, isOwner } = useAuth();
   const [tab, setTab] = useState<Tab>('tasks');
+  const [taskWorkspaceView, setTaskWorkspaceView] = useState<TaskWorkspaceView>('browse');
+  const [volunteerWorkspaceView, setVolunteerWorkspaceView] = useState<VolunteerWorkspaceView>('directory');
   const [tasks, setTasks] = useState<VolunteerTask[]>([]);
   const [volunteers, setVolunteers] = useState<VolunteerProfile[]>([]);
   const [events, setEvents] = useState<TempleEvent[]>([]);
@@ -215,11 +219,21 @@ const AdminDashboard: React.FC = () => {
     if (group instanceof HTMLDetailsElement) group.open = false;
   };
 
+  const chooseTaskView = (view: TaskWorkspaceView, event: React.MouseEvent<HTMLButtonElement>) => {
+    setTaskWorkspaceView(view);
+    chooseTab('tasks', event);
+  };
+
+  const chooseVolunteerView = (view: VolunteerWorkspaceView, event: React.MouseEvent<HTMLButtonElement>) => {
+    setVolunteerWorkspaceView(view);
+    chooseTab('volunteers', event);
+  };
+
   const taskTabs: Tab[] = ['tasks', 'ai'];
   const eventTabs: Tab[] = ['calendar', 'events'];
   const peopleTabs: Tab[] = ['volunteers', 'admins'];
   const reportTabs: Tab[] = ['reports', 'costs', 'value'];
-  const moreTabs: Tab[] = ['announcements', 'history', 'trash', 'audit'];
+  const moreTabs: Tab[] = ['history', 'trash', 'audit'];
 
   return (
     <div className="admin-dashboard">
@@ -240,8 +254,11 @@ const AdminDashboard: React.FC = () => {
         <details className={`nav-group ${taskTabs.includes(tab) ? 'active' : ''}`}>
           <summary>Tasks</summary>
           <div className="nav-menu">
-            <button className={tab === 'tasks' ? 'active' : ''} onClick={(event) => chooseTab('tasks', event)}>Task Workspace</button>
-            <button className={tab === 'ai' ? 'active' : ''} onClick={(event) => chooseTab('ai', event)}>AI Create</button>
+            <button className={tab === 'tasks' && taskWorkspaceView === 'browse' ? 'active' : ''} onClick={(event) => chooseTaskView('browse', event)}>Browse &amp; Sign Up</button>
+            <button className={tab === 'tasks' && taskWorkspaceView === 'assigned' ? 'active' : ''} onClick={(event) => chooseTaskView('assigned', event)}>My Assignments</button>
+            <button className={tab === 'tasks' && taskWorkspaceView === 'create' ? 'active' : ''} onClick={(event) => chooseTaskView('create', event)}>Create Task</button>
+            <button className={tab === 'tasks' && taskWorkspaceView === 'manage' ? 'active' : ''} onClick={(event) => chooseTaskView('manage', event)}>Manage Tasks</button>
+            <button className={tab === 'ai' ? 'active' : ''} onClick={(event) => chooseTab('ai', event)}>Create with AI</button>
           </div>
         </details>
         <details className={`nav-group ${eventTabs.includes(tab) ? 'active' : ''}`}>
@@ -251,13 +268,20 @@ const AdminDashboard: React.FC = () => {
             <button className={tab === 'events' ? 'active' : ''} onClick={(event) => chooseTab('events', event)}>Event Workspace</button>
           </div>
         </details>
-        <details className={`nav-group ${peopleTabs.includes(tab) ? 'active' : ''}`}>
+        <details className={`nav-group ${peopleTabs.includes(tab) && !(tab === 'volunteers' && volunteerWorkspaceView === 'invitations') ? 'active' : ''}`}>
           <summary>People</summary>
           <div className="nav-menu">
-            <button className={tab === 'volunteers' ? 'active' : ''} onClick={(event) => chooseTab('volunteers', event)}>Volunteers</button>
+            <button className={tab === 'volunteers' && volunteerWorkspaceView === 'directory' ? 'active' : ''} onClick={(event) => chooseVolunteerView('directory', event)}>Volunteers</button>
             {isOwner && <button className={tab === 'admins' ? 'active' : ''} onClick={(event) => chooseTab('admins', event)}>Admin Management</button>}
           </div>
         </details>
+        {isOwner && <details className={`nav-group ${tab === 'announcements' || (tab === 'volunteers' && volunteerWorkspaceView === 'invitations') ? 'active' : ''}`}>
+          <summary>Communication</summary>
+          <div className="nav-menu">
+            <button className={tab === 'announcements' ? 'active' : ''} onClick={(event) => chooseTab('announcements', event)}>Announcements</button>
+            <button className={tab === 'volunteers' && volunteerWorkspaceView === 'invitations' ? 'active' : ''} onClick={(event) => chooseVolunteerView('invitations', event)}>Invitation Queue</button>
+          </div>
+        </details>}
         <details className={`nav-group ${reportTabs.includes(tab) ? 'active' : ''}`}>
           <summary>Reports</summary>
           <div className="nav-menu">
@@ -269,7 +293,6 @@ const AdminDashboard: React.FC = () => {
         <details className={`nav-group ${moreTabs.includes(tab) ? 'active' : ''}`}>
           <summary>More{trashCount ? ` (${trashCount})` : ''}</summary>
           <div className="nav-menu nav-menu-right">
-            {isOwner && <button className={tab === 'announcements' ? 'active' : ''} onClick={(event) => chooseTab('announcements', event)}>Announcements</button>}
             {isOwner && <button className={tab === 'history' ? 'active' : ''} onClick={(event) => chooseTab('history', event)}>History</button>}
             <button className={tab === 'trash' ? 'active' : ''} onClick={(event) => chooseTab('trash', event)}>Trash ({trashCount})</button>
             {isOwner && <button className={tab === 'audit' ? 'active' : ''} onClick={(event) => chooseTab('audit', event)}>Audit</button>}
@@ -292,6 +315,7 @@ const AdminDashboard: React.FC = () => {
             setError={setError}
             uid={user?.uid}
             isOwner={isOwner}
+            view={taskWorkspaceView}
           />
         )}
         {tab === 'ai' && (
@@ -305,7 +329,7 @@ const AdminDashboard: React.FC = () => {
         )}
         {tab === 'events' && <EventWorkspace uid={user?.uid} events={events} tasks={tasks} setError={setError} />}
         {tab === 'calendar' && <EventCalendar uid={user?.uid} events={events} tasks={tasks} volunteers={volunteers} setError={setError} canManage={isOwner} />}
-        {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} uid={user?.uid} isOwner={isOwner} setError={setError} />}
+        {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} uid={user?.uid} isOwner={isOwner} setError={setError} view={volunteerWorkspaceView} />}
         {tab === 'announcements' && isOwner && (
           <AnnouncementsTab uid={user?.uid} setError={setError} />
         )}
@@ -332,7 +356,8 @@ const TasksTab: React.FC<{
   setError: (s: string) => void;
   uid?: string;
   isOwner: boolean;
-}> = ({ tasks, volunteers, events, setError, uid, isOwner }) => {
+  view: TaskWorkspaceView;
+}> = ({ tasks, volunteers, events, setError, uid, isOwner, view }) => {
   const [form, setForm] = useState(emptyTaskForm);
   const [saving, setSaving] = useState(false);
   const [taskSearch, setTaskSearch] = useState('');
@@ -348,6 +373,11 @@ const TasksTab: React.FC<{
     volunteers.forEach((v) => map.set(v.uid, v));
     return map;
   }, [volunteers]);
+
+  useEffect(() => {
+    if (view === 'assigned') setCreatorFilter('assigned');
+    else if (view === 'browse' || view === 'manage') setCreatorFilter('all');
+  }, [view]);
 
   const activeTasks = useMemo(() => {
     const now = new Date();
@@ -509,8 +539,8 @@ const TasksTab: React.FC<{
   };
 
   return (
-    <div className="two-col">
-      <section className="panel">
+    <div className={view === 'create' ? 'task-create-layout' : 'task-workspace-layout'}>
+      {view === 'create' && <section className="panel task-create-panel">
         <h2>Create Task</h2>
         <form onSubmit={handleCreate} className="stacked-form">
           <input
@@ -617,9 +647,9 @@ const TasksTab: React.FC<{
             {saving ? 'Saving…' : 'Create Task'}
           </button>
         </form>
-      </section>
+      </section>}
 
-      <section className="panel results-panel">
+      {view !== 'create' && <section className="panel results-panel">
         {selfServiceMessage && <div className="undo-banner" role="status">
           <span>{selfServiceMessage}</span>
           <button className="link-btn" onClick={() => setSelfServiceMessage('')}>Dismiss</button>
@@ -648,7 +678,7 @@ const TasksTab: React.FC<{
         </div>
         <div className="panel-head results-heading">
           <div>
-            <h2>Tasks</h2>
+            <h2>{view === 'assigned' ? 'My Assignments' : view === 'manage' ? 'Manage Tasks' : 'Browse & Sign Up'}</h2>
             <p className="muted small">{filteredTasks.length} of {activeTasks.length} current or upcoming occurrences shown</p>
           </div>
           {(taskSearch || statusFilter !== 'all' || eventFilter !== 'all' || creatorFilter !== 'all') && (
@@ -656,7 +686,7 @@ const TasksTab: React.FC<{
               setTaskSearch('');
               setStatusFilter('all');
               setEventFilter('all');
-              setCreatorFilter('mine');
+              setCreatorFilter(view === 'assigned' ? 'assigned' : 'all');
             }}>Clear filters</button>
           )}
         </div>
@@ -680,14 +710,14 @@ const TasksTab: React.FC<{
               {activeEvents.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
             </select>
           </label>
-          <label>
+          {view === 'manage' && <label>
             <span>Task view</span>
             <select value={creatorFilter} onChange={(e) => setCreatorFilter(e.target.value as typeof creatorFilter)}>
               <option value="mine">Created by me</option>
               <option value="assigned">Assigned to me</option>
               <option value="all">All tasks</option>
             </select>
-          </label>
+          </label>}
           <label>
             <span>Sort</span>
             <select value={taskSort} onChange={(e) => setTaskSort(e.target.value as typeof taskSort)}>
@@ -726,13 +756,14 @@ const TasksTab: React.FC<{
                   selfUid={uid}
                   onSelfSignup={handleSelfSignup}
                   onSelfWithdraw={handleSelfWithdraw}
+                  canManage={view === 'manage'}
                   setError={setError}
                 />
               ))}
             </div>
           </div>
         ))}
-      </section>
+      </section>}
     </div>
   );
 };
@@ -748,8 +779,9 @@ const SeriesCard: React.FC<{
   selfUid?: string;
   onSelfSignup: (task: VolunteerTask) => Promise<void>;
   onSelfWithdraw: (task: VolunteerTask) => Promise<void>;
+  canManage: boolean;
   setError: (s: string) => void;
-}> = ({ group, volunteers, volunteerById, onAssign, onRemove, onTrash, selfUid, onSelfSignup, onSelfWithdraw, setError }) => {
+}> = ({ group, volunteers, volunteerById, onAssign, onRemove, onTrash, selfUid, onSelfSignup, onSelfWithdraw, canManage, setError }) => {
   const isSeries = group.recurrence !== 'none' && !!group.seriesId;
   const [expanded, setExpanded] = useState(!isSeries);
   const [scopeRequest, setScopeRequest] = useState<{
@@ -806,6 +838,7 @@ const SeriesCard: React.FC<{
               selfUid={selfUid}
               onSelfSignup={onSelfSignup}
               onSelfWithdraw={onSelfWithdraw}
+              canManage={canManage}
               askScope={askScope}
               setError={setError}
             />
@@ -837,9 +870,10 @@ const OccurrenceRow: React.FC<{
   selfUid?: string;
   onSelfSignup: (task: VolunteerTask) => Promise<void>;
   onSelfWithdraw: (task: VolunteerTask) => Promise<void>;
+  canManage: boolean;
   askScope: (verb: string) => Promise<SeriesScope | null>;
   setError: (s: string) => void;
-}> = ({ task, volunteers, volunteerById, onAssign, onRemove, onTrash, selfUid, onSelfSignup, onSelfWithdraw, askScope, setError }) => {
+}> = ({ task, volunteers, volunteerById, onAssign, onRemove, onTrash, selfUid, onSelfSignup, onSelfWithdraw, canManage, askScope, setError }) => {
   const [assigning, setAssigning] = useState(false);
   const [assignmentMessage, setAssignmentMessage] = useState('');
   const [editing, setEditing] = useState(false);
@@ -928,14 +962,14 @@ const OccurrenceRow: React.FC<{
           {task.assignedVolunteers.map((vid) => (
             <li key={vid}>
               {volunteerById.get(vid)?.name || (vid.startsWith('former_') ? 'Former volunteer' : vid)}
-              <button className="link-btn" onClick={() => onRemove(task, vid)}>
+              {canManage && <button className="link-btn" onClick={() => onRemove(task, vid)}>
                 remove
-              </button>
+              </button>}
             </li>
           ))}
         </ul>
       )}
-      {editing && <form className="task-edit-form" onSubmit={saveTaskEdit}>
+      {canManage && editing && <form className="task-edit-form" onSubmit={saveTaskEdit}>
         <label><span>Task title</span><input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} required /></label>
         <label className="task-edit-wide"><span>Description</span><textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} /></label>
         <label><span>Start (Eastern Time — ET)</span><AutoCommitDateInput type="datetime-local" value={editForm.startDateTime} onValueChange={(value) => setEditForm({ ...editForm, startDateTime: value })} min={toEasternDateTimeInput(new Date())} disabled={isHistoricalTask} required />{isHistoricalTask && <small className="field-hint">Historical task times are locked. Other task details can still be edited.</small>}</label>
@@ -964,7 +998,7 @@ const OccurrenceRow: React.FC<{
         >
           {selfServiceBusy ? 'Updating…' : selfAssigned ? 'Withdraw myself' : 'Sign me up'}
         </button>}
-        <select
+        {canManage && <><select
           defaultValue=""
           disabled={assigning || assignmentClosed}
           onChange={async (e) => {
@@ -1026,6 +1060,7 @@ const OccurrenceRow: React.FC<{
         >
           Move to Trash
         </button>
+        </>}
       </div>
     </div>
   );
@@ -1215,7 +1250,8 @@ const VolunteersTab: React.FC<{
   uid?: string;
   isOwner: boolean;
   setError: (s: string) => void;
-}> = ({ volunteers, uid, isOwner, setError }) => {
+  view: VolunteerWorkspaceView;
+}> = ({ volunteers, uid, isOwner, setError, view }) => {
   const [form, setForm] = useState(emptyVolunteerForm);
   const [editing, setEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(emptyVolunteerForm);
@@ -1410,6 +1446,53 @@ const VolunteersTab: React.FC<{
     return a.name.localeCompare(b.name);
   });
 
+  if (view === 'invitations') {
+    return <section className="panel invitation-queue-page">
+      <div className="panel-head">
+        <div>
+          <h2>Invitation Queue</h2>
+          <p className="muted small">Send or retry secure portal links for volunteers who have not added an email address.</p>
+        </div>
+        <span className={`invite-state ${inviteSettings.enabled ? 'enabled' : ''}`}>
+          Sending {inviteSettings.enabled ? 'enabled' : 'disabled'}
+        </span>
+      </div>
+      <div className="portal-invite-panel">
+        <p><strong>{pendingInvites.length}</strong> waiting · Template <code>{inviteSettings.templateName}</code></p>
+        <div className="row">
+          <button type="button" className="secondary-btn" disabled={inviteBusy} onClick={toggleInviteSending}>
+            {inviteSettings.enabled ? 'Disable sending' : 'Mark approved & enable'}
+          </button>
+          <button type="button" className="primary-btn" disabled={inviteBusy || !inviteSettings.enabled || pendingInvites.length === 0} onClick={sendPendingInvites}>
+            {inviteBusy ? 'Working...' : 'Send all pending'}
+          </button>
+        </div>
+        <small>Links expire 7 days after sending. Expired or failed invitations remain here so they can be resent.</small>
+      </div>
+      {pendingInvites.length === 0
+        ? <div className="empty-state"><strong>No invitations waiting</strong><span>Everyone in the queue has an active link or has added an email.</span></div>
+        : <div className="volunteer-list invitation-list">
+          {pendingInvites.map((volunteer) => <div key={volunteer.uid} className="volunteer-card">
+            <div>
+              <strong>{volunteer.name}</strong>
+              <p className="muted small">
+                {volunteer.phoneNumber} · {volunteer.invitationStatus?.replaceAll('_', ' ') || 'waiting'}
+                {volunteer.invitationExpiresAt ? ` · Link expires ${formatDate(volunteer.invitationExpiresAt)}` : ''}
+              </p>
+            </div>
+            <button
+              className="primary-btn"
+              onClick={() => sendOnePortalInvite(volunteer)}
+              disabled={resendingInvitation === volunteer.uid || !inviteSettings.enabled}
+              title={!inviteSettings.enabled ? 'Enable the approved portal template first' : undefined}
+            >
+              {resendingInvitation === volunteer.uid ? 'Sending...' : volunteer.invitationSendCount ? 'Resend invitation' : 'Send invitation'}
+            </button>
+          </div>)}
+        </div>}
+    </section>;
+  }
+
   return (
     <div className="two-col">
       <section className="panel">
@@ -1455,7 +1538,7 @@ const VolunteersTab: React.FC<{
         <p className="muted small">
           Without an email, the volunteer can be assigned immediately. Their WhatsApp portal invite stays queued until the Owner enables the approved template.
         </p>
-        {isOwner && <div className="portal-invite-panel">
+        {false && isOwner && <div className="portal-invite-panel">
           <h3>Portal invitation queue</h3>
           <p><strong>{pendingInvites.length}</strong> waiting · Template <code>{inviteSettings.templateName}</code></p>
           <p className={`invite-state ${inviteSettings.enabled ? 'enabled' : ''}`}>
