@@ -112,9 +112,15 @@ exports.sendPortalInvites = onCall(
       const link = `${PORTAL_URL}?invite=${encodeURIComponent(token)}`;
       try {
         const providerId = await sendPortalTemplate(volunteer.phoneNumber, [volunteer.firstName || volunteer.name || 'Volunteer', link, expiresAt.toDate().toLocaleDateString('en-US', { timeZone: 'America/New_York' })]);
+        const previousInvites = await db.collection('portalInvites').where('volunteerId', '==', snapshot.id).get();
         const inviteRef = db.doc(`portalInvites/${hash}`);
         const messageRef = db.collection('sentMessages').doc();
         const batch = db.batch();
+        previousInvites.docs.forEach((previous) => {
+          if (previous.data().status === 'active') {
+            batch.update(previous.ref, { status: 'revoked', revokedAt: admin.firestore.FieldValue.serverTimestamp() });
+          }
+        });
         batch.set(inviteRef, { volunteerId: snapshot.id, tokenHash: hash, status: 'active', createdAt: admin.firestore.FieldValue.serverTimestamp(), expiresAt, sentBy: request.auth.uid, providerId });
         batch.update(snapshot.ref, { invitationStatus: 'sent', invitationLastSentAt: admin.firestore.FieldValue.serverTimestamp(), invitationExpiresAt: expiresAt, invitationSendCount: admin.firestore.FieldValue.increment(1), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
         batch.set(messageRef, { channel: 'whatsapp', type: 'portal_invitation', volunteerId: snapshot.id, destination: volunteer.phoneNumber, templateName: PORTAL_INVITE_TEMPLATE, providerId, status: 'accepted', sentAt: admin.firestore.FieldValue.serverTimestamp(), acceptedAt: admin.firestore.FieldValue.serverTimestamp() });

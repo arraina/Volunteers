@@ -1207,6 +1207,23 @@ const VolunteersTab: React.FC<{
     finally { setInviteBusy(false); }
   };
 
+  const sendOnePortalInvite = async (volunteer: VolunteerProfile) => {
+    if (volunteer.email || !isOwner) return;
+    if (!inviteSettings.enabled) {
+      setError('Portal invitation sending is disabled. Enable it after Meta approves the template.');
+      return;
+    }
+    if (!window.confirm(`${volunteer.invitationSendCount ? 'Resend' : 'Send'} a portal invitation to ${volunteer.name} at ${volunteer.phoneNumber}?`)) return;
+    setResendingInvitation(volunteer.uid);
+    setError('');
+    try {
+      const result = await sendPortalInvites([volunteer.uid]);
+      if (result.sent !== 1) throw new Error('The invitation was not sent. Check the phone number and WhatsApp consent.');
+      window.alert(`Portal invitation sent to ${volunteer.name}. The new link expires in 7 days.`);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Could not send the portal invitation.'); }
+    finally { setResendingInvitation(null); }
+  };
+
   const resendInvitation = async (volunteer: VolunteerProfile) => {
     setError('');
     setResendingInvitation(volunteer.uid);
@@ -1471,6 +1488,20 @@ const VolunteersTab: React.FC<{
                     </p>
                   </div>
                   <div className="row">
+                    {isOwner && !v.email && (
+                      <button
+                        className="link-btn"
+                        onClick={() => sendOnePortalInvite(v)}
+                        disabled={resendingInvitation === v.uid || !inviteSettings.enabled}
+                        title={!inviteSettings.enabled ? 'Enable the approved portal template first' : undefined}
+                      >
+                        {resendingInvitation === v.uid
+                          ? 'Sending...'
+                          : v.invitationSendCount
+                            ? 'Resend portal invitation'
+                            : 'Send portal invitation'}
+                      </button>
+                    )}
                     {v.invitationStatus === 'invited' && (
                       <button
                         className="link-btn"
