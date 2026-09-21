@@ -145,6 +145,34 @@
   margin-top: 1rem;
 }
 
+.event-repeat-box {
+  background: #f6fbf6;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.85rem;
+}
+
+.event-date-picker {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  margin: 0.7rem 0;
+}
+
+.event-date-picker label {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  display: flex;
+  gap: 0.45rem;
+  padding: 0.55rem;
+}
+
+.event-date-picker input {
+  width: auto;
+}
+
 .duplicate-volunteer-alert {
   grid-column: 1 / -1;
   border-color: #f0b45a;

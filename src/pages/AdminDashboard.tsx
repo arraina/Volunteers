@@ -108,6 +108,24 @@ const emptyTaskForm = {
   eventId: '',
 };
 
+type EventRepeatMode = 'once' | 'every_day' | 'selected_dates';
+
+const easternDateKey = (date: Date) => toEasternDateTimeInput(date).slice(0, 10);
+
+const eventDateKeys = (event?: TempleEvent): string[] => {
+  if (!event?.date) return [];
+  const first = easternDateKey(event.date);
+  const last = easternDateKey(event.endDate || event.date);
+  const [year, month, day] = first.split('-').map(Number);
+  const cursor = new Date(Date.UTC(year, month - 1, day));
+  const result: string[] = [];
+  while (cursor.toISOString().slice(0, 10) <= last && result.length < 370) {
+    result.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return result;
+};
+
 // Preset horizons for recurring tasks (weeks).
 const HORIZON_PRESETS: { label: string; weeks: number }[] = [
   { label: '3 months', weeks: 13 },
@@ -369,6 +387,8 @@ const TasksTab: React.FC<{
   const [taskSort, setTaskSort] = useState<'soonest' | 'latest' | 'title'>('soonest');
   const [undoBatchId, setUndoBatchId] = useState('');
   const [selfServiceMessage, setSelfServiceMessage] = useState('');
+  const [eventRepeatMode, setEventRepeatMode] = useState<EventRepeatMode>('once');
+  const [selectedEventDates, setSelectedEventDates] = useState<string[]>([]);
 
   const volunteerById = useMemo(() => {
     const map = new Map<string, VolunteerProfile>();
@@ -398,6 +418,8 @@ const TasksTab: React.FC<{
       return (event.endDate || event.date) >= now;
     });
   }, [events, tasks]);
+  const selectedEvent = useMemo(() => events.find((event) => event.id === form.eventId), [events, form.eventId]);
+  const selectedEventDateKeys = useMemo(() => eventDateKeys(selectedEvent), [selectedEvent]);
 
   const filteredTasks = useMemo(() => {
     const q = taskSearch.trim().toLowerCase();
@@ -474,30 +496,49 @@ const TasksTab: React.FC<{
         .filter(Number.isFinite)))
         .sort((a, b) => b - a));
 
-      const startDateTime = fromEasternDateTimeInput(form.startDateTime);
-      assertTaskStartNotPast(startDateTime);
-      await createTask({
-        title: form.title,
-        description: form.description,
-        startDateTime,
-        endDateTime: form.endDateTime ? fromEasternDateTimeInput(form.endDateTime) : null,
-        location: form.location,
-        skillsNeeded: [],
-        volunteersNeeded: needed,
-        openForSignup: form.openForSignup,
-        recurrence: form.recurrence,
-        reminderHoursBefore: reminderHours.length ? reminderHours : [24],
-        horizonWeeks:
-          form.recurrence === 'none'
-            ? undefined
-            : Math.max(1, parseInt(form.horizonWeeks, 10) || DEFAULT_HORIZON_WEEKS),
-        eventId: form.eventId || undefined,
-        eventName: form.eventId
-          ? events.find((ev) => ev.id === form.eventId)?.name
-          : undefined,
-        createdBy: uid,
-      });
+      const originalStart = fromEasternDateTimeInput(form.startDateTime);
+      assertTaskStartNotPast(originalStart);
+      const originalEnd = form.endDateTime ? fromEasternDateTimeInput(form.endDateTime) : null;
+      const durationMs = originalEnd ? originalEnd.getTime() - originalStart.getTime() : 0;
+      const time = form.startDateTime.slice(11);
+      const requestedDates = eventRepeatMode === 'every_day'
+        ? selectedEventDateKeys
+        : eventRepeatMode === 'selected_dates' ? selectedEventDates : [];
+      if (eventRepeatMode !== 'once' && requestedDates.length === 0) throw new Error('Select at least one event date.');
+      const starts = eventRepeatMode === 'once'
+        ? [originalStart]
+        : requestedDates.map((date) => fromEasternDateTimeInput(`${date}T${time}`));
+      starts.forEach((start) => assertTaskStartNotPast(start));
+      const duplicate = starts.find((start) => tasks.some((task) =>
+        task.eventId === form.eventId
+        && task.title.trim().toLowerCase() === form.title.trim().toLowerCase()
+        && task.startDateTime.getTime() === start.getTime()
+      ));
+      if (duplicate) throw new Error(`This task already exists on ${formatDate(duplicate)}.`);
+      for (const startDateTime of starts) {
+        await createTask({
+          title: form.title,
+          description: form.description,
+          startDateTime,
+          endDateTime: durationMs ? new Date(startDateTime.getTime() + durationMs) : null,
+          location: form.location,
+          skillsNeeded: [],
+          volunteersNeeded: needed,
+          openForSignup: form.openForSignup,
+          recurrence: eventRepeatMode === 'once' && !form.eventId ? form.recurrence : 'none',
+          reminderHoursBefore: reminderHours.length ? reminderHours : [24],
+          horizonWeeks:
+            eventRepeatMode === 'once' && !form.eventId && form.recurrence !== 'none'
+              ? Math.max(1, parseInt(form.horizonWeeks, 10) || DEFAULT_HORIZON_WEEKS)
+              : undefined,
+          eventId: form.eventId || undefined,
+          eventName: selectedEvent?.name,
+          createdBy: uid,
+        });
+      }
       setForm(emptyTaskForm);
+      setEventRepeatMode('once');
+      setSelectedEventDates([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create task.');
     } finally {
@@ -542,6 +583,42 @@ const TasksTab: React.FC<{
     setUndoBatchId(batchId);
   };
 
+  const repeatAcrossEventDates = async (task: VolunteerTask) => {
+    const event = events.find((item) => item.id === task.eventId);
+    const keys = eventDateKeys(event);
+    const sourceDate = easternDateKey(task.startDateTime);
+    const time = toEasternDateTimeInput(task.startDateTime).slice(11);
+    const dates = keys.filter((key) => key > sourceDate);
+    if (!dates.length) throw new Error('There are no remaining event dates after this task.');
+    const starts = dates.map((date) => fromEasternDateTimeInput(`${date}T${time}`));
+    const newStarts = starts.filter((start) => !tasks.some((existing) =>
+      existing.eventId === task.eventId
+      && existing.title.trim().toLowerCase() === task.title.trim().toLowerCase()
+      && existing.startDateTime.getTime() === start.getTime()
+    ));
+    if (!newStarts.length) throw new Error('This task already exists on every remaining event date.');
+    if (!window.confirm(`Create ${newStarts.length} unassigned task occurrence(s)?\n\n${newStarts.map((start) => formatDate(start)).join('\n')}`)) return;
+    const durationMs = task.endDateTime ? task.endDateTime.getTime() - task.startDateTime.getTime() : 0;
+    for (const startDateTime of newStarts) {
+      await createTask({
+        title: task.title,
+        description: task.description,
+        startDateTime,
+        endDateTime: durationMs ? new Date(startDateTime.getTime() + durationMs) : null,
+        location: task.location,
+        skillsNeeded: task.skillsNeeded || [],
+        volunteersNeeded: task.volunteersNeeded,
+        openForSignup: true,
+        recurrence: 'none',
+        reminderHoursBefore: task.reminderHoursBefore,
+        eventId: task.eventId,
+        eventName: task.eventName || event?.name,
+        createdBy: uid,
+      });
+    }
+    setSelfServiceMessage(`Created ${newStarts.length} additional ${task.title} task(s) across the event dates.`);
+  };
+
   return (
     <div className={view === 'manage' ? 'two-col' : 'task-workspace-layout'}>
       {view === 'manage' && <section className="panel">
@@ -564,7 +641,11 @@ const TasksTab: React.FC<{
           <label className="field-label">Event (optional)</label>
           <select
             value={form.eventId}
-            onChange={(e) => setForm({ ...form, eventId: e.target.value })}
+            onChange={(e) => {
+              setForm({ ...form, eventId: e.target.value, recurrence: 'none' });
+              setEventRepeatMode('once');
+              setSelectedEventDates([]);
+            }}
           >
             <option value="">— none (standalone task) —</option>
             {activeEvents.map((ev) => (
@@ -573,6 +654,32 @@ const TasksTab: React.FC<{
               </option>
             ))}
           </select>
+          {selectedEventDateKeys.length > 1 && <div className="event-repeat-box">
+            <label className="field-label">Repeat during this multi-day event</label>
+            <select value={eventRepeatMode} onChange={(event) => {
+              const mode = event.target.value as EventRepeatMode;
+              setEventRepeatMode(mode);
+              setSelectedEventDates(mode === 'every_day' ? selectedEventDateKeys : []);
+            }}>
+              <option value="once">One time</option>
+              <option value="every_day">Every event day</option>
+              <option value="selected_dates">Select event dates</option>
+            </select>
+            {eventRepeatMode !== 'once' && <div className="event-date-picker">
+              {selectedEventDateKeys.map((date) => <label key={date}>
+                <input
+                  type="checkbox"
+                  checked={eventRepeatMode === 'every_day' || selectedEventDates.includes(date)}
+                  disabled={eventRepeatMode === 'every_day'}
+                  onChange={() => setSelectedEventDates((current) => current.includes(date)
+                    ? current.filter((item) => item !== date)
+                    : [...current, date].sort())}
+                />
+                <span>{fromEasternDateTimeInput(`${date}T12:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York' })}</span>
+              </label>)}
+            </div>}
+            <small className="field-hint">New dates start unassigned. The time and duration below are reused on each selected date.</small>
+          </div>}
           <label className="field-label">Start (Eastern Time — ET)</label>
           <AutoCommitDateInput
             type="datetime-local"
@@ -604,7 +711,7 @@ const TasksTab: React.FC<{
                 onChange={(e) => setForm({ ...form, volunteersNeeded: e.target.value })}
               />
             </div>
-            <div>
+            {eventRepeatMode === 'once' && !form.eventId && <div>
               <label className="field-label">Repeats</label>
               <select
                 value={form.recurrence}
@@ -617,9 +724,9 @@ const TasksTab: React.FC<{
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
               </select>
-            </div>
+            </div>}
           </div>
-          {form.recurrence !== 'none' && (
+          {eventRepeatMode === 'once' && !form.eventId && form.recurrence !== 'none' && (
             <div>
               <label className="field-label">Generate occurrences for</label>
               <select
@@ -754,6 +861,7 @@ const TasksTab: React.FC<{
                   group={group}
                   volunteers={volunteers}
                   volunteerById={volunteerById}
+                  events={events}
                   onAssign={handleAssign}
                   onRemove={removeVolunteerFromTask}
                   onTrash={handleTrash}
@@ -761,6 +869,7 @@ const TasksTab: React.FC<{
                   onSelfSignup={handleSelfSignup}
                   onSelfWithdraw={handleSelfWithdraw}
                   canManage={view === 'manage'}
+                  onRepeatAcrossEventDates={repeatAcrossEventDates}
                   setError={setError}
                 />
               ))}
@@ -777,6 +886,7 @@ const SeriesCard: React.FC<{
   group: ReturnType<typeof groupTasksBySeries>[number];
   volunteers: VolunteerProfile[];
   volunteerById: Map<string, VolunteerProfile>;
+  events: TempleEvent[];
   onAssign: (task: VolunteerTask, volunteerId: string) => Promise<void>;
   onRemove: (task: VolunteerTask, volunteerId: string) => void;
   onTrash: (task: VolunteerTask, scope: SeriesScope) => Promise<void>;
@@ -784,8 +894,9 @@ const SeriesCard: React.FC<{
   onSelfSignup: (task: VolunteerTask) => Promise<void>;
   onSelfWithdraw: (task: VolunteerTask) => Promise<void>;
   canManage: boolean;
+  onRepeatAcrossEventDates: (task: VolunteerTask) => Promise<void>;
   setError: (s: string) => void;
-}> = ({ group, volunteers, volunteerById, onAssign, onRemove, onTrash, selfUid, onSelfSignup, onSelfWithdraw, canManage, setError }) => {
+}> = ({ group, volunteers, volunteerById, events, onAssign, onRemove, onTrash, selfUid, onSelfSignup, onSelfWithdraw, canManage, onRepeatAcrossEventDates, setError }) => {
   const isSeries = group.recurrence !== 'none' && !!group.seriesId;
   const [expanded, setExpanded] = useState(!isSeries);
   const [scopeRequest, setScopeRequest] = useState<{
@@ -836,6 +947,7 @@ const SeriesCard: React.FC<{
               task={task}
               volunteers={volunteers}
               volunteerById={volunteerById}
+              events={events}
               onAssign={onAssign}
               onRemove={onRemove}
               onTrash={onTrash}
@@ -843,6 +955,7 @@ const SeriesCard: React.FC<{
               onSelfSignup={onSelfSignup}
               onSelfWithdraw={onSelfWithdraw}
               canManage={canManage}
+              onRepeatAcrossEventDates={onRepeatAcrossEventDates}
               askScope={askScope}
               setError={setError}
             />
@@ -868,6 +981,7 @@ const OccurrenceRow: React.FC<{
   task: VolunteerTask;
   volunteers: VolunteerProfile[];
   volunteerById: Map<string, VolunteerProfile>;
+  events: TempleEvent[];
   onAssign: (task: VolunteerTask, volunteerId: string) => Promise<void>;
   onRemove: (task: VolunteerTask, volunteerId: string) => void;
   onTrash: (task: VolunteerTask, scope: SeriesScope) => Promise<void>;
@@ -875,9 +989,10 @@ const OccurrenceRow: React.FC<{
   onSelfSignup: (task: VolunteerTask) => Promise<void>;
   onSelfWithdraw: (task: VolunteerTask) => Promise<void>;
   canManage: boolean;
+  onRepeatAcrossEventDates: (task: VolunteerTask) => Promise<void>;
   askScope: (verb: string) => Promise<SeriesScope | null>;
   setError: (s: string) => void;
-}> = ({ task, volunteers, volunteerById, onAssign, onRemove, onTrash, selfUid, onSelfSignup, onSelfWithdraw, canManage, askScope, setError }) => {
+}> = ({ task, volunteers, volunteerById, events, onAssign, onRemove, onTrash, selfUid, onSelfSignup, onSelfWithdraw, canManage, onRepeatAcrossEventDates, askScope, setError }) => {
   const [assigning, setAssigning] = useState(false);
   const [assignmentMessage, setAssignmentMessage] = useState('');
   const [editing, setEditing] = useState(false);
@@ -1037,6 +1152,10 @@ const OccurrenceRow: React.FC<{
         </select>
         {assignmentMessage && <span className="success-text small">{assignmentMessage}</span>}
         <button className="secondary-btn" onClick={() => { setEditForm(taskEditValues(task)); setEditing((value) => !value); }}>{editing ? 'Close editor' : 'Edit Task'}</button>
+        {task.eventId && task.recurrence === 'none' && eventDateKeys(events.find((event) => event.id === task.eventId)).length > 1 && <button className="secondary-btn" onClick={async () => {
+          try { await onRepeatAcrossEventDates(task); }
+          catch (err) { setError(err instanceof Error ? err.message : 'Could not repeat this task across the event.'); }
+        }}>Repeat across event dates</button>}
         {status !== 'completed' && <button className="link-btn danger" onClick={async () => {
           const nextStatus: TaskStatus = status === 'cancelled' ? 'open' : 'cancelled';
           const scope = await askScope(status === 'cancelled' ? 'Reopen task' : 'Cancel task');

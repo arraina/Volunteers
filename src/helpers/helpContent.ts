@@ -196,6 +196,8 @@ export const HELP_ARTICLES: HelpArticle[] = [
       { heading: 'Manual editing', text: 'Choose Edit Task on a dated occurrence to update its details without AI. For a recurring series, apply the changes only to that occurrence or to that date and all future occurrences.' },
       { heading: 'Admin self-service views', text: 'Browse & Sign Up shows available tasks with Sign me up or Withdraw myself. My Assignments shows the signed-in Admin or Owner commitments. Create & Manage contains the creation form and all management controls.' },
       { heading: 'Volunteer-created tasks', text: 'Volunteers may create only standalone, non-repeating tasks with one reminder. They can assign eligible people, edit their own task, and delete their own task. Admins and Owners can sign up for those tasks and manage them when necessary.' },
+      { heading: 'Multi-day event tasks', text: 'When the selected event spans multiple dates, choose One time, Every event day, or Select event dates. The form previews the available dates and reuses the entered time and duration. Each new date starts with no assignments, duplicate task/date combinations are blocked, and event-based repetition stops at the event end date.' },
+      { heading: 'Repeat an existing event task', text: 'For a one-time task linked to a multi-day event, choose Repeat across event dates. Review the exact remaining dates before confirming. The original task keeps its assignments; newly created dates are unassigned and skip any matching task occurrence that already exists.' },
     ], keywords: ['create task', 'recurring', 'weekly', 'monthly', 'daily', 'reminder hours', 'assignment'],
   },
   {
