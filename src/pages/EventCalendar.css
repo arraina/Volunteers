@@ -24,6 +24,9 @@
 .ai-calendar-input { display: grid; gap: .7rem; grid-template-columns: 1fr auto; }
 .ai-calendar-input textarea { min-height: 80px; }
 .ai-plan { background: #f0fdf4; border: 1px solid #bbdfbd; border-radius: var(--radius-sm); margin-top: .8rem; padding: .85rem; }
-.event-calendar-page.read-only .calendar-sidebar > .panel:first-child { display: none; }
+.missing-date-panel { background: #fffaf0; border-color: #f0b45a; }
+.missing-date-panel h2 { color: #8a4b08; }
+.missing-date-actions { margin-top: .55rem; }
+.event-calendar-page.read-only .calendar-editor { display: none; }
 @media (max-width: 1000px) { .calendar-layout { grid-template-columns: 1fr; } .calendar-grid { overflow-x: auto; } }
 @media (max-width: 650px) { .calendar-toolbar { align-items: stretch; flex-direction: column; } .view-switch { justify-content: center; } .year-grid { grid-template-columns: 1fr 1fr; } .ai-calendar-input { grid-template-columns: 1fr; } .calendar-grid { display: block; } .calendar-day { min-height: 90px; } }

@@ -175,9 +175,13 @@ const AICreateTab: React.FC<Props> = ({ uid, events, tasks: existingTasks, volun
       } else {
         if (!eventName.trim()) throw new Error('Event name is required.');
         targetEventName = eventName.trim();
+        const inferredStart = taskStarts.reduce((earliest, start) => start < earliest ? start : earliest, taskStarts[0]);
+        const inferredEnd = taskStarts.reduce((latest, start) => start > latest ? start : latest, taskStarts[0]);
+        const selectedDate = eventDate ? fromEasternDateTimeInput(`${eventDate}T00:00`) : inferredStart;
         eventId = await createEvent({
           name: targetEventName,
-          date: eventDate ? new Date(eventDate) : null,
+          date: selectedDate,
+          endDate: inferredEnd > selectedDate ? inferredEnd : undefined,
           createdBy: uid,
         });
       }

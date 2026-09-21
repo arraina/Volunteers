@@ -45,6 +45,7 @@ const EventCalendar: React.FC<Props> = ({ events, tasks, volunteers, uid, setErr
   const [aiBusy, setAiBusy] = useState(false);
 
   const datedEvents = useMemo(() => events.filter((event) => event.date).sort((a, b) => a.date!.getTime() - b.date!.getTime()), [events]);
+  const undatedEvents = useMemo(() => events.filter((event) => !event.date).sort((a, b) => a.name.localeCompare(b.name)), [events]);
   const ownerName = (event: TempleEvent) => (event.owner ? ownerNames?.[event.owner] : '') || volunteers.find((volunteer) => volunteer.uid === event.owner)?.name || volunteers.find((volunteer) => volunteer.uid === event.owner)?.email || 'Not assigned';
   const eventLabel = (event: TempleEvent) => `${event.name}${event.date ? ` — ${event.allDay ? event.date.toLocaleDateString() : event.date.toLocaleString()}` : ''} · Owner: ${ownerName(event)}`;
   const visibleEvents = useMemo(() => {
@@ -52,6 +53,11 @@ const EventCalendar: React.FC<Props> = ({ events, tasks, volunteers, uid, setErr
     return datedEvents.filter((event) => !needle || [event.name, event.description, event.location]
       .some((value) => value?.toLowerCase().includes(needle)));
   }, [datedEvents, search]);
+  const visibleUndatedEvents = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return undatedEvents.filter((event) => !needle || [event.name, event.description, event.location]
+      .some((value) => value?.toLowerCase().includes(needle)));
+  }, [undatedEvents, search]);
 
   const conflicts = useMemo(() => {
     const rows: Array<{ key: string; first: TempleEvent; second?: TempleEvent; reason: string }> = [];
@@ -113,6 +119,28 @@ const EventCalendar: React.FC<Props> = ({ events, tasks, volunteers, uid, setErr
     await trashRecord('events', event.id, uid); if (editingId === event.id) resetForm();
   };
 
+  const inferEventDatesFromTasks = async (event: TempleEvent) => {
+    const linked = tasks
+      .filter((task) => task.eventId === event.id && task.startDateTime >= new Date())
+      .sort((a, b) => a.startDateTime.getTime() - b.startDateTime.getTime());
+    if (!linked.length) {
+      setForEdit(event);
+      setError('This event has no future linked tasks to infer dates from. Enter its date manually.');
+      return;
+    }
+    const start = linked[0].startDateTime;
+    const end = linked.reduce((latest, task) => {
+      const taskEnd = task.endDateTime || task.startDateTime;
+      return taskEnd > latest ? taskEnd : latest;
+    }, linked[0].endDateTime || linked[0].startDateTime);
+    try {
+      await updateEventCalendarFields(event.id, { date: start, endDate: end > start ? end : undefined });
+      setMessage(`Added dates to ${event.name} from its linked tasks.`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not infer event dates.');
+    }
+  };
+
   const parseAi = async () => {
     if (!aiText.trim()) return; setAiBusy(true); setError(''); setAiPlan(null);
     try { setAiPlan(await parseEventCalendarRequest(aiText, events)); }
@@ -134,6 +162,7 @@ const EventCalendar: React.FC<Props> = ({ events, tasks, volunteers, uid, setErr
     const source = action.type === 'create_event' ? action.event : action.changes;
     const date = source.date ? new Date(source.date) : undefined;
     const endDate = source.endDate ? new Date(source.endDate) : source.endDate === null ? undefined : undefined;
+    if (action.type === 'create_event' && !date) throw new Error('AI-created events require a date. Add a date to the request and preview it again.');
     if (date) assertTaskStartNotPast(date);
     const fields = {
       ...(source.name !== undefined ? { name: source.name } : {}),
@@ -179,7 +208,21 @@ const EventCalendar: React.FC<Props> = ({ events, tasks, volunteers, uid, setErr
       </section>
 
       <aside className="calendar-sidebar">
-        <section className="panel">
+        {visibleUndatedEvents.length > 0 && <section className="panel missing-date-panel">
+          <h2>Date missing ({visibleUndatedEvents.length})</h2>
+          <p className="muted small">These events were saved without a date. Add one so they appear normally in the calendar and event selectors.</p>
+          <ul className="attention-list">
+            {visibleUndatedEvents.map((event) => <li key={event.id}>
+              <strong>{event.name}</strong><br />
+              <span>Owner: {ownerName(event)}</span>
+              {canManage && <div className="row missing-date-actions">
+                <button className="secondary-btn" onClick={() => setForEdit(event)}>Edit date</button>
+                <button className="link-btn" onClick={() => inferEventDatesFromTasks(event)}>Use linked task dates</button>
+              </div>}
+            </li>)}
+          </ul>
+        </section>}
+        <section className="panel calendar-editor">
           <h2>{editingId ? 'Edit event' : 'Add event'}</h2>
           <form className="stacked-form" onSubmit={saveEvent}>
             <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Event name" required />

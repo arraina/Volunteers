@@ -388,14 +388,16 @@ const TasksTab: React.FC<{
   const activeEvents = useMemo(() => {
     const now = new Date();
     return events.filter((event) => {
-      if (!event.date) return false;
+      if (!event.date) {
+        return tasks.some((task) => task.eventId === event.id && task.startDateTime >= now);
+      }
       if (event.allDay) {
         const lastDate = event.endDate || event.date;
         return new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate() + 1) > now;
       }
       return (event.endDate || event.date) >= now;
     });
-  }, [events]);
+  }, [events, tasks]);
 
   const filteredTasks = useMemo(() => {
     const q = taskSearch.trim().toLowerCase();
@@ -567,7 +569,7 @@ const TasksTab: React.FC<{
             <option value="">— none (standalone task) —</option>
             {activeEvents.map((ev) => (
               <option key={ev.id} value={ev.id}>
-                {ev.name}
+                {ev.name}{!ev.date ? ' — date missing' : ''}
               </option>
             ))}
           </select>
@@ -709,7 +711,7 @@ const TasksTab: React.FC<{
             <select value={eventFilter} onChange={(e) => setEventFilter(e.target.value)}>
               <option value="all">All events</option>
               <option value="__none__">Standalone</option>
-              {activeEvents.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}
+              {activeEvents.map((event) => <option key={event.id} value={event.id}>{event.name}{!event.date ? ' — date missing' : ''}</option>)}
             </select>
           </label>
           {view === 'manage' && <label>
