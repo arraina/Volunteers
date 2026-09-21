@@ -1642,6 +1642,9 @@ const VolunteersTab: React.FC<{
                 {volunteer.phoneNumber} · {volunteer.invitationStatus?.replaceAll('_', ' ') || 'waiting'}
                 {volunteer.invitationExpiresAt ? ` · Link expires ${formatDate(volunteer.invitationExpiresAt)}` : ''}
               </p>
+              {volunteer.invitationStatus === 'failed' && volunteer.invitationFailureReason
+                ? <p className="error-text small">{volunteer.invitationFailureReason}</p>
+                : null}
             </div>
             <button
               className="primary-btn"

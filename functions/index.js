@@ -151,7 +151,11 @@ async function sendPortalTemplate(phoneNumber, params) {
     }}),
   });
   const body = await response.json();
-  if (!response.ok) throw new Error(body?.error?.message || `Meta returned HTTP ${response.status}`);
+  if (!response.ok) {
+    const message = body?.error?.message || `Meta returned HTTP ${response.status}`;
+    const details = body?.error?.error_data?.details;
+    throw new Error(details ? `${message}: ${details}` : message);
+  }
   return body.messages?.[0]?.id || '';
 }
 
@@ -177,7 +181,8 @@ exports.sendPortalInvites = onCall(
       const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + PORTAL_INVITE_TTL_DAYS * 86400000);
       const link = `${PORTAL_URL}?invite=${encodeURIComponent(token)}`;
       try {
-        const providerId = await sendPortalTemplate(volunteer.phoneNumber, [volunteer.firstName || volunteer.name || 'Volunteer', link, expiresAt.toDate().toLocaleDateString('en-US', { timeZone: 'America/New_York' })]);
+        // The approved volunteer_portal_invite_v1 body has two variables: name and secure link.
+        const providerId = await sendPortalTemplate(volunteer.phoneNumber, [volunteer.firstName || volunteer.name || 'Volunteer', link]);
         const previousInvites = await db.collection('portalInvites').where('volunteerId', '==', snapshot.id).get();
         const inviteRef = db.doc(`portalInvites/${hash}`);
         const messageRef = db.collection('sentMessages').doc();
@@ -188,7 +193,7 @@ exports.sendPortalInvites = onCall(
           }
         });
         batch.set(inviteRef, { volunteerId: snapshot.id, tokenHash: hash, status: 'active', createdAt: admin.firestore.FieldValue.serverTimestamp(), expiresAt, sentBy: request.auth.uid, providerId });
-        batch.update(snapshot.ref, { invitationStatus: 'sent', invitationLastSentAt: admin.firestore.FieldValue.serverTimestamp(), invitationExpiresAt: expiresAt, invitationSendCount: admin.firestore.FieldValue.increment(1), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        batch.update(snapshot.ref, { invitationStatus: 'sent', invitationFailureReason: admin.firestore.FieldValue.delete(), invitationLastSentAt: admin.firestore.FieldValue.serverTimestamp(), invitationExpiresAt: expiresAt, invitationSendCount: admin.firestore.FieldValue.increment(1), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
         batch.set(messageRef, { channel: 'whatsapp', type: 'portal_invitation', volunteerId: snapshot.id, destination: volunteer.phoneNumber, templateName: PORTAL_INVITE_TEMPLATE, providerId, status: 'accepted', sentAt: admin.firestore.FieldValue.serverTimestamp(), acceptedAt: admin.firestore.FieldValue.serverTimestamp() });
         await batch.commit();
         results.push({ volunteerId: snapshot.id, sent: true });
