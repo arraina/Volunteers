@@ -30,4 +30,22 @@
 .missing-date-actions { margin-top: .55rem; }
 .event-calendar-page.read-only .calendar-editor { display: none; }
 @media (max-width: 1000px) { .calendar-layout { grid-template-columns: 1fr; } .calendar-grid { overflow-x: auto; } }
-@media (max-width: 650px) { .calendar-toolbar { align-items: stretch; flex-direction: column; } .view-switch { justify-content: center; } .year-grid { grid-template-columns: 1fr 1fr; } .ai-calendar-input { grid-template-columns: 1fr; } .calendar-grid { display: block; } .calendar-day { min-height: 90px; } }
+@media (max-width: 650px) {
+  .event-calendar-page, .calendar-layout, .calendar-sidebar { gap: .65rem; }
+  .calendar-main { padding: .75rem; }
+  .calendar-toolbar { align-items: stretch; flex-direction: column; gap: .65rem; }
+  .calendar-toolbar h2 { font-size: 1.05rem; }
+  .view-switch { justify-content: center; overflow-x: auto; width: 100%; }
+  .view-switch button { flex: 1 0 auto; min-height: 44px; }
+  .year-grid { grid-template-columns: 1fr 1fr; }
+  .ai-calendar-input { grid-template-columns: 1fr; }
+  .calendar-grid { border-radius: 8px; display: block; overflow: hidden; }
+  .calendar-day { min-height: 90px; padding: .55rem; }
+  .calendar-event { font-size: .82rem; min-height: 44px; }
+  .missing-date-actions { align-items: stretch; flex-direction: column; }
+  .missing-date-actions button { width: 100%; }
+}
+
+@media (max-width: 420px) {
+  .year-grid { grid-template-columns: 1fr; }
+}

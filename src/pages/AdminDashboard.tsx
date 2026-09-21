@@ -213,6 +213,16 @@ const AdminDashboard: React.FC = () => {
   }, [isOwner, tab]);
 
   useEffect(() => {
+    const closeNavigation = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('.admin-nav')) return;
+      document.querySelectorAll<HTMLDetailsElement>('.admin-nav details[open]').forEach((item) => { item.open = false; });
+    };
+    document.addEventListener('pointerdown', closeNavigation);
+    return () => document.removeEventListener('pointerdown', closeNavigation);
+  }, []);
+
+  useEffect(() => {
     const unsubTasks = subscribeTasks(setTasks);
     const unsubVols = subscribeVolunteers(setVolunteers);
     const unsubEvents = subscribeEvents(setEvents);
@@ -250,6 +260,14 @@ const AdminDashboard: React.FC = () => {
     chooseTab('volunteers', event);
   };
 
+  const handleNavToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
+    const current = event.currentTarget;
+    if (!current.open) return;
+    current.closest('nav')?.querySelectorAll<HTMLDetailsElement>('details[open]').forEach((item) => {
+      if (item !== current) item.open = false;
+    });
+  };
+
   const taskTabs: Tab[] = ['tasks', 'ai'];
   const eventTabs: Tab[] = ['calendar', 'events'];
   const peopleTabs: Tab[] = ['volunteers', 'admins'];
@@ -271,8 +289,8 @@ const AdminDashboard: React.FC = () => {
         </div>
       </header>
 
-      <nav className="tab-bar" aria-label="Admin navigation">
-        <details className={`nav-group ${taskTabs.includes(tab) ? 'active' : ''}`}>
+      <nav className="tab-bar admin-nav" aria-label="Admin navigation">
+        <details className={`nav-group ${taskTabs.includes(tab) ? 'active' : ''}`} onToggle={handleNavToggle}>
           <summary>Tasks</summary>
           <div className="nav-menu">
             <button className={tab === 'tasks' && taskWorkspaceView === 'browse' ? 'active' : ''} onClick={(event) => chooseTaskView('browse', event)}>Browse &amp; Sign Up</button>
@@ -281,28 +299,28 @@ const AdminDashboard: React.FC = () => {
             <button className={tab === 'ai' ? 'active' : ''} onClick={(event) => chooseTab('ai', event)}>Create with AI</button>
           </div>
         </details>
-        <details className={`nav-group ${eventTabs.includes(tab) ? 'active' : ''}`}>
+        <details className={`nav-group ${eventTabs.includes(tab) ? 'active' : ''}`} onToggle={handleNavToggle}>
           <summary>Events</summary>
           <div className="nav-menu">
             <button className={tab === 'calendar' ? 'active' : ''} onClick={(event) => chooseTab('calendar', event)}>Event Calendar</button>
             <button className={tab === 'events' ? 'active' : ''} onClick={(event) => chooseTab('events', event)}>Event Workspace</button>
           </div>
         </details>
-        <details className={`nav-group ${peopleTabs.includes(tab) && !(tab === 'volunteers' && volunteerWorkspaceView === 'invitations') ? 'active' : ''}`}>
+        <details className={`nav-group ${peopleTabs.includes(tab) && !(tab === 'volunteers' && volunteerWorkspaceView === 'invitations') ? 'active' : ''}`} onToggle={handleNavToggle}>
           <summary>People</summary>
           <div className="nav-menu">
             <button className={tab === 'volunteers' && volunteerWorkspaceView === 'directory' ? 'active' : ''} onClick={(event) => chooseVolunteerView('directory', event)}>Volunteers</button>
             {isOwner && <button className={tab === 'admins' ? 'active' : ''} onClick={(event) => chooseTab('admins', event)}>Admin Management</button>}
           </div>
         </details>
-        {isOwner && <details className={`nav-group ${tab === 'announcements' || (tab === 'volunteers' && volunteerWorkspaceView === 'invitations') ? 'active' : ''}`}>
+        {isOwner && <details className={`nav-group ${tab === 'announcements' || (tab === 'volunteers' && volunteerWorkspaceView === 'invitations') ? 'active' : ''}`} onToggle={handleNavToggle}>
           <summary>Communication</summary>
           <div className="nav-menu">
             <button className={tab === 'announcements' ? 'active' : ''} onClick={(event) => chooseTab('announcements', event)}>Announcements</button>
             <button className={tab === 'volunteers' && volunteerWorkspaceView === 'invitations' ? 'active' : ''} onClick={(event) => chooseVolunteerView('invitations', event)}>Invitation Queue</button>
           </div>
         </details>}
-        <details className={`nav-group ${reportTabs.includes(tab) ? 'active' : ''}`}>
+        <details className={`nav-group ${reportTabs.includes(tab) ? 'active' : ''}`} onToggle={handleNavToggle}>
           <summary>Reports</summary>
           <div className="nav-menu">
             {isOwner && <button className={tab === 'reports' ? 'active' : ''} onClick={(event) => chooseTab('reports', event)}>Analytics</button>}
@@ -310,7 +328,7 @@ const AdminDashboard: React.FC = () => {
             {isOwner && <button className={tab === 'value' ? 'active' : ''} onClick={(event) => chooseTab('value', event)}>App Value</button>}
           </div>
         </details>
-        <details className={`nav-group ${moreTabs.includes(tab) ? 'active' : ''}`}>
+        <details className={`nav-group ${moreTabs.includes(tab) ? 'active' : ''}`} onToggle={handleNavToggle}>
           <summary>More{trashCount ? ` (${trashCount})` : ''}</summary>
           <div className="nav-menu nav-menu-right">
             {isOwner && <button className={tab === 'history' ? 'active' : ''} onClick={(event) => chooseTab('history', event)}>History</button>}

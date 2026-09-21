@@ -1411,3 +1411,97 @@
 .portal-invite-panel .row { margin: 0.8rem 0; flex-wrap: wrap; }
 .invite-state { color: #9a6700; font-weight: 700; }
 .invite-state.enabled { color: var(--green-700); }
+
+/* Keep the grouped admin navigation usable as a tap menu on phones. */
+@media (max-width: 700px) {
+  .admin-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+    overflow: visible;
+    padding: 0.5rem;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+
+  .admin-nav .nav-group {
+    min-width: 0;
+    position: static;
+  }
+
+  .admin-nav .nav-group summary {
+    align-items: center;
+    background: #f8fafc;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    display: flex;
+    font-size: 0.88rem;
+    justify-content: space-between;
+    min-height: 46px;
+    overflow: hidden;
+    padding: 0.7rem 0.75rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-nav .nav-group.active summary {
+    background: var(--green-100);
+    border-color: var(--green-400);
+  }
+
+  .admin-nav .nav-group summary::after {
+    flex: 0 0 auto;
+    margin-left: 0.35rem;
+  }
+
+  .admin-nav .nav-menu,
+  .admin-nav .nav-menu-right {
+    border-radius: 12px;
+    left: 0.5rem;
+    max-height: min(60vh, 420px);
+    min-width: 0;
+    overflow-y: auto;
+    position: absolute;
+    right: 0.5rem;
+    top: calc(100% + 0.25rem);
+    width: auto;
+  }
+
+  .admin-nav .nav-menu button {
+    min-height: 48px;
+    white-space: normal;
+  }
+
+  .admin-dashboard .tab-bar:not(.admin-nav) {
+    scroll-snap-type: x proximity;
+  }
+
+  .admin-dashboard .tab-bar:not(.admin-nav) > button {
+    min-height: 48px;
+    scroll-snap-align: start;
+  }
+
+  .dashboard-content { padding: 0.65rem; }
+  .panel { border-radius: 12px; padding: 0.85rem; }
+  .results-panel { overflow: hidden; }
+  .event-date-picker { grid-template-columns: 1fr; }
+
+  .scope-dialog {
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    width: calc(100vw - 2rem);
+  }
+
+  .panel-head > .row { width: 100%; }
+  .panel-head > .row > * { flex: 1 1 auto; }
+  .filter-bar { padding: 0.75rem; }
+  .summary-strip strong { font-size: 1.25rem; }
+}
+
+@media (max-width: 390px) {
+  .admin-nav .nav-group summary {
+    font-size: 0.82rem;
+    padding: 0.65rem 0.55rem;
+  }
+}
