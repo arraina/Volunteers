@@ -16,6 +16,7 @@
 .calendar-event { background: white; border: 1px solid var(--line); border-left: 4px solid; border-radius: 6px; cursor: pointer; display: grid; font-size: .76rem; padding: .35rem; text-align: left; }
 .calendar-event span { color: #64748b; }
 .calendar-event.status-cancelled { opacity: .55; text-decoration: line-through; }
+.calendar-event.event-continues { background: #f7fbf7; border-left-style: dashed; }
 .calendar-week .calendar-day, .calendar-day .calendar-day { min-height: 360px; }
 .year-grid { display: grid; gap: .75rem; grid-template-columns: repeat(3, 1fr); }
 .year-month { background: #fbfefb; border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; display: grid; gap: .4rem; min-height: 100px; padding: 1rem; text-align: left; }

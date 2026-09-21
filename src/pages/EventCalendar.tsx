@@ -30,6 +30,17 @@ const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(),
 const addDays = (date: Date, days: number) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 const eventEnd = (event: TempleEvent) => event.endDate || new Date((event.date?.getTime() || 0) + 60 * 60_000);
+const eventCoversDay = (event: TempleEvent, day: Date) => {
+  if (!event.date) return false;
+  const calendarDay = startOfDay(day);
+  return calendarDay >= startOfDay(event.date) && calendarDay <= startOfDay(event.endDate || event.date);
+};
+const eventOverlapsMonth = (event: TempleEvent, year: number, month: number) => {
+  if (!event.date) return false;
+  const monthStart = new Date(year, month, 1);
+  const monthEnd = new Date(year, month + 1, 0);
+  return startOfDay(event.date) <= monthEnd && startOfDay(event.endDate || event.date) >= monthStart;
+};
 const volunteerName = (volunteer: VolunteerProfile) => volunteer.name || `${volunteer.firstName} ${volunteer.lastName}`.trim() || volunteer.email;
 
 const EventCalendar: React.FC<Props> = ({ events, tasks, volunteers, uid, setError, canManage, ownerNames }) => {
@@ -203,8 +214,12 @@ const EventCalendar: React.FC<Props> = ({ events, tasks, volunteers, uid, setErr
       <section className="panel calendar-main">
         <div className="calendar-toolbar"><div className="row"><button className="secondary-btn" onClick={() => move(-1)}>‹</button><button className="secondary-btn" onClick={() => setCursor(startOfDay(new Date()))}>Today</button><button className="secondary-btn" onClick={() => move(1)}>›</button></div><h2>{view === 'year' ? cursor.getFullYear() : cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric', ...(view === 'day' ? { day: 'numeric' } : {}) })}</h2><div className="view-switch">{(['year', 'month', 'week', 'day'] as CalendarView[]).map((item) => <button key={item} className={view === item ? 'active' : ''} onClick={() => setView(item)}>{item}</button>)}</div></div>
         <input className="calendar-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search events, location, or description" />
-        {view === 'year' ? <div className="year-grid">{Array.from({ length: 12 }, (_, month) => <button key={month} className="year-month" onClick={() => { setCursor(new Date(cursor.getFullYear(), month, 1)); setView('month'); }}><strong>{new Date(cursor.getFullYear(), month, 1).toLocaleDateString('en-US', { month: 'long' })}</strong><span>{visibleEvents.filter((event) => event.date!.getFullYear() === cursor.getFullYear() && event.date!.getMonth() === month).length} event(s)</span></button>)}</div>
-          : <div className={`calendar-grid calendar-${view}`}>{days.map((day) => <div key={day.toISOString()} className={`calendar-day ${sameDay(day, new Date()) ? 'today' : ''} ${view === 'month' && day.getMonth() !== cursor.getMonth() ? 'outside' : ''}`}><button className="day-number" onClick={() => { setCursor(day); setView('day'); }}>{day.toLocaleDateString('en-US', { weekday: view === 'month' ? undefined : 'short', day: 'numeric', month: view === 'month' ? undefined : 'short' })}</button><div className="day-events">{visibleEvents.filter((event) => sameDay(event.date!, day)).map((event) => <button key={event.id} className={`calendar-event status-${event.status}`} style={{ borderLeftColor: event.color }} onClick={() => canManage && setForEdit(event)}><strong>{event.allDay ? '' : `${event.date!.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} `}{event.name}</strong>{view !== 'month' && <><span>{event.allDay ? 'All day' : event.location || 'Location not set'}</span><span>Owner: {ownerName(event)}</span></>}</button>)}</div></div>)}</div>}
+        {view === 'year' ? <div className="year-grid">{Array.from({ length: 12 }, (_, month) => <button key={month} className="year-month" onClick={() => { setCursor(new Date(cursor.getFullYear(), month, 1)); setView('month'); }}><strong>{new Date(cursor.getFullYear(), month, 1).toLocaleDateString('en-US', { month: 'long' })}</strong><span>{visibleEvents.filter((event) => eventOverlapsMonth(event, cursor.getFullYear(), month)).length} event(s)</span></button>)}</div>
+          : <div className={`calendar-grid calendar-${view}`}>{days.map((day) => <div key={day.toISOString()} className={`calendar-day ${sameDay(day, new Date()) ? 'today' : ''} ${view === 'month' && day.getMonth() !== cursor.getMonth() ? 'outside' : ''}`}><button className="day-number" onClick={() => { setCursor(day); setView('day'); }}>{day.toLocaleDateString('en-US', { weekday: view === 'month' ? undefined : 'short', day: 'numeric', month: view === 'month' ? undefined : 'short' })}</button><div className="day-events">{visibleEvents.filter((event) => eventCoversDay(event, day)).map((event) => {
+            const startsToday = sameDay(event.date!, day);
+            const endsToday = sameDay(event.endDate || event.date!, day);
+            return <button key={event.id} className={`calendar-event status-${event.status} ${startsToday ? 'event-start' : 'event-continues'}`} style={{ borderLeftColor: event.color }} onClick={() => canManage && setForEdit(event)}><strong>{startsToday && !event.allDay ? `${event.date!.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} ` : !startsToday ? '↳ ' : ''}{event.name}</strong>{view !== 'month' && <><span>{event.allDay ? 'All day' : startsToday ? event.location || 'Location not set' : endsToday ? 'Ends today' : 'Continues'}</span><span>Owner: {ownerName(event)}</span></>}</button>;
+          })}</div></div>)}</div>}
       </section>
 
       <aside className="calendar-sidebar">

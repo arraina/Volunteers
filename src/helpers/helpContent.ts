@@ -236,7 +236,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'event-calendar', title: 'Event Calendar and AI planner', category: 'Events', roles: ['volunteer', 'admin', 'owner'],
     summary: 'Review events across calendar views, detect conflicts, and use Owner planning controls.',
     sections: [
-      { heading: 'Calendar views', text: 'Use year, month, week, or day view to review current and upcoming events. Search by event name, location, or description. Volunteers have read-only access; Admins can view the calendar; the Owner can use event management controls.' },
+      { heading: 'Calendar views', text: 'Use year, month, week, or day view to review current and upcoming events. A multi-day event appears on every date from its start through its end, with continuation styling after the first day; yearly month counts include events spanning into that month. Search by event name, location, or description. Volunteers have read-only access; Admins can view the calendar; the Owner can use event management controls.' },
       { heading: 'Conflict alerts', text: 'The calendar flags overlapping event times, matching-location collisions, and linked tasks that fall outside their event window. Resolve alerts before confirming the schedule.' },
       { heading: 'Task-based reminders', text: 'Events do not broadcast one reminder to every participant. Reminders belong to linked tasks and go to the volunteers assigned to those tasks, using each task’s configured lead time.' },
       { heading: 'AI event planner', text: 'Describe an event addition, change, or deletion in plain language. Review the proposed actions and approve them before anything is saved. Ambiguous deletes are rejected.' },
