@@ -51,8 +51,9 @@ jobs:
           REACT_APP_AI_ENDPOINT: ${{ vars.REACT_APP_AI_ENDPOINT }}
           REACT_APP_GEMINI_API_KEY: ${{ vars.REACT_APP_GEMINI_API_KEY }}
           REACT_APP_GEMINI_MODEL: ${{ vars.REACT_APP_GEMINI_MODEL }}
-          # SPA on GitHub Pages: keep asset paths relative.
-          PUBLIC_URL: '.'
+          # Use the repository root so deep SPA links (for example /task/:id)
+          # still load JavaScript, CSS, and the manifest from the right path.
+          PUBLIC_URL: /Volunteers
         run: npm run build
 
       - name: SPA fallback (404 -> index.html)
