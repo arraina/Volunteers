@@ -218,7 +218,7 @@ const VolunteerDashboard: React.FC = () => {
         </div>
       </header>
 
-      <nav className="tab-bar">
+      <nav className="tab-bar volunteer-nav" aria-label="Volunteer navigation">
         <button className={tab === 'open' ? 'active' : ''} onClick={() => setTab('open')}>
           Open Tasks
         </button>
