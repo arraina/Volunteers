@@ -126,8 +126,8 @@ service cloud.firestore {
     function isSelfSignup() {
       return resource.data.status != 'cancelled'
         && resource.data.status != 'completed'
-        && resource.data.deleted != true
-        && resource.data.openForSignup == true
+        && resource.data.get('deleted', false) != true
+        && resource.data.get('openForSignup', true) == true
         && resource.data.startDateTime > request.time
         && onlyAssignmentFieldsChanged()
         && !(request.auth.uid in resource.data.assignedVolunteers)
