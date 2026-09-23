@@ -34,6 +34,7 @@ import {
 import { fromEasternDateTimeInput, toEasternDateTimeInput } from '../helpers/taskDateTime';
 import { normalizePhoneNumber, validatePhoneNumber } from '../helpers/phone';
 import { findTaskScheduleConflicts } from '../helpers/scheduleConflicts';
+import { shareTask } from '../helpers/taskShare';
 import '../pages/AdminDashboard.css';
 import './VolunteerDashboard.css';
 import EventFeedback from './EventFeedback';
@@ -516,7 +517,7 @@ const VolunteerTaskManagement: React.FC<{
           <option value="">Choose volunteer…</option>{directory.filter((item) => !task.assignedVolunteers.includes(item.uid)).map((item) => <option key={item.uid} value={item.uid}>{item.name}</option>)}
         </select></label>
         <button className="secondary-btn" disabled={!assignmentChoice[task.id] || Boolean(assignmentBusy)} onClick={() => changeAssignment(task, assignmentChoice[task.id], 'add')}>Assign</button>
-        <div className="task-actions"><button className="link-btn" onClick={() => editTask(task)}>Edit task</button><button className="link-btn danger" onClick={async () => {
+        <div className="task-actions"><button className="secondary-btn" onClick={() => shareTask(task)}>Share task</button><button className="link-btn" onClick={() => editTask(task)}>Edit task</button><button className="link-btn danger" onClick={async () => {
           if (!window.confirm(`Delete “${task.title}”? It will be moved to Trash and removed from volunteer task lists.`)) return;
           try { await trashOwnTask(task.id, profile.uid); setMessage('Task moved to Trash.'); }
           catch (err) { setError(err instanceof Error ? err.message : 'Could not delete the task.'); }

@@ -10,6 +10,7 @@ import {
 import { deleteApp, initializeApp } from 'firebase/app';
 import { auth, firebaseConfig } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
+import { shareTask } from '../helpers/taskShare';
 import {
   NotificationChannel,
   Announcement,
@@ -1117,6 +1118,7 @@ const OccurrenceRow: React.FC<{
         <div className="task-edit-actions task-edit-wide"><button className="primary-btn" disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</button><button type="button" className="secondary-btn" onClick={() => { setEditForm(taskEditValues(task)); setEditing(false); }}>Cancel edit</button></div>
       </form>}
       <div className="task-actions">
+        {canManage && (!task.createdBy || task.createdBy === selfUid) && <button className="secondary-btn" onClick={() => shareTask(task)}>Share task</button>}
         {selfUid && (selfAssigned || !assignmentClosed) && <button
           className={selfAssigned ? 'secondary-btn' : 'primary-btn'}
           disabled={selfServiceBusy}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import AuthPage from './pages/Auth';
 import AdminDashboard from './pages/AdminDashboard';
 import VolunteerDashboard from './pages/VolunteerDashboard';
@@ -7,6 +7,7 @@ import VerifyEmail from './pages/VerifyEmail';
 import HelpCenter from './pages/HelpCenter';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import ClaimPortalInvite from './pages/ClaimPortalInvite';
+import SharedTask from './pages/SharedTask';
 import { AuthProvider, useAuth } from './helpers/useAuth';
 import { isFirebaseConfigured } from './config/firebase';
 import './App.css';
@@ -41,9 +42,11 @@ const Protected: React.FC<{ admin?: boolean; children: React.ReactElement }> = (
   children,
 }) => {
   const { user, isAdmin, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <Loading />;
-  if (!user) return <Navigate to="/login" replace />;
-  if (!user.emailVerified) return <Navigate to="/verify-email" replace />;
+  const returnTo = `${location.pathname}${location.search}`;
+  if (!user) return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
+  if (!user.emailVerified) return <Navigate to={`/verify-email?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   if (admin && !isAdmin) return <Navigate to="/dashboard" replace />;
   return children;
 };
@@ -51,9 +54,12 @@ const Protected: React.FC<{ admin?: boolean; children: React.ReactElement }> = (
 // Redirect already-signed-in users away from the auth screens.
 const PublicOnly: React.FC<{ children: React.ReactElement }> = ({ children }) => {
   const { user, isAdmin, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <Loading />;
   if (user) {
-    return <Navigate to={user.emailVerified ? (isAdmin ? '/admin' : '/dashboard') : '/verify-email'} replace />;
+    const requested = new URLSearchParams(location.search).get('returnTo') || '';
+    const returnTo = requested.startsWith('/') && !requested.startsWith('//') ? requested : '';
+    return <Navigate to={user.emailVerified ? (returnTo || (isAdmin ? '/admin' : '/dashboard')) : `/verify-email${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`} replace />;
   }
   return children;
 };
@@ -103,6 +109,7 @@ function App() {
             }
           />
           <Route path="/help" element={<Protected><HelpCenter /></Protected>} />
+          <Route path="/task/:taskId" element={<Protected><SharedTask /></Protected>} />
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

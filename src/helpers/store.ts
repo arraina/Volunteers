@@ -457,6 +457,12 @@ export async function getTasks(): Promise<VolunteerTask[]> {
   return snap.docs.filter((d) => d.data().deleted !== true).map((d) => normalizeTask(d.id, d.data()));
 }
 
+export async function getTask(taskId: string): Promise<VolunteerTask | null> {
+  const snapshot = await getDoc(doc(db, 'tasks', taskId));
+  if (!snapshot.exists() || snapshot.data().deleted === true) return null;
+  return normalizeTask(snapshot.id, snapshot.data());
+}
+
 /**
  * Fetch past tasks (started before now), most recent first, for the History
  * view. Bounded by `limitCount` to stay light on reads.
@@ -905,6 +911,11 @@ export async function assignVolunteerToTask(
     const fresh = await tx.get(taskRef);
     if (!fresh.exists()) throw new Error('Task no longer exists.');
     const data = fresh.data();
+    const freshStart = firestoreTimestampToDate(data.startDateTime);
+    if (data.deleted === true || data.openForSignup === false
+      || data.status === 'cancelled' || data.status === 'completed' || freshStart <= new Date()) {
+      throw new Error('Signup is closed for this task.');
+    }
     const assigned: string[] = Array.isArray(data.assignedVolunteers)
       ? data.assignedVolunteers
       : [];

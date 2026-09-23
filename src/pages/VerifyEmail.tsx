@@ -1,24 +1,28 @@
 import React, { useState } from 'react';
 import { sendEmailVerification, signOut } from 'firebase/auth';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { auth } from '../config/firebase';
 import { getUserAdminRole } from '../helpers/types';
 import { recordLoginAudit } from '../helpers/store';
 import { useAuth } from '../helpers/useAuth';
 import './Auth.css';
 
-const verificationSettings = () => ({
-  url: `${window.location.origin}${window.location.pathname.startsWith('/Volunteers') ? '/Volunteers' : ''}/verify-email`,
+const verificationSettings = (returnTo: string) => ({
+  url: `${window.location.origin}${window.location.pathname.startsWith('/Volunteers') ? '/Volunteers' : ''}/verify-email${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`,
 });
 
 const VerifyEmail: React.FC = () => {
   const { user, loading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const email = user?.email || (location.state as { email?: string } | null)?.email || '';
+  const stateReturnTo = (location.state as { returnTo?: string } | null)?.returnTo || '';
+  const requestedReturnTo = searchParams.get('returnTo') || stateReturnTo;
+  const returnTo = requestedReturnTo.startsWith('/') && !requestedReturnTo.startsWith('//') ? requestedReturnTo : '';
 
   const checkVerification = async () => {
     if (!user) {
@@ -41,7 +45,7 @@ const VerifyEmail: React.FC = () => {
         verifiedUser.email || '',
         role || 'volunteer'
       );
-      navigate(role ? '/admin' : '/dashboard', { replace: true });
+      navigate(returnTo || (role ? '/admin' : '/dashboard'), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not refresh verification status.');
     } finally {
@@ -58,7 +62,7 @@ const VerifyEmail: React.FC = () => {
     setError('');
     setMessage('');
     try {
-      await sendEmailVerification(user, verificationSettings());
+      await sendEmailVerification(user, verificationSettings(returnTo));
       setMessage('A new verification email has been sent.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not resend the verification email.');

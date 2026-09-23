@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   createUserWithEmailAndPassword,
   deleteUser,
@@ -41,7 +41,10 @@ function getErrorMessage(error: unknown, fallback: string): string {
 
 const AuthPage: React.FC<AuthProps> = ({ type }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isLogin = type === 'login';
+  const requestedReturnTo = searchParams.get('returnTo') || '';
+  const returnTo = requestedReturnTo.startsWith('/') && !requestedReturnTo.startsWith('//') ? requestedReturnTo : '';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -52,7 +55,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const actionCodeSettings = {
-    url: `${window.location.origin}${window.location.pathname.startsWith('/Volunteers') ? '/Volunteers' : ''}/login`,
+    url: `${window.location.origin}${window.location.pathname.startsWith('/Volunteers') ? '/Volunteers' : ''}/verify-email${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`,
   };
   const phoneValidation = validatePhoneNumber(phoneNumber);
 
@@ -60,7 +63,9 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
     const user = auth.currentUser;
     const role = user ? await getUserAdminRole(user) : null;
     if (user) await recordLoginAudit(uid, user.email || '', role || 'volunteer').catch(() => undefined);
-    if (role) {
+    if (returnTo) {
+      navigate(returnTo, { replace: true });
+    } else if (role) {
       navigate('/admin');
     } else {
       navigate('/dashboard');
@@ -96,7 +101,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
         whatsappOptIn: true,
       });
       await sendEmailVerification(credential.user, actionCodeSettings);
-      navigate('/verify-email', { state: { email: normalizedEmail } });
+      navigate(`/verify-email${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`, { state: { email: normalizedEmail, returnTo } });
     } catch (err) {
       setError(getErrorMessage(err, 'Unable to create your account.'));
     } finally {
@@ -115,7 +120,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
 
       const credential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
       if (!credential.user.emailVerified) {
-        navigate('/verify-email', { state: { email: normalizedEmail } });
+        navigate(`/verify-email${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`, { state: { email: normalizedEmail, returnTo } });
         return;
       }
       // Ensure a volunteer profile exists (e.g. accounts created before profile).
@@ -308,7 +313,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
         </form>
 
           <p className="toggle-link">
-            <Link to={isLogin ? '/signup' : '/login'}>
+            <Link to={`${isLogin ? '/signup' : '/login'}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`}>
               {isLogin ? 'New volunteer? Create an account' : 'Already have an account? Log in'}
             </Link>
           </p>
