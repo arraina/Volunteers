@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   createUserWithEmailAndPassword,
   deleteUser,
@@ -92,6 +92,10 @@ import './AdminDashboard.css';
 type Tab = 'tasks' | 'ai' | 'events' | 'calendar' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'costs' | 'trash' | 'admins' | 'audit' | 'value';
 type TaskWorkspaceView = 'browse' | 'assigned' | 'manage';
 type VolunteerWorkspaceView = 'directory' | 'invitations';
+
+const ADMIN_TABS: Tab[] = ['tasks', 'ai', 'events', 'calendar', 'volunteers', 'announcements', 'history', 'reports', 'costs', 'trash', 'admins', 'audit', 'value'];
+const TASK_VIEWS: TaskWorkspaceView[] = ['browse', 'assigned', 'manage'];
+const VOLUNTEER_VIEWS: VolunteerWorkspaceView[] = ['directory', 'invitations'];
 
 const STATUS_OPTIONS: TaskStatus[] = ['open', 'filled', 'completed', 'cancelled'];
 
@@ -191,10 +195,13 @@ async function createVolunteerInvitation(input: typeof emptyVolunteerForm): Prom
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, isOwner } = useAuth();
-  const [tab, setTab] = useState<Tab>('tasks');
-  const [taskWorkspaceView, setTaskWorkspaceView] = useState<TaskWorkspaceView>('browse');
-  const [volunteerWorkspaceView, setVolunteerWorkspaceView] = useState<VolunteerWorkspaceView>('directory');
+  const requestedTab = searchParams.get('tab') as Tab | null;
+  const tab: Tab = requestedTab && ADMIN_TABS.includes(requestedTab) ? requestedTab : 'tasks';
+  const requestedView = searchParams.get('view');
+  const taskWorkspaceView: TaskWorkspaceView = TASK_VIEWS.includes(requestedView as TaskWorkspaceView) ? requestedView as TaskWorkspaceView : 'browse';
+  const volunteerWorkspaceView: VolunteerWorkspaceView = VOLUNTEER_VIEWS.includes(requestedView as VolunteerWorkspaceView) ? requestedView as VolunteerWorkspaceView : 'directory';
   const [tasks, setTasks] = useState<VolunteerTask[]>([]);
   const [volunteers, setVolunteers] = useState<VolunteerProfile[]>([]);
   const [events, setEvents] = useState<TempleEvent[]>([]);
@@ -209,9 +216,9 @@ const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     if (!isOwner && (tab === 'announcements' || tab === 'history' || tab === 'reports')) {
-      setTab('tasks');
+      setSearchParams({ tab: 'tasks', view: 'browse' }, { replace: true });
     }
-  }, [isOwner, tab]);
+  }, [isOwner, tab, setSearchParams]);
 
   useEffect(() => {
     const closeNavigation = (event: PointerEvent) => {
@@ -246,19 +253,21 @@ const AdminDashboard: React.FC = () => {
   };
 
   const chooseTab = (nextTab: Tab, event: React.MouseEvent<HTMLButtonElement>) => {
-    setTab(nextTab);
+    setSearchParams({ tab: nextTab });
     const group = event.currentTarget.closest('details');
     if (group instanceof HTMLDetailsElement) group.open = false;
   };
 
   const chooseTaskView = (view: TaskWorkspaceView, event: React.MouseEvent<HTMLButtonElement>) => {
-    setTaskWorkspaceView(view);
-    chooseTab('tasks', event);
+    setSearchParams({ tab: 'tasks', view });
+    const group = event.currentTarget.closest('details');
+    if (group instanceof HTMLDetailsElement) group.open = false;
   };
 
   const chooseVolunteerView = (view: VolunteerWorkspaceView, event: React.MouseEvent<HTMLButtonElement>) => {
-    setVolunteerWorkspaceView(view);
-    chooseTab('volunteers', event);
+    setSearchParams({ tab: 'volunteers', view });
+    const group = event.currentTarget.closest('details');
+    if (group instanceof HTMLDetailsElement) group.open = false;
   };
 
   const handleNavToggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {

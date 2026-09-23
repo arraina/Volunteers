@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
@@ -42,11 +42,15 @@ import EventCalendar from './EventCalendar';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
 
 type Tab = 'open' | 'mine' | 'create' | 'calendar' | 'past' | 'feedback' | 'profile';
+const VOLUNTEER_TABS: Tab[] = ['open', 'mine', 'create', 'calendar', 'past', 'feedback', 'profile'];
 
 const VolunteerDashboard: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
-  const [tab, setTab] = useState<Tab>('open');
+  const requestedTab = searchParams.get('tab') as Tab | null;
+  const tab: Tab = requestedTab && VOLUNTEER_TABS.includes(requestedTab) ? requestedTab : 'open';
+  const chooseTab = (nextTab: Tab) => setSearchParams({ tab: nextTab });
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
   const [tasks, setTasks] = useState<VolunteerTask[]>([]);
   const [events, setEvents] = useState<TempleEvent[]>([]);
@@ -220,25 +224,25 @@ const VolunteerDashboard: React.FC = () => {
       </header>
 
       <nav className="tab-bar volunteer-nav" aria-label="Volunteer navigation">
-        <button className={tab === 'open' ? 'active' : ''} onClick={() => setTab('open')}>
+        <button className={tab === 'open' ? 'active' : ''} onClick={() => chooseTab('open')}>
           Open Tasks
         </button>
-        <button className={tab === 'mine' ? 'active' : ''} onClick={() => setTab('mine')}>
+        <button className={tab === 'mine' ? 'active' : ''} onClick={() => chooseTab('mine')}>
           My Upcoming Tasks ({myTasks.length})
         </button>
-        <button className={tab === 'create' ? 'active' : ''} onClick={() => setTab('create')}>
+        <button className={tab === 'create' ? 'active' : ''} onClick={() => chooseTab('create')}>
           Create &amp; Manage Tasks
         </button>
-        <button className={tab === 'calendar' ? 'active' : ''} onClick={() => setTab('calendar')}>
+        <button className={tab === 'calendar' ? 'active' : ''} onClick={() => chooseTab('calendar')}>
           Event Calendar
         </button>
-        <button className={tab === 'past' ? 'active' : ''} onClick={() => setTab('past')}>
+        <button className={tab === 'past' ? 'active' : ''} onClick={() => chooseTab('past')}>
           Past Tasks ({pastTasks.length})
         </button>
-        <button className={tab === 'feedback' ? 'active' : ''} onClick={() => setTab('feedback')}>
+        <button className={tab === 'feedback' ? 'active' : ''} onClick={() => chooseTab('feedback')}>
           Event Feedback
         </button>
-        <button className={tab === 'profile' ? 'active' : ''} onClick={() => setTab('profile')}>
+        <button className={tab === 'profile' ? 'active' : ''} onClick={() => chooseTab('profile')}>
           My Profile
         </button>
         <button onClick={() => navigate('/help')}>Help</button>
