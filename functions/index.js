@@ -29,6 +29,17 @@ function tokenHash(token) {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function normalizedTaskTitle(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function validReminderHours(value) {
+  if (!Array.isArray(value) || value.length > 2) return false;
+  const hours = [...new Set(value.map(Number))].sort((a, b) => b - a);
+  return hours.length === value.length && hours.every((item) => Number.isFinite(item) && item > 0)
+    && (hours.length < 2 || Math.abs(hours[0] - hours[1]) >= 24);
+}
+
 async function requireAdmin(request, ownerOnly = false) {
   if (!request.auth || request.auth.token.email_verified !== true) {
     throw new HttpsError('unauthenticated', 'A verified administrator account is required.');
@@ -78,6 +89,103 @@ exports.assertVolunteerPhoneAvailable = onCall({ region: 'us-central1', maxInsta
     );
   }
   return { available: true, phoneNumber };
+});
+
+exports.createEventTask = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  await requireAdmin(request);
+  const input = request.data || {};
+  const title = String(input.title || '').trim();
+  const eventId = String(input.eventId || '').trim();
+  const eventName = String(input.eventName || '').trim();
+  const startMillis = Number(input.startMillis);
+  const endMillis = input.endMillis == null ? null : Number(input.endMillis);
+  const volunteersNeeded = Math.floor(Number(input.volunteersNeeded));
+  const reminderHoursBefore = Array.isArray(input.reminderHoursBefore) ? input.reminderHoursBefore.map(Number) : [];
+  if (!title || !eventId || !Number.isFinite(startMillis)) throw new HttpsError('invalid-argument', 'Event, task title, and start time are required.');
+  if (startMillis < Date.now() - 60000) throw new HttpsError('invalid-argument', 'Task start date and time cannot be in the past.');
+  if (endMillis !== null && (!Number.isFinite(endMillis) || endMillis <= startMillis)) throw new HttpsError('invalid-argument', 'Task end time must be after its start time.');
+  if (!Number.isFinite(volunteersNeeded) || volunteersNeeded < 1) throw new HttpsError('invalid-argument', 'At least one volunteer is required.');
+  if (!validReminderHours(reminderHoursBefore)) throw new HttpsError('invalid-argument', 'Use up to two positive reminder times at least 24 hours apart.');
+  const event = await db.doc(`events/${eventId}`).get();
+  if (!event.exists || event.data().deleted === true) throw new HttpsError('not-found', 'The selected event was not found.');
+
+  const normalizedTitle = normalizedTaskTitle(title);
+  const existing = await db.collection('tasks').where('eventId', '==', eventId).get();
+  const duplicate = existing.docs.find((item) => {
+    const data = item.data();
+    return data.deleted !== true && normalizedTaskTitle(data.title) === normalizedTitle
+      && data.startDateTime?.toMillis?.() === startMillis;
+  });
+  if (duplicate) throw new HttpsError('already-exists', `This event already has “${title}” at that date and time.`);
+
+  const uniquenessId = createHash('sha256').update(`${eventId}|${normalizedTitle}|${startMillis}`).digest('hex');
+  const lockRef = db.doc(`taskUniqueness/${uniquenessId}`);
+  const taskRef = db.collection('tasks').doc();
+  await db.runTransaction(async (transaction) => {
+    const lock = await transaction.get(lockRef);
+    if (lock.exists) {
+      const linkedId = String(lock.data().taskId || '');
+      const linked = linkedId ? await transaction.get(db.doc(`tasks/${linkedId}`)) : null;
+      if (linked?.exists && linked.data().deleted !== true) {
+        throw new HttpsError('already-exists', `This event already has “${title}” at that date and time.`);
+      }
+    }
+    transaction.set(taskRef, {
+      title, description: String(input.description || '').trim(), eventId,
+      eventName: eventName || event.data().name || null,
+      startDateTime: admin.firestore.Timestamp.fromMillis(startMillis),
+      endDateTime: endMillis === null ? null : admin.firestore.Timestamp.fromMillis(endMillis),
+      location: String(input.location || '').trim(),
+      skillsNeeded: Array.isArray(input.skillsNeeded) ? input.skillsNeeded.map(String) : [],
+      volunteersNeeded, assignedVolunteers: [], openForSignup: true, status: 'open',
+      recurrence: 'none', seriesId: null, occurrenceIndex: 0, reminderHoursBefore,
+      createdBy: request.auth.uid, createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    transaction.set(lockRef, { taskId: taskRef.id, eventId, normalizedTitle, startMillis, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+  });
+  return { taskId: taskRef.id };
+});
+
+exports.trashTask = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  if (!request.auth || request.auth.token.email_verified !== true) throw new HttpsError('unauthenticated', 'A verified portal account is required.');
+  const taskId = String(request.data?.taskId || '').trim();
+  const scope = request.data?.scope === 'future' ? 'future' : 'one';
+  if (!taskId) throw new HttpsError('invalid-argument', 'Task is required.');
+  const selected = await db.doc(`tasks/${taskId}`).get();
+  if (!selected.exists) throw new HttpsError('not-found', 'Task was not found.');
+  const selectedData = selected.data();
+  const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
+  const isAdmin = adminDoc.data()?.isAdmin === true;
+  if (!isAdmin && selectedData.createdBy !== request.auth.uid) throw new HttpsError('permission-denied', 'You can move only tasks you created to Trash.');
+
+  let targets = [selected];
+  if (scope === 'future' && selectedData.seriesId) {
+    const series = await db.collection('tasks').where('seriesId', '==', selectedData.seriesId).get();
+    const cutoff = selectedData.startDateTime?.toMillis?.() || 0;
+    targets = series.docs.filter((item) => (item.data().startDateTime?.toMillis?.() || 0) >= cutoff);
+  }
+  targets = targets.filter((item) => item.data().deleted !== true);
+  if (!targets.length) throw new HttpsError('failed-precondition', 'This task is already in Trash.');
+  const batchId = `${Date.now()}_${taskId}`;
+  const deletedFields = {
+    deleted: true, deletedAt: admin.firestore.FieldValue.serverTimestamp(), deletedBy: request.auth.uid,
+    deletedBatchId: batchId, deletedScope: scope, updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (scope === 'future' && selectedData.seriesId) {
+    await db.doc(`taskSeries/${selectedData.seriesId}`).set({
+      stoppedAt: admin.firestore.FieldValue.serverTimestamp(), deletedBatchId: batchId,
+      cutoff: selectedData.startDateTime,
+    });
+  }
+  for (let i = 0; i < targets.length; i += 400) {
+    const batch = db.batch();
+    targets.slice(i, i + 400).forEach((item) => batch.update(item.ref, deletedFields));
+    await batch.commit();
+  }
+  const verification = await selected.ref.get();
+  if (verification.data()?.deleted !== true) throw new HttpsError('internal', 'Task deletion could not be verified.');
+  return { batchId, affected: targets.length };
 });
 
 exports.beginVolunteerSignup = onCall(

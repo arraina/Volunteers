@@ -414,6 +414,7 @@ const TasksTab: React.FC<{
   const [creatorFilter, setCreatorFilter] = useState<'all' | 'mine' | 'assigned'>('mine');
   const [taskSort, setTaskSort] = useState<'soonest' | 'latest' | 'title'>('soonest');
   const [undoBatchId, setUndoBatchId] = useState('');
+  const [undoAffectedCount, setUndoAffectedCount] = useState(0);
   const [selfServiceMessage, setSelfServiceMessage] = useState('');
   const [eventRepeatMode, setEventRepeatMode] = useState<EventRepeatMode>('once');
   const [selectedEventDates, setSelectedEventDates] = useState<string[]>([]);
@@ -607,8 +608,11 @@ const TasksTab: React.FC<{
   };
 
   const handleTrash = async (task: VolunteerTask, scope: SeriesScope) => {
-    const batchId = await trashTaskScoped(task, scope, uid);
-    setUndoBatchId(batchId);
+    setUndoBatchId('');
+    setUndoAffectedCount(0);
+    const result = await trashTaskScoped(task, scope, uid);
+    setUndoBatchId(result.batchId);
+    setUndoAffectedCount(result.affected);
   };
 
   const repeatAcrossEventDates = async (task: VolunteerTask) => {
@@ -795,7 +799,7 @@ const TasksTab: React.FC<{
         </div>}
         {undoBatchId && (
           <div className="undo-banner" role="status">
-            <span>Task moved to Trash. It can be restored for 30 days.</span>
+            <span>{undoAffectedCount} task {undoAffectedCount === 1 ? 'record' : 'records'} moved to Trash and verified. {undoAffectedCount === 1 ? 'It can' : 'They can'} be restored for 30 days.</span>
             <div>
               {isOwner && <button className="link-btn" onClick={async () => {
                 try {

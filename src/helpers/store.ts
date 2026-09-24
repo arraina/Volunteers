@@ -570,6 +570,17 @@ function occurrenceDoc(input: TaskInput, seriesId: string, start: Date, index: n
 export async function createTask(input: TaskInput): Promise<string> {
   assertTaskStartNotPast(input.startDateTime);
   input = { ...input, reminderHoursBefore: validateReminderHours(input.reminderHoursBefore) };
+  if (input.eventId && input.recurrence === 'none') {
+    const call = httpsCallable<Record<string, unknown>, { taskId: string }>(functions, 'createEventTask');
+    const result = await call({
+      title: input.title, description: input.description || '', eventId: input.eventId,
+      eventName: input.eventName || '', startMillis: input.startDateTime.getTime(),
+      endMillis: input.endDateTime?.getTime() ?? null, location: input.location || '',
+      skillsNeeded: input.skillsNeeded || [], volunteersNeeded: input.volunteersNeeded,
+      reminderHoursBefore: input.reminderHoursBefore,
+    });
+    return result.data.taskId;
+  }
   if (input.recurrence === 'none') {
     const ref = await addDoc(collection(db, 'tasks'), {
       ...occurrenceDoc(input, '', input.startDateTime, 0),
@@ -611,12 +622,9 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus): Prom
 
 /** Move a volunteer-created task to Trash. Security rules verify ownership. */
 export async function trashOwnTask(taskId: string, volunteerId: string): Promise<void> {
-  await updateDoc(doc(db, 'tasks', taskId), {
-    deleted: true,
-    deletedAt: serverTimestamp(),
-    deletedBy: volunteerId,
-    updatedAt: serverTimestamp(),
-  });
+  void volunteerId;
+  const call = httpsCallable<{ taskId: string; scope: SeriesScope }, { batchId: string; affected: number }>(functions, 'trashTask');
+  await call({ taskId, scope: 'one' });
 }
 
 export interface TaskManagementFields {
@@ -736,37 +744,11 @@ export async function trashTaskScoped(
   task: VolunteerTask,
   scope: SeriesScope,
   deletedBy?: string
-): Promise<string> {
-  const batchId = `${Date.now()}_${task.id}`;
-  const deletedFields = {
-    deleted: true,
-    deletedAt: serverTimestamp(),
-    deletedBy: deletedBy || null,
-    deletedBatchId: batchId,
-    deletedScope: scope,
-    updatedAt: serverTimestamp(),
-  };
-  if (!task.seriesId || scope === 'one') {
-    await updateDoc(doc(db, 'tasks', task.id), deletedFields);
-    return batchId;
-  }
-  const docs = await seriesOccurrences(task.seriesId);
-  const cutoff = task.startDateTime.getTime();
-  const targets = docs.filter((d) => {
-    const start = d.data().startDateTime?.toDate?.()?.getTime?.() ?? 0;
-    return start >= cutoff;
-  });
-  await setDoc(doc(db, 'taskSeries', task.seriesId), {
-    stoppedAt: serverTimestamp(),
-    deletedBatchId: batchId,
-    cutoff: Timestamp.fromDate(task.startDateTime),
-  });
-  for (let i = 0; i < targets.length; i += 450) {
-    const batch = writeBatch(db);
-    targets.slice(i, i + 450).forEach((d) => batch.update(d.ref, deletedFields));
-    await batch.commit();
-  }
-  return batchId;
+): Promise<{ batchId: string; affected: number }> {
+  void deletedBy;
+  const call = httpsCallable<{ taskId: string; scope: SeriesScope }, { batchId: string; affected: number }>(functions, 'trashTask');
+  const result = await call({ taskId: task.id, scope });
+  return result.data;
 }
 
 export async function restoreDeletedTaskBatch(batchId: string): Promise<void> {
