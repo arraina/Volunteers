@@ -382,7 +382,7 @@ const AdminDashboard: React.FC = () => {
         {tab === 'announcements' && isOwner && (
           <AnnouncementsTab uid={user?.uid} setError={setError} />
         )}
-        {tab === 'history' && isOwner && <HistoryTab volunteers={volunteers} events={events} setError={setError} />}
+        {tab === 'history' && isOwner && <HistoryTab tasks={tasks} volunteers={volunteers} events={events} setError={setError} />}
         {tab === 'reports' && isOwner && <ReportsTab volunteers={volunteers} tasks={tasks} events={events} />}
         {tab === 'costs' && <CostTab events={events} uid={user?.uid} isOwner={isOwner} whatsappSettings={whatsappSettings} />}
         {tab === 'trash' && <TrashTab tasks={deletedTasks} records={deletedRecords} isOwner={isOwner} setError={setError} />}
@@ -2044,12 +2044,18 @@ const OwnerHistoryTaskEditor: React.FC<{
 };
 
 const HistoryTab: React.FC<{
+  tasks: VolunteerTask[];
   volunteers: VolunteerProfile[];
   events: TempleEvent[];
   setError: (s: string) => void;
-}> = ({ volunteers, events, setError }) => {
+}> = ({ tasks, volunteers, events, setError }) => {
   const [pastTasks, setPastTasks] = useState<VolunteerTask[] | null>(null);
   const [message, setMessage] = useState('');
+
+  const recentPastTasks = useMemo(
+    () => tasks.filter((task) => task.startDateTime < new Date()),
+    [tasks]
+  );
 
   const volunteerById = useMemo(() => {
     const map = new Map<string, VolunteerProfile>();
@@ -2059,14 +2065,18 @@ const HistoryTab: React.FC<{
 
   const reloadHistory = () => {
     getPastTasks()
-      .then(setPastTasks)
+      .then((fetched) => {
+        const byId = new Map<string, VolunteerTask>();
+        [...fetched, ...recentPastTasks].forEach((task) => byId.set(task.id, task));
+        setPastTasks(Array.from(byId.values()).sort((a, b) => b.startDateTime.getTime() - a.startDateTime.getTime()));
+      })
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to load history.');
-        setPastTasks([]);
+        setPastTasks(recentPastTasks);
       });
   };
 
-  useEffect(reloadHistory, [setError]);
+  useEffect(reloadHistory, [setError, tasks]);
 
   // Group past tasks by event (eventId), standalone tasks under "Other tasks".
   const eventGroups = useMemo(() => {
