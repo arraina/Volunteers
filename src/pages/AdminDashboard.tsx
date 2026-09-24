@@ -67,6 +67,7 @@ import {
   subscribeAnnouncements,
   subscribeVolunteers,
   updateTaskStatusScoped,
+  updateTaskManagementFields,
   updateTaskManagementFieldsScoped,
   trashTaskScoped,
   restoreDeletedTaskBatch,
@@ -1966,12 +1967,84 @@ const AnnouncementsTab: React.FC<{ uid?: string; setError: (s: string) => void }
 // History tab (past events + tasks)
 // ---------------------------------------------------------------------------
 
+const OwnerHistoryTaskEditor: React.FC<{
+  task: VolunteerTask;
+  setError: (message: string) => void;
+  onSaved: () => void;
+}> = ({ task, setError, onSaved }) => {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState(() => taskEditValues(task));
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    const start = fromEasternDateTimeInput(form.startDateTime);
+    const end = form.endDateTime ? fromEasternDateTimeInput(form.endDateTime) : null;
+    const needed = Number.parseInt(form.volunteersNeeded, 10);
+    const startChanged = form.startDateTime !== toEasternDateTimeInput(task.startDateTime);
+    let reminders: number[];
+    try {
+      reminders = validateReminderHours(Array.from(new Set(form.reminderHoursBefore.split(',')
+        .map((value) => value.trim()).filter(Boolean).map(Number).filter(Number.isFinite)))
+        .sort((a, b) => b - a));
+      if (!form.title.trim() || Number.isNaN(start.getTime())) throw new Error('Task title and a valid start date/time are required.');
+      if (startChanged) assertTaskStartNotPast(start);
+      if (end && (Number.isNaN(end.getTime()) || end <= start)) throw new Error('End date/time must be after the start date/time.');
+      if (!Number.isFinite(needed) || needed < Math.max(1, task.assignedVolunteers.length)) {
+        throw new Error(`Volunteers needed must be at least ${Math.max(1, task.assignedVolunteers.length)}.`);
+      }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Please correct the task details.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await updateTaskManagementFields(task.id, {
+        title: form.title,
+        description: form.description,
+        ...(startChanged ? { startDateTime: start } : {}),
+        endDateTime: end,
+        location: form.location,
+        volunteersNeeded: needed,
+        reminderHoursBefore: reminders,
+        openForSignup: true,
+      });
+      setEditing(false);
+      onSaved();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to update the past task.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <>
+    <button className="secondary-btn" onClick={() => {
+      setForm(taskEditValues(task));
+      setEditing((value) => !value);
+    }}>{editing ? 'Close editor' : 'Edit Task'}</button>
+    {editing && <form className="task-edit-form" onSubmit={save}>
+      <label><span>Task title</span><input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
+      <label className="task-edit-wide"><span>Description</span><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+      <label><span>Start (Eastern Time — ET)</span><AutoCommitDateInput type="datetime-local" value={form.startDateTime} onValueChange={(value) => setForm({ ...form, startDateTime: value })} min={toEasternDateTimeInput(new Date())} required /><small className="field-hint">Choose a future time to return this task to the active task lists.</small></label>
+      <label><span>End (optional, Eastern Time — ET)</span><AutoCommitDateInput type="datetime-local" value={form.endDateTime} onValueChange={(value) => setForm({ ...form, endDateTime: value })} /></label>
+      <label><span>Location</span><input value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} /></label>
+      <label><span>Volunteers needed</span><input type="number" min={Math.max(1, task.assignedVolunteers.length)} value={form.volunteersNeeded} onChange={(event) => setForm({ ...form, volunteersNeeded: event.target.value })} required /></label>
+      <label className="task-edit-wide"><span>Reminder times (hours before the task)</span><input value={form.reminderHoursBefore} onChange={(event) => setForm({ ...form, reminderHoursBefore: event.target.value })} placeholder="48, 24" /></label>
+      <div className="task-edit-actions task-edit-wide"><button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button><button type="button" className="secondary-btn" onClick={() => setEditing(false)}>Cancel edit</button></div>
+    </form>}
+  </>;
+};
+
 const HistoryTab: React.FC<{
   volunteers: VolunteerProfile[];
   events: TempleEvent[];
   setError: (s: string) => void;
 }> = ({ volunteers, events, setError }) => {
   const [pastTasks, setPastTasks] = useState<VolunteerTask[] | null>(null);
+  const [message, setMessage] = useState('');
 
   const volunteerById = useMemo(() => {
     const map = new Map<string, VolunteerProfile>();
@@ -1979,14 +2052,16 @@ const HistoryTab: React.FC<{
     return map;
   }, [volunteers]);
 
-  useEffect(() => {
+  const reloadHistory = () => {
     getPastTasks()
       .then(setPastTasks)
       .catch((err) => {
         setError(err instanceof Error ? err.message : 'Failed to load history.');
         setPastTasks([]);
       });
-  }, [setError]);
+  };
+
+  useEffect(reloadHistory, [setError]);
 
   // Group past tasks by event (eventId), standalone tasks under "Other tasks".
   const eventGroups = useMemo(() => {
@@ -2036,6 +2111,8 @@ const HistoryTab: React.FC<{
     <section className="panel">
       <h2>Past events &amp; tasks</h2>
       <p className="muted small">Events and tasks whose date has already passed.</p>
+      <p className="muted small">Owners can correct an expired task and move it to a future date. Admins and Volunteers cannot change past task dates.</p>
+      {message && <div className="success-message">{message}</div>}
       {eventGroups.length === 0 && <p className="muted">No past events or tasks yet.</p>}
 
       <div className="task-list">
@@ -2070,6 +2147,14 @@ const HistoryTab: React.FC<{
                   ) : (
                     <p className="small muted">No volunteers were assigned.</p>
                   )}
+                  <OwnerHistoryTaskEditor
+                    task={task}
+                    setError={setError}
+                    onSaved={() => {
+                      setMessage('Task updated. If its new date is in the future, it is now shown under Tasks.');
+                      reloadHistory();
+                    }}
+                  />
                 </div>
               ))}
             </div>

@@ -219,12 +219,16 @@ service cloud.firestore {
       // Admins can update anything. Volunteers may only self-add/remove
       // themselves on the assignedVolunteers array of an open task.
       allow update: if ((isOwner()
-        || (isAdmin() && (
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
-            'deleted', 'deletedAt', 'deletedBy', 'deletedBatchId', 'deletedScope'
-          ])
-          || (resource.data.deleted != true && request.resource.data.deleted == true)
-        ))) && hasValidReminderSchedule() && keepsOrHasCurrentTaskStart())
+        || (isAdmin()
+          && (
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+              'deleted', 'deletedAt', 'deletedBy', 'deletedBatchId', 'deletedScope'
+            ])
+            || (resource.data.deleted != true && request.resource.data.deleted == true)
+          )
+          && (resource.data.startDateTime >= request.time
+            || request.resource.data.startDateTime == resource.data.startDateTime)))
+        && hasValidReminderSchedule() && keepsOrHasCurrentTaskStart())
         || volunteerMayUpdateOwnTask()
         || volunteerMayTrashOwnTask()
         || (verifiedUser() && (isSelfSignup() || isSelfWithdrawal()));
