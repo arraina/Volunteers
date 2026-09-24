@@ -419,6 +419,12 @@ const TasksTab: React.FC<{
   const [selfServiceMessage, setSelfServiceMessage] = useState('');
   const [eventRepeatMode, setEventRepeatMode] = useState<EventRepeatMode>('once');
   const [selectedEventDates, setSelectedEventDates] = useState<string[]>([]);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const volunteerById = useMemo(() => {
     const map = new Map<string, VolunteerProfile>();
@@ -432,9 +438,8 @@ const TasksTab: React.FC<{
   }, [view]);
 
   const activeTasks = useMemo(() => {
-    const now = new Date();
-    return tasks.filter((task) => (task.endDateTime || task.startDateTime) >= now);
-  }, [tasks]);
+    return tasks.filter((task) => task.startDateTime >= now);
+  }, [tasks, now]);
   const activeEvents = useMemo(() => {
     const now = new Date();
     return events.filter((event) => {
@@ -2080,7 +2085,7 @@ const HistoryTab: React.FC<{
       if (isPast) groups.set(event.id, { key: event.id, name: event.name, date: lastDate, tasks: [] });
     }
     for (const task of pastTasks) {
-      if ((task.endDateTime || task.startDateTime) >= now) continue;
+      if (task.startDateTime >= now) continue;
       const key = task.eventId || `__standalone__`;
       const name = task.eventId ? task.eventName || 'Event' : 'Other tasks';
       if (!groups.has(key)) {
