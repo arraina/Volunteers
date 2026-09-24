@@ -224,6 +224,18 @@ export async function assertVolunteerPhoneAvailable(phoneNumber: string, exclude
   await call({ phoneNumber: normalizedPhone, excludeUid });
 }
 
+export async function beginVolunteerSignup(
+  phoneNumber: string,
+  email: string
+): Promise<{ existingProfile: boolean; inviteSent?: boolean; recentlySent?: boolean }> {
+  const call = httpsCallable<
+    { phoneNumber: string; email: string },
+    { existingProfile: boolean; inviteSent?: boolean; recentlySent?: boolean }
+  >(functions, 'beginVolunteerSignup');
+  const result = await call({ phoneNumber: normalizePhoneNumber(phoneNumber, true), email: email.trim().toLowerCase() });
+  return result.data;
+}
+
 export interface PortalInviteSettings {
   enabled: boolean;
   templateName: string;

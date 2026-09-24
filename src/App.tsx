@@ -7,6 +7,7 @@ import VerifyEmail from './pages/VerifyEmail';
 import HelpCenter from './pages/HelpCenter';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import ClaimPortalInvite from './pages/ClaimPortalInvite';
+import ClaimLinkSent from './pages/ClaimLinkSent';
 import SharedTask from './pages/SharedTask';
 import { AuthProvider, useAuth } from './helpers/useAuth';
 import { isFirebaseConfigured } from './config/firebase';
@@ -75,6 +76,7 @@ function App() {
         <Routes>
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/claim" element={<ClaimPortalInvite />} />
+          <Route path="/claim-link-sent" element={<ClaimLinkSent />} />
           <Route
             path="/login"
             element={

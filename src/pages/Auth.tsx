@@ -5,12 +5,13 @@ import {
   deleteUser,
   sendEmailVerification,
   sendPasswordResetEmail,
+  signOut,
   signInWithEmailAndPassword,
   updateProfile,
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { getUserAdminRole } from '../helpers/types';
-import { assertVolunteerPhoneAvailable, createVolunteerProfile, getVolunteer, recordLoginAudit, updateVolunteer } from '../helpers/store';
+import { beginVolunteerSignup, createVolunteerProfile, getVolunteer, recordLoginAudit, updateVolunteer } from '../helpers/store';
 import { normalizePhoneNumber, validatePhoneNumber } from '../helpers/phone';
 import './Auth.css';
 
@@ -87,7 +88,12 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
       if (password.length < 6) throw new Error('Password must be at least 6 characters.');
       const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       try {
-        await assertVolunteerPhoneAvailable(phone);
+        const signup = await beginVolunteerSignup(phone, normalizedEmail);
+        if (signup.existingProfile) {
+          await signOut(auth).catch(() => undefined);
+          navigate('/claim-link-sent', { replace: true, state: { recentlySent: signup.recentlySent === true } });
+          return;
+        }
       } catch (phoneError) {
         await deleteUser(credential.user).catch(() => undefined);
         throw phoneError;

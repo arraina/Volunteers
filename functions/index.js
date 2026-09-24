@@ -80,6 +80,73 @@ exports.assertVolunteerPhoneAvailable = onCall({ region: 'us-central1', maxInsta
   return { available: true, phoneNumber };
 });
 
+exports.beginVolunteerSignup = onCall(
+  { region: 'us-central1', maxInstances: 2, secrets: [whatsappAccessToken] },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Start signup before checking the phone number.');
+    const phoneNumber = normalizePhone(request.data?.phoneNumber);
+    const email = String(request.data?.email || '').trim().toLowerCase();
+    if (!email || email !== String(request.auth.token.email || '').trim().toLowerCase()) {
+      throw new HttpsError('permission-denied', 'Signup email does not match the signed-in account.');
+    }
+
+    const matches = await db.collection('volunteers').where('phoneNumber', '==', phoneNumber).get();
+    const existing = matches.docs.find((snapshot) => snapshot.id !== request.auth.uid && snapshot.data().deleted !== true);
+    if (!existing) return { existingProfile: false };
+
+    const volunteer = existing.data();
+    if (volunteer.email) {
+      throw new HttpsError('already-exists', 'This phone number is already connected to an activated account. Use login or forgot password.');
+    }
+    if (volunteer.whatsappOptIn !== true || !volunteer.phoneNumber) {
+      throw new HttpsError('failed-precondition', 'This profile cannot receive a secure WhatsApp activation link. Ask the Owner for help.');
+    }
+
+    const lastSentAt = volunteer.invitationLastSentAt?.toMillis?.() || 0;
+    const recentlySent = Date.now() - lastSentAt < 2 * 60 * 1000;
+    if (!recentlySent) {
+      const token = randomBytes(32).toString('base64url');
+      const hash = tokenHash(token);
+      const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + PORTAL_INVITE_TTL_DAYS * 86400000);
+      const link = `${PORTAL_URL}?invite=${encodeURIComponent(token)}`;
+      let providerId;
+      try {
+        providerId = await sendPortalTemplate(volunteer.phoneNumber, [volunteer.firstName || volunteer.name || 'Volunteer', link]);
+      } catch (error) {
+        throw new HttpsError('unavailable', `The secure WhatsApp activation link could not be sent. ${String(error.message || error)}`);
+      }
+
+      const previousInvites = await db.collection('portalInvites').where('volunteerId', '==', existing.id).get();
+      const batch = db.batch();
+      previousInvites.docs.forEach((previous) => {
+        if (previous.data().status === 'active') {
+          batch.update(previous.ref, { status: 'revoked', revokedAt: admin.firestore.FieldValue.serverTimestamp() });
+        }
+      });
+      batch.set(db.doc(`portalInvites/${hash}`), {
+        volunteerId: existing.id, tokenHash: hash, status: 'active',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(), expiresAt,
+        sentBy: request.auth.uid, providerId,
+      });
+      batch.update(existing.ref, {
+        invitationStatus: 'sent', invitationFailureReason: admin.firestore.FieldValue.delete(),
+        invitationLastSentAt: admin.firestore.FieldValue.serverTimestamp(), invitationExpiresAt: expiresAt,
+        invitationSendCount: admin.firestore.FieldValue.increment(1), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      batch.set(db.collection('sentMessages').doc(), {
+        channel: 'whatsapp', type: 'portal_invitation', volunteerId: existing.id,
+        destination: volunteer.phoneNumber, templateName: PORTAL_INVITE_TEMPLATE,
+        providerId, status: 'accepted', sentAt: admin.firestore.FieldValue.serverTimestamp(),
+        acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      await batch.commit();
+    }
+
+    await admin.auth().deleteUser(request.auth.uid).catch(() => undefined);
+    return { existingProfile: true, inviteSent: !recentlySent, recentlySent };
+  }
+);
+
 exports.getVolunteerDirectory = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
   if (!request.auth || request.auth.token.email_verified !== true) {
     throw new HttpsError('unauthenticated', 'A verified portal account is required.');
