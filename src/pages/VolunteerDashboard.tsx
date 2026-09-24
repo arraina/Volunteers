@@ -526,7 +526,7 @@ const VolunteerTaskManagement: React.FC<{
           try { await trashOwnTask(task.id, profile.uid); setMessage('Task moved to Trash.'); }
           catch (err) { setError(err instanceof Error ? err.message : 'Could not delete the task.'); }
         }}>Delete task</button></div>
-        {task.assignedVolunteers.length > 0 && <div className="assigned-volunteer-list">{task.assignedVolunteers.map((id) => <div className="row" key={id}><span>{directoryById.get(id) || 'Assigned volunteer'}</span><button className="link-btn danger" disabled={Boolean(assignmentBusy)} onClick={() => changeAssignment(task, id, 'remove')}>Remove</button></div>)}</div>}
+        {task.assignedVolunteers.length > 0 && <div className="assigned-volunteer-list">{task.assignedVolunteers.map((id) => <div className="row" key={id}><span>{directoryById.get(id) || (id.startsWith('former_') ? 'Former volunteer' : 'Deleted volunteer')}</span><button className="link-btn danger" disabled={Boolean(assignmentBusy)} onClick={() => changeAssignment(task, id, 'remove')}>Remove</button></div>)}</div>}
       </div>)}</div>
     </section>
   </div>;

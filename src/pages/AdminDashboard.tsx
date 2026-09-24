@@ -1112,7 +1112,7 @@ const OccurrenceRow: React.FC<{
         <ul className="assigned-list">
           {task.assignedVolunteers.map((vid) => (
             <li key={vid}>
-              {volunteerById.get(vid)?.name || (vid.startsWith('former_') ? 'Former volunteer' : vid)}
+              {volunteerById.get(vid)?.name || (vid.startsWith('former_') ? 'Former volunteer' : 'Deleted volunteer')}
               {canManage && <button className="link-btn" onClick={() => onRemove(task, vid)}>
                 remove
               </button>}
@@ -2064,7 +2064,7 @@ const HistoryTab: React.FC<{
                     <p className="small muted">
                       Volunteers:{' '}
                       {task.assignedVolunteers
-                        .map((vid) => volunteerById.get(vid)?.name || (vid.startsWith('former_') ? 'Former volunteer' : 'Unknown'))
+                        .map((vid) => volunteerById.get(vid)?.name || (vid.startsWith('former_') ? 'Former volunteer' : 'Deleted volunteer'))
                         .join(', ')}
                     </p>
                   ) : (
