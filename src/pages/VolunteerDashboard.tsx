@@ -564,6 +564,8 @@ const ProfileTab: React.FC<{
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [availability, setAvailability] = useState<string[]>(profile.availability);
   const [prefs, setPrefs] = useState({ ...profile.notificationPrefs, email: true });
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const phoneValidation = validatePhoneNumber(phoneNumber);
   const toggle = (list: string[], value: string, setter: (v: string[]) => void) =>
     setter(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
@@ -571,6 +573,9 @@ const ProfileTab: React.FC<{
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setMessage('');
+    setSaveStatus(null);
+    setSaving(true);
     try {
       if (!firstName.trim() || !lastName.trim()) throw new Error('Name is required.');
       const normalizedPhone = normalizePhoneNumber(phoneNumber, true);
@@ -584,9 +589,14 @@ const ProfileTab: React.FC<{
       });
       sessionStorage.removeItem(`pendingPhone:${profile.uid}`);
       setMessage('Profile updated.');
+      setSaveStatus({ type: 'success', text: 'Profile saved successfully.' });
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save profile.');
+      const errorText = err instanceof Error ? err.message : 'Could not save profile.';
+      setError(errorText);
+      setSaveStatus({ type: 'error', text: errorText });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -669,8 +679,13 @@ const ProfileTab: React.FC<{
           task and service notifications. Your service history is preserved.
         </p>
 
-        <button type="submit" className="primary-btn" disabled={!phoneValidation.valid}>
-          Save Profile
+        {saveStatus && (
+          <div className={saveStatus.type === 'success' ? 'success-message' : 'error-message'} role="status">
+            {saveStatus.text}
+          </div>
+        )}
+        <button type="submit" className="primary-btn" disabled={!phoneValidation.valid || saving}>
+          {saving ? 'Saving…' : 'Save Profile'}
         </button>
       </form>
 

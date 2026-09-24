@@ -54,10 +54,10 @@ const ClaimPortalInvite: React.FC = () => {
           <p>Welcome, <strong>{preview.name}</strong>. Add your email and choose a password. Your existing task assignments will stay attached to this profile.</p>
           <p className="muted small">This link expires {new Date(preview.expiresAt).toLocaleString()} and can be used once.</p>
           <form className="auth-form" onSubmit={submit}>
-            <label>Email<input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-            <label>Password<input type="password" autoComplete="new-password" minLength={6} required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
-            <label>Confirm password<input type="password" autoComplete="new-password" minLength={6} required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} /></label>
-            <button className="primary-btn" disabled={loading}>{loading ? 'Activating…' : 'Activate my account'}</button>
+            <div className="form-group"><label htmlFor="claim-email">Email</label><input id="claim-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+            <div className="form-group"><label htmlFor="claim-password">Password</label><input id="claim-password" type="password" autoComplete="new-password" minLength={6} required value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+            <div className="form-group"><label htmlFor="claim-confirm-password">Confirm password</label><input id="claim-confirm-password" type="password" autoComplete="new-password" minLength={6} required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} /></div>
+            <button className="submit-btn" disabled={loading}>{loading ? 'Activating…' : 'Activate my account'}</button>
           </form>
         </>}
       </div>
