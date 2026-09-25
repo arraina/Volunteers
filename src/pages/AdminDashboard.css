@@ -61,7 +61,7 @@
 .fundraising-new-event-fields,
 .fundraising-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
   align-items: end;
 }
@@ -76,8 +76,18 @@
 .money-input input { min-width: 0; width: 100%; border: 0 !important; box-shadow: none !important; }
 
 .fundraising-current-card { display: grid; gap: 0.2rem; color: #fff; background: linear-gradient(135deg, #6d28d9, #a855f7) !important; border: 0 !important; }
-.fundraising-current-card strong { font-size: clamp(1.6rem, 4vw, 2.4rem); }
-.fundraising-current-card small { color: rgba(255,255,255,0.86); }
+.fundraising-target-card { display: grid; gap: 0.2rem; color: #fff; background: linear-gradient(135deg, #166534, #22a447) !important; border: 0 !important; }
+.fundraising-current-card strong,
+.fundraising-target-card strong { font-size: clamp(1.6rem, 4vw, 2.4rem); }
+.fundraising-current-card small,
+.fundraising-target-card small { color: rgba(255,255,255,0.86); }
+
+.fundraising-settings { display: grid; gap: 1rem; }
+.fundraising-settings-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 1rem; align-items: start; }
+.fundraising-settings-grid label { display: grid; gap: 0.4rem; font-weight: 700; }
+.fundraising-settings-grid small { color: var(--muted); font-weight: 400; }
+.fundraising-settings .fundraising-event-select select { border: 1px solid var(--line); background: #fbfefb; }
+.fundraising-new-event { padding-top: 1rem; border-top: 1px solid var(--line); }
 
 .fundraising-progress-card { padding: 1.35rem; border: 1px solid #b7e0c0; border-radius: 18px; background: linear-gradient(145deg, #f6fff7, #ecf8ef); box-shadow: var(--shadow); }
 .fundraising-progress-card.goal-reached { border-color: #f4c84a; background: linear-gradient(145deg, #fffbea, #f3ffe9); }
@@ -102,6 +112,7 @@
   .fundraising-event-select { min-width: 0; width: 100%; }
   .fundraising-new-event-fields,
   .fundraising-metrics { grid-template-columns: 1fr; }
+  .fundraising-settings-grid { grid-template-columns: 1fr; }
   .fundraising-progress-heading { align-items: flex-start; flex-direction: column; }
   .fundraising-entry-header { display: none; }
   .fundraising-entry-row { grid-template-columns: 1fr; }

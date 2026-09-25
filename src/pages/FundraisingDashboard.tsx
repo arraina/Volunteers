@@ -102,25 +102,11 @@ const FundraisingDashboard: React.FC<{
         <h2>{selectedEvent?.name || 'Choose an event'}</h2>
         <p>Track donations and pledges against the event goal in real time.</p>
       </div>
-      <label className="fundraising-event-select"><span>Fundraising event</span><select value={eventId} onChange={(event) => {
-        const value = event.target.value;
-        setEventId(value); setCreatingEvent(value === '__new__'); setMessage('');
-      }}><option value="">Select an event…</option>{events.map((event) => <option value={event.id} key={event.id}>{event.name}</option>)}<option value="__new__">+ Create a new event</option></select></label>
     </section>
-
-    {creatingEvent && <section className="panel fundraising-new-event">
-      <h3>Create a new fundraising event</h3>
-      <div className="fundraising-new-event-fields">
-        <label><span>Event name</span><input value={newEventName} onChange={(event) => setNewEventName(event.target.value)} placeholder="Event name" /></label>
-        <label><span>Event date (optional)</span><AutoCommitDateInput type="date" value={newEventDate} onValueChange={setNewEventDate} /></label>
-        <button className="primary-btn" disabled={saving} onClick={createNewEvent}>Create event</button>
-      </div>
-    </section>}
 
     {eventId && eventId !== '__new__' && <>
       <section className="fundraising-metrics">
-        <label><span>Target</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={target} onChange={(event) => setTarget(event.target.value)} /></div></label>
-        <label><span>Current before entries</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={startingCurrent} onChange={(event) => setStartingCurrent(event.target.value)} /></div><small>Use this for funds collected before this list.</small></label>
+        <div className="fundraising-target-card"><span>Target</span><strong>{money.format(targetAmount)}</strong><small>Fundraising goal</small></div>
         <div className="fundraising-current-card"><span>Current total</span><strong>{money.format(current)}</strong><small>{percent >= 100 ? `${money.format(current - targetAmount)} above target` : `${money.format(remaining)} remaining`}</small></div>
       </section>
 
@@ -142,10 +128,32 @@ const FundraisingDashboard: React.FC<{
           <button className="link-btn danger" aria-label={`Remove row ${index + 1}`} onClick={() => setEntries((currentEntries) => currentEntries.length === 1 ? [blankEntry()] : currentEntries.filter((item) => item.id !== entry.id))}>Remove</button>
         </div>)}
         <div className="fundraising-entry-total"><span>Listed donations and pledges</span><strong>{money.format(entryTotal)}</strong></div>
-        {message && <div className="success-message">{message}</div>}
-        <button className="primary-btn fundraising-save" disabled={saving || loading} onClick={save}>{saving ? 'Saving…' : loading ? 'Loading…' : 'Save fundraising dashboard'}</button>
       </section>
     </>}
+
+    <section className="panel fundraising-settings">
+      <div className="panel-head"><div><h3>Fundraising setup</h3><p className="muted small">Choose the event and maintain the amounts used by the dashboard.</p></div></div>
+      <div className="fundraising-settings-grid">
+        <label className="fundraising-event-select"><span>Fundraising event</span><select value={eventId} onChange={(event) => {
+          const value = event.target.value;
+          setEventId(value); setCreatingEvent(value === '__new__'); setMessage('');
+        }}><option value="">Select an event…</option>{events.map((event) => <option value={event.id} key={event.id}>{event.name}</option>)}<option value="__new__">+ Create a new event</option></select></label>
+        {eventId && eventId !== '__new__' && <>
+          <label><span>Target</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={target} onChange={(event) => setTarget(event.target.value)} /></div></label>
+          <label><span>Current before entries</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={startingCurrent} onChange={(event) => setStartingCurrent(event.target.value)} /></div><small>Funds collected before the list above.</small></label>
+        </>}
+      </div>
+      {creatingEvent && <div className="fundraising-new-event">
+        <h3>Create a new fundraising event</h3>
+        <div className="fundraising-new-event-fields">
+          <label><span>Event name</span><input value={newEventName} onChange={(event) => setNewEventName(event.target.value)} placeholder="Event name" /></label>
+          <label><span>Event date (optional)</span><AutoCommitDateInput type="date" value={newEventDate} onValueChange={setNewEventDate} /></label>
+          <button className="primary-btn" disabled={saving} onClick={createNewEvent}>Create event</button>
+        </div>
+      </div>}
+      {message && <div className="success-message">{message}</div>}
+      {eventId && eventId !== '__new__' && <button className="primary-btn fundraising-save" disabled={saving || loading} onClick={save}>{saving ? 'Saving…' : loading ? 'Loading…' : 'Save fundraising dashboard'}</button>}
+    </section>
   </div>;
 };
 
