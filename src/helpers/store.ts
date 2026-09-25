@@ -54,6 +54,7 @@ export interface FundraisingEntry {
   id: string;
   firstName: string;
   lastName: string;
+  type: 'pledge' | 'loan' | 'donation';
   amount: number;
 }
 
@@ -80,6 +81,7 @@ export function subscribeFundraisingCampaign(
         id: String(entry.id || ''),
         firstName: String(entry.firstName || ''),
         lastName: String(entry.lastName || ''),
+        type: ['pledge', 'loan', 'donation'].includes(entry.type) ? entry.type : 'donation',
         amount: Number(entry.amount) || 0,
       })) : [],
       updatedBy: data.updatedBy || undefined,
@@ -96,6 +98,7 @@ export async function saveFundraisingCampaign(campaign: FundraisingCampaign): Pr
       id: entry.id,
       firstName: entry.firstName.trim(),
       lastName: entry.lastName.trim(),
+      type: entry.type,
       amount: Math.max(0, entry.amount),
     })),
     updatedBy: campaign.updatedBy || null,
