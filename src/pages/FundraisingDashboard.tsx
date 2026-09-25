@@ -125,7 +125,7 @@ const FundraisingDashboard: React.FC<{
       </section>
 
       <section className={`fundraising-progress-card ${percent >= 100 ? 'goal-reached' : ''}`}>
-        <div className="fundraising-progress-heading"><div><span>Campaign progress</span><strong>{Math.round(percent)}%</strong></div><span>{money.format(current)} of {money.format(targetAmount)}</span></div>
+        <div className="fundraising-progress-heading"><div><span>Progress</span><strong>{Math.round(percent)}%</strong></div><span>{money.format(current)} of {money.format(targetAmount)}</span></div>
         <div className="fundraising-track" role="progressbar" aria-valuemin={0} aria-valuemax={Math.max(targetAmount, current)} aria-valuenow={current}>
           <div className="fundraising-fill" style={{ width: `${Math.min(100, percent)}%` }} />
         </div>
