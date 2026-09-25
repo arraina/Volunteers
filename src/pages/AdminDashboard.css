@@ -48,7 +48,7 @@
   padding: 1.5rem;
   border-radius: 18px;
   color: #fff;
-  background: linear-gradient(135deg, #164e3b 0%, #2f8f46 55%, #69b93f 100%);
+  background: linear-gradient(135deg, #123c32 0%, #24784b 58%, #65a93f 100%);
   box-shadow: 0 14px 34px rgba(22, 78, 59, 0.2);
 }
 
@@ -75,8 +75,8 @@
 .money-input > span { padding-left: 0.8rem; color: var(--green-700); font-weight: 800; }
 .money-input input { min-width: 0; width: 100%; border: 0 !important; box-shadow: none !important; }
 
-.fundraising-current-card { display: grid; gap: 0.2rem; color: #fff; background: linear-gradient(135deg, #6d28d9, #a855f7) !important; border: 0 !important; }
-.fundraising-target-card { display: grid; gap: 0.2rem; color: #fff; background: linear-gradient(135deg, #166534, #22a447) !important; border: 0 !important; }
+.fundraising-current-card { display: grid; gap: 0.2rem; color: #fff; background: linear-gradient(135deg, #1e4f9a, #6541c7) !important; border: 0 !important; }
+.fundraising-target-card { display: grid; gap: 0.2rem; color: #fff; background: linear-gradient(135deg, #8a4512, #bd7218) !important; border: 0 !important; }
 .fundraising-current-card strong,
 .fundraising-target-card strong { font-size: clamp(1.6rem, 4vw, 2.4rem); }
 .fundraising-current-card small,
