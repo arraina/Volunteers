@@ -10,7 +10,7 @@ import {
 import { fromEasternDateTimeInput } from '../helpers/taskDateTime';
 
 const blankEntry = (): FundraisingEntry => ({
-  id: crypto.randomUUID(), firstName: '', lastName: '', type: 'donation', amount: 0,
+  id: crypto.randomUUID(), firstName: '', lastName: '', type: 'donation', amount: 0, comments: '',
 });
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -120,7 +120,7 @@ const FundraisingDashboard: React.FC<{
 
       <section className="panel fundraising-entries">
         <div className="panel-head"><div><h3>Pledges, loans, and donations</h3><p className="muted small">Each completed row contributes immediately to the live total.</p></div><button className="secondary-btn" onClick={() => setEntries((currentEntries) => [...currentEntries, blankEntry()])}>+ Add row</button></div>
-        <div className="fundraising-entry-header"><span>First name</span><span>Last name</span><span>Type</span><span>Amount</span><span /></div>
+        <div className="fundraising-entry-header"><span>First name</span><span>Last name</span><span>Type</span><span>Amount</span><span>Comments</span><span /></div>
         {entries.map((entry, index) => <div className="fundraising-entry-row" key={entry.id}>
           <input aria-label={`First name row ${index + 1}`} value={entry.firstName} onChange={(event) => updateEntry(entry.id, { firstName: event.target.value })} placeholder="First name" />
           <input aria-label={`Last name row ${index + 1}`} value={entry.lastName} onChange={(event) => updateEntry(entry.id, { lastName: event.target.value })} placeholder="Last name" />
@@ -130,6 +130,7 @@ const FundraisingDashboard: React.FC<{
             <option value="donation">Donation</option>
           </select>
           <div className="money-input"><span>$</span><input aria-label={`Amount row ${index + 1}`} type="number" min="0" step="0.01" value={entry.amount || ''} onChange={(event) => updateEntry(entry.id, { amount: Math.max(0, Number(event.target.value) || 0) })} placeholder="0.00" /></div>
+          <input aria-label={`Comments row ${index + 1}`} value={entry.comments} onChange={(event) => updateEntry(entry.id, { comments: event.target.value })} placeholder="Comments" />
           <button className="link-btn danger" aria-label={`Remove row ${index + 1}`} onClick={() => setEntries((currentEntries) => currentEntries.length === 1 ? [blankEntry()] : currentEntries.filter((item) => item.id !== entry.id))}>Remove</button>
         </div>)}
         <div className="fundraising-entry-total"><span>Listed pledges, loans, and donations</span><strong>{money.format(entryTotal)}</strong></div>
