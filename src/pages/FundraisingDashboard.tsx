@@ -136,6 +136,8 @@ const FundraisingDashboard: React.FC<{
       </section>
     </>}
 
+    {eventId && eventId !== '__new__' && <button className="primary-btn fundraising-save" disabled={saving || loading} onClick={save}>{saving ? 'Saving…' : loading ? 'Loading…' : 'Save fundraising dashboard'}</button>}
+
     <section className="panel fundraising-settings">
       <div className="panel-head"><div><h3>Fundraising setup</h3><p className="muted small">Choose the event and maintain the amounts used by the dashboard.</p></div></div>
       <div className="fundraising-settings-grid">
@@ -157,7 +159,6 @@ const FundraisingDashboard: React.FC<{
         </div>
       </div>}
       {message && <div className="success-message">{message}</div>}
-      {eventId && eventId !== '__new__' && <button className="primary-btn fundraising-save" disabled={saving || loading} onClick={save}>{saving ? 'Saving…' : loading ? 'Loading…' : 'Save fundraising dashboard'}</button>}
     </section>
   </div>;
 };
