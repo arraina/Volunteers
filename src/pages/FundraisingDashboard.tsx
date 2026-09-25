@@ -100,7 +100,6 @@ const FundraisingDashboard: React.FC<{
       <div>
         <p className="fundraising-kicker">Fundraising dashboard</p>
         <h2>{selectedEvent?.name || 'Choose an event'}</h2>
-        <p>Track pledges, loans, and donations against the event goal in real time.</p>
       </div>
     </section>
 
