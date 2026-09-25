@@ -40,6 +40,7 @@ import './VolunteerDashboard.css';
 import EventFeedback from './EventFeedback';
 import EventCalendar from './EventCalendar';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
+import ReminderDeliveryNotice from '../components/ReminderDeliveryNotice';
 
 type Tab = 'open' | 'mine' | 'create' | 'calendar' | 'past' | 'feedback' | 'profile';
 const VOLUNTEER_TABS: Tab[] = ['open', 'mine', 'create', 'calendar', 'past', 'feedback', 'profile'];
@@ -507,6 +508,7 @@ const VolunteerTaskManagement: React.FC<{
         <input placeholder="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
         <label><span>Volunteers needed</span><input type="number" min="1" required value={form.volunteersNeeded} onChange={(e) => setForm({ ...form, volunteersNeeded: e.target.value })} /></label>
         <label><span>One reminder (hours before task)</span><input type="number" min="1" step="1" required value={form.reminderHoursBefore} onChange={(e) => setForm({ ...form, reminderHoursBefore: e.target.value })} /></label>
+        <ReminderDeliveryNotice startValue={form.startDateTime} reminderValue={form.reminderHoursBefore} />
         <button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : editingTaskId ? 'Save Changes' : 'Publish Task'}</button>
         {editingTaskId && <button type="button" className="secondary-btn" onClick={() => { setEditingTaskId(''); setForm(emptyCreatorForm); }}>Cancel editing</button>}
       </form>
@@ -517,6 +519,7 @@ const VolunteerTaskManagement: React.FC<{
       <div className="task-list">{createdTasks.map((task) => <div className="task-card" key={task.id}>
         <div className="task-card-head"><div><h3>{task.title}</h3><p className="muted">{formatDate(task.startDateTime)}{task.location ? ` · ${task.location}` : ''}</p></div><span>{task.assignedVolunteers.length}/{task.volunteersNeeded}</span></div>
         <p className="muted small">Reminder: {task.reminderHoursBefore[0]} hour(s) before</p>
+        <ReminderDeliveryNotice startValue={toEasternDateTimeInput(task.startDateTime)} reminderValue={String(task.reminderHoursBefore[0] || 24)} />
         <label><span>Assign a volunteer</span><select value={assignmentChoice[task.id] || ''} onChange={(e) => setAssignmentChoice({ ...assignmentChoice, [task.id]: e.target.value })}>
           <option value="">Choose volunteer…</option>{directory.filter((item) => !task.assignedVolunteers.includes(item.uid)).map((item) => <option key={item.uid} value={item.uid}>{item.name}</option>)}
         </select></label>

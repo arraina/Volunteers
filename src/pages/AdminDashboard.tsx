@@ -86,6 +86,7 @@ import AICreateTab from './AICreate';
 import EventWorkspace from './EventWorkspace';
 import EventCalendar from './EventCalendar';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
+import ReminderDeliveryNotice from '../components/ReminderDeliveryNotice';
 import { assertTaskStartNotPast, fromEasternDateTimeInput, toEasternDateTimeInput } from '../helpers/taskDateTime';
 import { normalizePhoneNumber } from '../helpers/phone';
 import './AdminDashboard.css';
@@ -792,6 +793,7 @@ const TasksTab: React.FC<{
             onChange={(e) => setForm({ ...form, reminderHoursBefore: e.target.value })}
           />
           <small className="field-hint">One reminder may be any positive number of hours before the task. If you set two reminders, they must be at least 24 hours apart. Sample formats: 2 or 48, 24.</small>
+          <ReminderDeliveryNotice startValue={form.startDateTime} reminderValue={form.reminderHoursBefore} />
           <button type="submit" disabled={saving} className="primary-btn">
             {saving ? 'Saving…' : 'Create Task'}
           </button>
@@ -1114,6 +1116,10 @@ const OccurrenceRow: React.FC<{
       <p className="small muted">
         {task.assignedVolunteers.length}/{task.volunteersNeeded} filled · {openSlots(task)} open
       </p>
+      {canManage && <ReminderDeliveryNotice
+        startValue={toEasternDateTimeInput(task.startDateTime)}
+        reminderValue={task.reminderHoursBefore.join(', ')}
+      />}
       {task.assignedVolunteers.length > 0 && (
         <ul className="assigned-list">
           {task.assignedVolunteers.map((vid) => (
@@ -1134,6 +1140,7 @@ const OccurrenceRow: React.FC<{
         <label><span>Location</span><input value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} /></label>
         <label><span>Volunteers needed</span><input type="number" min={Math.max(1, task.assignedVolunteers.length)} value={editForm.volunteersNeeded} onChange={(e) => setEditForm({ ...editForm, volunteersNeeded: e.target.value })} required /></label>
         <label className="task-edit-wide"><span>Reminder times (hours before the task)</span><input value={editForm.reminderHoursBefore} onChange={(e) => setEditForm({ ...editForm, reminderHoursBefore: e.target.value })} placeholder="48, 24" /><small className="field-hint">One reminder may be any positive number of hours before the task. If you set two reminders, they must be at least 24 hours apart. Sample formats: 2 or 48, 24.</small></label>
+        <div className="task-edit-wide"><ReminderDeliveryNotice startValue={editForm.startDateTime} reminderValue={editForm.reminderHoursBefore} /></div>
         <div className="task-edit-actions task-edit-wide"><button className="primary-btn" disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</button><button type="button" className="secondary-btn" onClick={() => { setEditForm(taskEditValues(task)); setEditing(false); }}>Cancel edit</button></div>
       </form>}
       <div className="task-actions">
@@ -2038,6 +2045,7 @@ const OwnerHistoryTaskEditor: React.FC<{
       <label><span>Location</span><input value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} /></label>
       <label><span>Volunteers needed</span><input type="number" min={Math.max(1, task.assignedVolunteers.length)} value={form.volunteersNeeded} onChange={(event) => setForm({ ...form, volunteersNeeded: event.target.value })} required /></label>
       <label className="task-edit-wide"><span>Reminder times (hours before the task)</span><input value={form.reminderHoursBefore} onChange={(event) => setForm({ ...form, reminderHoursBefore: event.target.value })} placeholder="48, 24" /></label>
+      <div className="task-edit-wide"><ReminderDeliveryNotice startValue={form.startDateTime} reminderValue={form.reminderHoursBefore} /></div>
       <div className="task-edit-actions task-edit-wide"><button className="primary-btn" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button><button type="button" className="secondary-btn" onClick={() => setEditing(false)}>Cancel edit</button></div>
     </form>}
   </>;

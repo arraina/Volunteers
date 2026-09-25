@@ -17,6 +17,7 @@ import {
   updateTaskStatus,
 } from '../helpers/store';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
+import ReminderDeliveryNotice from '../components/ReminderDeliveryNotice';
 import { assertTaskStartNotPast, fromEasternDateTimeInput, toEasternDateTimeInput } from '../helpers/taskDateTime';
 
 interface EditableTask extends ParsedTask {
@@ -392,6 +393,7 @@ const AICreateTab: React.FC<Props> = ({ uid, events, tasks: existingTasks, volun
                     />
                   </div>
                 </div>
+                <ReminderDeliveryNotice startValue={t.startDateTime} reminderValue="24" />
               </div>
             ))}
           </div>

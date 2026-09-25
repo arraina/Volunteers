@@ -5,6 +5,7 @@
 
 const admin = require('firebase-admin');
 const { sendWhatsApp, sendEmail } = require('./channels');
+const { adjustedReminderTime, isQuietHours } = require('./quiet-hours');
 
 const toDate = (ts) => (ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null);
 
@@ -145,8 +146,19 @@ async function runReminderSender() {
     const reminderHours = limitedReminderHours(task.reminderHoursBefore);
     const assigned = Array.isArray(task.assignedVolunteers) ? task.assignedVolunteers : [];
 
-    for (const hours of reminderHours) {
-      const dueAt = new Date(start.getTime() - hours * 3600 * 1000);
+    const deliveryTimes = new Set();
+    const reminderSchedule = reminderHours.map((hours) => {
+      const requestedAt = new Date(start.getTime() - hours * 3600 * 1000);
+      return { hours, ...adjustedReminderTime(requestedAt, start) };
+    }).filter((item) => {
+      const key = item.deliveryAt.getTime();
+      if (deliveryTimes.has(key)) return false;
+      deliveryTimes.add(key);
+      return true;
+    });
+
+    for (const schedule of reminderSchedule) {
+      const { hours, requestedAt, deliveryAt: dueAt, adjusted, reason: adjustmentReason } = schedule;
       // Fire when we've passed dueAt but not more than LOOKBACK_MS ago, and the
       // task hasn't already started.
       const inWindow = now >= dueAt && now.getTime() - dueAt.getTime() <= LOOKBACK_MS;
@@ -186,6 +198,8 @@ async function runReminderSender() {
         if (whatsappEnabled && volunteer.phoneNumber) {
           const skipReason = whatsappPaused
             ? 'WhatsApp globally paused by Owner'
+            : isQuietHours(now)
+              ? 'No permitted WhatsApp delivery window before the task'
             : whatsappSentToday >= DAILY_WHATSAPP_LIMIT
               ? `Daily WhatsApp limit of ${DAILY_WHATSAPP_LIMIT} reached`
               : '';
@@ -220,6 +234,10 @@ async function runReminderSender() {
             providerId: r.id || null,
             failureReason: r.ok || skipped ? null : r.error || 'unknown',
             skipReason: skipped ? r.skipReason : null,
+            requestedDueAt: admin.firestore.Timestamp.fromDate(requestedAt),
+            adjustedDueAt: admin.firestore.Timestamp.fromDate(dueAt),
+            quietHoursAdjusted: adjusted,
+            quietHoursAdjustmentReason: adjustmentReason,
             // Current direct-Meta North America utility estimate. Storing the
             // applied rate keeps historical monthly totals stable if rates change.
             billingCategory: r.channel === 'whatsapp' ? 'utility' : null,
@@ -247,6 +265,10 @@ async function runReminderSender() {
           taskId: task.id,
           volunteerId,
           hours,
+          requestedDueAt: admin.firestore.Timestamp.fromDate(requestedAt),
+          adjustedDueAt: admin.firestore.Timestamp.fromDate(dueAt),
+          quietHoursAdjusted: adjusted,
+          quietHoursAdjustmentReason: adjustmentReason,
           processedAt: admin.firestore.FieldValue.serverTimestamp(),
           channels: results.map((r) => ({ channel: r.channel, ok: r.ok })),
         });

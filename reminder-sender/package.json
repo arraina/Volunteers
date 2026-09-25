@@ -8,7 +8,8 @@
     "node": "22"
   },
   "scripts": {
-    "send": "node cli.js"
+    "send": "node cli.js",
+    "test": "node --test --test-isolation=none quiet-hours.test.js"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0",

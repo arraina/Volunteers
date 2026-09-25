@@ -18,6 +18,23 @@
   margin: 0;
 }
 
+.reminder-delivery-notice {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem 0.85rem;
+  border-left: 4px solid #d97706;
+  border-radius: 6px;
+  background: #fffbeb;
+  color: #78350f;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.reminder-delivery-notice ul {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+}
+
 .dashboard-header p {
   margin: 0;
   opacity: 0.8;
