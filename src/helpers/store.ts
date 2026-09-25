@@ -50,6 +50,59 @@ import {
   firestoreTimestampToDate,
 } from './types';
 
+export interface FundraisingEntry {
+  id: string;
+  firstName: string;
+  lastName: string;
+  amount: number;
+}
+
+export interface FundraisingCampaign {
+  eventId: string;
+  targetAmount: number;
+  startingCurrentAmount: number;
+  entries: FundraisingEntry[];
+  updatedBy?: string;
+}
+
+export function subscribeFundraisingCampaign(
+  eventId: string,
+  cb: (campaign: FundraisingCampaign | null) => void
+) {
+  return onSnapshot(doc(db, 'fundraisingCampaigns', eventId), (snapshot) => {
+    if (!snapshot.exists()) return cb(null);
+    const data = snapshot.data();
+    cb({
+      eventId,
+      targetAmount: Number(data.targetAmount) || 0,
+      startingCurrentAmount: Number(data.startingCurrentAmount) || 0,
+      entries: Array.isArray(data.entries) ? data.entries.map((entry: any) => ({
+        id: String(entry.id || ''),
+        firstName: String(entry.firstName || ''),
+        lastName: String(entry.lastName || ''),
+        amount: Number(entry.amount) || 0,
+      })) : [],
+      updatedBy: data.updatedBy || undefined,
+    });
+  });
+}
+
+export async function saveFundraisingCampaign(campaign: FundraisingCampaign): Promise<void> {
+  await setDoc(doc(db, 'fundraisingCampaigns', campaign.eventId), {
+    eventId: campaign.eventId,
+    targetAmount: Math.max(0, campaign.targetAmount),
+    startingCurrentAmount: Math.max(0, campaign.startingCurrentAmount),
+    entries: campaign.entries.map((entry) => ({
+      id: entry.id,
+      firstName: entry.firstName.trim(),
+      lastName: entry.lastName.trim(),
+      amount: Math.max(0, entry.amount),
+    })),
+    updatedBy: campaign.updatedBy || null,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
 // ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------

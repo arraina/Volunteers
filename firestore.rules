@@ -340,6 +340,21 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    // One fundraising campaign per event. Admins and the Owner collaborate on
+    // targets, starting totals, and donor/pledge rows.
+    match /fundraisingCampaigns/{eventId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin()
+        && request.resource.data.eventId == eventId
+        && request.resource.data.targetAmount is number
+        && request.resource.data.targetAmount >= 0
+        && request.resource.data.startingCurrentAmount is number
+        && request.resource.data.startingCurrentAmount >= 0
+        && request.resource.data.entries is list
+        && request.resource.data.entries.size() <= 1000;
+      allow delete: if isOwner();
+    }
+
     // Successful-login audit records are append-only. A user can record only
     // their own verified login; only the Owner can view the audit history.
     match /auditLogs/{id} {
