@@ -55,6 +55,7 @@ const FundraisingDashboard: React.FC<{
   const percent = targetAmount > 0 ? current / targetAmount * 100 : 0;
   const remaining = Math.max(0, targetAmount - current);
   const selectedEvent = events.find((event) => event.id === eventId);
+  const visibleContributions = entries.filter((entry) => entry.firstName.trim() || entry.lastName.trim() || entry.amount > 0);
 
   const updateEntry = (id: string, patch: Partial<FundraisingEntry>) => {
     setEntries((currentEntries) => currentEntries.map((entry) => entry.id === id ? { ...entry, ...patch } : entry));
@@ -108,17 +109,33 @@ const FundraisingDashboard: React.FC<{
     </section>
 
     {eventId && eventId !== '__new__' && <>
-      <section className="fundraising-metrics">
-        <div className="fundraising-target-card"><span>Target</span><strong>{money.format(targetAmount)}</strong><small>Fundraising goal</small></div>
-        <div className="fundraising-current-card"><span>Current total</span><strong>{money.format(current)}</strong><small>{percent >= 100 ? `${money.format(current - targetAmount)} above target` : `${money.format(remaining)} remaining`}</small></div>
-      </section>
-
-      <section className={`fundraising-progress-card ${percent >= 100 ? 'goal-reached' : ''}`}>
-        <div className="fundraising-progress-heading"><div><span>Progress</span><strong>{Math.round(percent)}%</strong></div><span>{money.format(current)} of {money.format(targetAmount)}</span></div>
-        <div className="fundraising-track" role="progressbar" aria-valuemin={0} aria-valuemax={Math.max(targetAmount, current)} aria-valuenow={current}>
-          <div className="fundraising-fill" style={{ width: `${Math.min(100, percent)}%` }} />
+      <section className={`fundraising-display-board ${percent >= 100 ? 'goal-reached' : ''}`}>
+        <div className="fundraising-contribution-board">
+          <div className="fundraising-board-label">Supporters</div>
+          <div className="fundraising-supporter-list">
+            {visibleContributions.length ? visibleContributions.map((entry) => <div className="fundraising-supporter" key={entry.id}>
+              <span><strong>{[entry.firstName, entry.lastName].filter(Boolean).join(' ') || 'Anonymous'}</strong><small>{entry.type}</small></span>
+              <b>{money.format(entry.amount)}</b>
+            </div>) : <p className="fundraising-empty-supporters">Add pledges, loans, or donations below to see supporters here.</p>}
+          </div>
         </div>
-        {percent >= 100 && <div className="fundraising-celebration">🎉 Goal reached{percent > 100 ? ` — ${Math.round(percent - 100)}% beyond target!` : '!'}</div>}
+
+        <div className="fundraising-goal-meter" role="progressbar" aria-label="Fundraising progress" aria-valuemin={0} aria-valuemax={Math.max(targetAmount, current)} aria-valuenow={current}>
+          <div className="fundraising-meter-scale"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div>
+          <div className="fundraising-meter-track">
+            <div className="fundraising-meter-fill" style={{ height: `${Math.min(100, percent)}%` }} />
+            <strong>{Math.round(percent)}%</strong>
+          </div>
+          <span className="fundraising-meter-caption">Goal progress</span>
+        </div>
+
+        <div className="fundraising-scorecards">
+          <div><span>Target</span><strong>{money.format(targetAmount)}</strong></div>
+          <div><span>Current</span><strong>{money.format(current)}</strong><small>{percent >= 100 ? `${money.format(current - targetAmount)} above goal` : `${money.format(remaining)} to go`}</small></div>
+          <div><span>Progress</span><strong>{Math.round(percent)}%</strong></div>
+          <div><span>Contributors</span><strong>{visibleContributions.length}</strong></div>
+        </div>
+        {percent >= 100 && <div className="fundraising-board-celebration">Goal reached!</div>}
       </section>
 
       <section className="panel fundraising-entries">
