@@ -155,6 +155,7 @@
 .fundraising-entry-row > select { width: 100%; min-width: 0; }
 .fundraising-entry-total { display: flex; justify-content: flex-end; gap: 1rem; padding: 0.8rem 0; font-size: 1.05rem; }
 .fundraising-entry-total strong { color: var(--green-700); }
+.fundraising-entry-footer { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; }
 .fundraising-save { width: 100%; }
 
 @media (max-width: 760px) {
@@ -168,6 +169,8 @@
   .fundraising-entry-row { grid-template-columns: 1fr; }
   .fundraising-entry-row .link-btn { justify-self: start; }
   .fundraising-entry-total { justify-content: space-between; }
+  .fundraising-entry-footer { align-items: stretch; flex-direction: column; }
+  .fundraising-entry-footer .secondary-btn { width: 100%; }
   .fundraising-display-board { grid-template-columns: 1fr; min-height: 0; padding: 0.9rem; }
   .fundraising-contribution-board { order: 2; }
   .fundraising-supporter-list { max-height: 20rem; }

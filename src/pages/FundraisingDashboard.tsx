@@ -151,7 +151,7 @@ const FundraisingDashboard: React.FC<{
       </section>
 
       <section className="panel fundraising-entries">
-        <div className="panel-head"><div><h3>Pledges, loans, and donations</h3><p className="muted small">First name, type, and an amount greater than zero are required. Last name and comments are optional.</p></div><button className="secondary-btn" onClick={() => setEntries((currentEntries) => [...currentEntries, blankEntry()])}>+ Add row</button></div>
+        <div className="panel-head"><div><h3>Pledges, loans, and donations</h3><p className="muted small">First name, type, and an amount greater than zero are required. Last name and comments are optional.</p></div></div>
         {entryValidationMessage && <div className="fundraising-validation-message" role="alert"><strong>Unable to save:</strong> {entryValidationMessage}</div>}
         <div className="fundraising-entry-header"><span>First name *</span><span>Last name (optional)</span><span>Type *</span><span>Amount *</span><span>Comments (optional)</span><span /></div>
         {entries.map((entry, index) => <div className={`fundraising-entry-row ${invalidEntryIds.includes(entry.id) ? 'has-error' : ''}`} key={entry.id}>
@@ -166,7 +166,10 @@ const FundraisingDashboard: React.FC<{
           <input aria-label={`Comments row ${index + 1}`} value={entry.comments} onChange={(event) => updateEntry(entry.id, { comments: event.target.value })} placeholder="Comments" />
           <button className="link-btn danger" aria-label={`Remove row ${index + 1}`} onClick={() => { setEntries((currentEntries) => currentEntries.length === 1 ? [blankEntry()] : currentEntries.filter((item) => item.id !== entry.id)); setInvalidEntryIds((currentIds) => currentIds.filter((entryId) => entryId !== entry.id)); setEntryValidationMessage(''); }}>Remove</button>
         </div>)}
-        <div className="fundraising-entry-total"><span>Listed pledges, loans, and donations</span><strong>{money.format(entryTotal)}</strong></div>
+        <div className="fundraising-entry-footer">
+          <div className="fundraising-entry-total"><span>Listed pledges, loans, and donations</span><strong>{money.format(entryTotal)}</strong></div>
+          <button className="secondary-btn" onClick={() => setEntries((currentEntries) => [...currentEntries, blankEntry()])}>+ Add row</button>
+        </div>
       </section>
     </>}
 
