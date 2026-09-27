@@ -24,6 +24,7 @@ const FundraisingDashboard: React.FC<{
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [newEventName, setNewEventName] = useState('');
   const [newEventDate, setNewEventDate] = useState('');
+  const [dashboardName, setDashboardName] = useState('');
   const [target, setTarget] = useState('0');
   const [startingCurrent, setStartingCurrent] = useState('0');
   const [entries, setEntries] = useState<FundraisingEntry[]>([blankEntry()]);
@@ -39,6 +40,8 @@ const FundraisingDashboard: React.FC<{
     if (!eventId || eventId === '__new__') return;
     setLoading(true);
     return subscribeFundraisingCampaign(eventId, (campaign) => {
+      const linkedEventName = events.find((event) => event.id === eventId)?.name || '';
+      setDashboardName(campaign?.dashboardName || linkedEventName);
       setTarget(String(campaign?.targetAmount || 0));
       setStartingCurrent(String(campaign?.startingCurrentAmount || 0));
       setEntries(campaign?.entries.length ? campaign.entries : [blankEntry()]);
@@ -60,6 +63,7 @@ const FundraisingDashboard: React.FC<{
 
   const save = async () => {
     if (!eventId || eventId === '__new__') return setError('Select or create an event first.');
+    if (!dashboardName.trim()) return setError('Enter a fundraising dashboard name.');
     if (targetAmount <= 0) return setError('Enter a fundraising target greater than zero.');
     const cleanEntries = entries.filter((entry) => entry.firstName.trim() || entry.lastName.trim() || entry.amount > 0);
     if (cleanEntries.some((entry) => !entry.firstName.trim() || !entry.lastName.trim() || entry.amount <= 0)) {
@@ -68,7 +72,7 @@ const FundraisingDashboard: React.FC<{
     setSaving(true); setError(''); setMessage('');
     try {
       await saveFundraisingCampaign({
-        eventId, targetAmount, startingCurrentAmount: Math.max(0, Number(startingCurrent) || 0),
+        eventId, dashboardName: dashboardName.trim(), targetAmount, startingCurrentAmount: Math.max(0, Number(startingCurrent) || 0),
         entries: cleanEntries, updatedBy: uid,
       });
       setEntries(cleanEntries.length ? cleanEntries : [blankEntry()]);
@@ -99,7 +103,7 @@ const FundraisingDashboard: React.FC<{
     <section className="fundraising-hero">
       <div>
         <p className="fundraising-kicker">Fundraising dashboard</p>
-        <h2>{selectedEvent?.name || 'Choose an event'}</h2>
+        <h2>{dashboardName || selectedEvent?.name || 'Choose an event'}</h2>
       </div>
     </section>
 
@@ -146,6 +150,7 @@ const FundraisingDashboard: React.FC<{
           setEventId(value); setCreatingEvent(value === '__new__'); setMessage('');
         }}><option value="">Select an event…</option>{events.map((event) => <option value={event.id} key={event.id}>{event.name}</option>)}<option value="__new__">+ Create a new event</option></select></label>
         {eventId && eventId !== '__new__' && <>
+          <label><span>Dashboard name</span><input value={dashboardName} onChange={(event) => { setDashboardName(event.target.value); setMessage(''); }} placeholder="Fundraising dashboard name" /></label>
           <label><span>Target</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={target} onChange={(event) => setTarget(event.target.value)} /></div></label>
           <label><span>Current before entries</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={startingCurrent} onChange={(event) => setStartingCurrent(event.target.value)} /></div><small>Funds collected before the list above.</small></label>
         </>}
