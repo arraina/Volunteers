@@ -31,6 +31,8 @@ const FundraisingDashboard: React.FC<{
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [entryValidationMessage, setEntryValidationMessage] = useState('');
+  const [invalidEntryIds, setInvalidEntryIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!eventId && events.length) setEventId(events[0].id);
@@ -59,6 +61,8 @@ const FundraisingDashboard: React.FC<{
 
   const updateEntry = (id: string, patch: Partial<FundraisingEntry>) => {
     setEntries((currentEntries) => currentEntries.map((entry) => entry.id === id ? { ...entry, ...patch } : entry));
+    setInvalidEntryIds((currentIds) => currentIds.filter((entryId) => entryId !== id));
+    setEntryValidationMessage('');
     setMessage('');
   };
 
@@ -67,9 +71,17 @@ const FundraisingDashboard: React.FC<{
     if (!dashboardName.trim()) return setError('Enter a fundraising dashboard name.');
     if (targetAmount <= 0) return setError('Enter a fundraising target greater than zero.');
     const cleanEntries = entries.filter((entry) => entry.firstName.trim() || entry.lastName.trim() || entry.amount > 0);
-    if (cleanEntries.some((entry) => !entry.firstName.trim() || !entry.lastName.trim() || entry.amount <= 0)) {
-      return setError('Each entry row must include first name, last name, a type, and an amount greater than zero.');
+    const invalidEntries = cleanEntries.map((entry) => ({
+      entry,
+      rowNumber: entries.findIndex((candidate) => candidate.id === entry.id) + 1,
+      missing: [!entry.firstName.trim() ? 'first name' : '', entry.amount <= 0 ? 'amount greater than zero' : ''].filter(Boolean),
+    })).filter(({ missing }) => missing.length > 0);
+    if (invalidEntries.length) {
+      setInvalidEntryIds(invalidEntries.map(({ entry }) => entry.id));
+      setEntryValidationMessage(invalidEntries.map(({ rowNumber, missing }) => `Row ${rowNumber}: enter ${missing.join(' and ')}.`).join(' '));
+      return setError('Please correct the highlighted fundraising entries before saving.');
     }
+    setInvalidEntryIds([]); setEntryValidationMessage('');
     setSaving(true); setError(''); setMessage('');
     try {
       await saveFundraisingCampaign({
@@ -139,19 +151,20 @@ const FundraisingDashboard: React.FC<{
       </section>
 
       <section className="panel fundraising-entries">
-        <div className="panel-head"><div><h3>Pledges, loans, and donations</h3><p className="muted small">Each completed row contributes immediately to the live total.</p></div><button className="secondary-btn" onClick={() => setEntries((currentEntries) => [...currentEntries, blankEntry()])}>+ Add row</button></div>
-        <div className="fundraising-entry-header"><span>First name</span><span>Last name</span><span>Type</span><span>Amount</span><span>Comments</span><span /></div>
-        {entries.map((entry, index) => <div className="fundraising-entry-row" key={entry.id}>
-          <input aria-label={`First name row ${index + 1}`} value={entry.firstName} onChange={(event) => updateEntry(entry.id, { firstName: event.target.value })} placeholder="First name" />
-          <input aria-label={`Last name row ${index + 1}`} value={entry.lastName} onChange={(event) => updateEntry(entry.id, { lastName: event.target.value })} placeholder="Last name" />
+        <div className="panel-head"><div><h3>Pledges, loans, and donations</h3><p className="muted small">First name, type, and an amount greater than zero are required. Last name and comments are optional.</p></div><button className="secondary-btn" onClick={() => setEntries((currentEntries) => [...currentEntries, blankEntry()])}>+ Add row</button></div>
+        {entryValidationMessage && <div className="fundraising-validation-message" role="alert"><strong>Unable to save:</strong> {entryValidationMessage}</div>}
+        <div className="fundraising-entry-header"><span>First name *</span><span>Last name (optional)</span><span>Type *</span><span>Amount *</span><span>Comments (optional)</span><span /></div>
+        {entries.map((entry, index) => <div className={`fundraising-entry-row ${invalidEntryIds.includes(entry.id) ? 'has-error' : ''}`} key={entry.id}>
+          <input aria-label={`First name row ${index + 1}`} aria-invalid={invalidEntryIds.includes(entry.id) && !entry.firstName.trim()} value={entry.firstName} onChange={(event) => updateEntry(entry.id, { firstName: event.target.value })} placeholder="First name *" />
+          <input aria-label={`Last name row ${index + 1}`} value={entry.lastName} onChange={(event) => updateEntry(entry.id, { lastName: event.target.value })} placeholder="Last name (optional)" />
           <select aria-label={`Type row ${index + 1}`} value={entry.type} onChange={(event) => updateEntry(entry.id, { type: event.target.value as FundraisingEntry['type'] })}>
             <option value="pledge">Pledge</option>
             <option value="loan">Loan</option>
             <option value="donation">Donation</option>
           </select>
-          <div className="money-input"><span>$</span><input aria-label={`Amount row ${index + 1}`} type="number" min="0" step="0.01" value={entry.amount || ''} onChange={(event) => updateEntry(entry.id, { amount: Math.max(0, Number(event.target.value) || 0) })} placeholder="0.00" /></div>
+          <div className="money-input"><span>$</span><input aria-label={`Amount row ${index + 1}`} aria-invalid={invalidEntryIds.includes(entry.id) && entry.amount <= 0} type="number" min="0.01" step="0.01" value={entry.amount || ''} onChange={(event) => updateEntry(entry.id, { amount: Math.max(0, Number(event.target.value) || 0) })} placeholder="0.00 *" /></div>
           <input aria-label={`Comments row ${index + 1}`} value={entry.comments} onChange={(event) => updateEntry(entry.id, { comments: event.target.value })} placeholder="Comments" />
-          <button className="link-btn danger" aria-label={`Remove row ${index + 1}`} onClick={() => setEntries((currentEntries) => currentEntries.length === 1 ? [blankEntry()] : currentEntries.filter((item) => item.id !== entry.id))}>Remove</button>
+          <button className="link-btn danger" aria-label={`Remove row ${index + 1}`} onClick={() => { setEntries((currentEntries) => currentEntries.length === 1 ? [blankEntry()] : currentEntries.filter((item) => item.id !== entry.id)); setInvalidEntryIds((currentIds) => currentIds.filter((entryId) => entryId !== entry.id)); setEntryValidationMessage(''); }}>Remove</button>
         </div>)}
         <div className="fundraising-entry-total"><span>Listed pledges, loans, and donations</span><strong>{money.format(entryTotal)}</strong></div>
       </section>
