@@ -112,6 +112,35 @@ const FundraisingDashboard: React.FC<{
     } finally { setSaving(false); }
   };
 
+  const exportToExcel = () => {
+    if (!eventId || eventId === '__new__') return setError('Select an event before exporting.');
+    const csvCell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
+    const exportEntries = entries.filter((entry) => entry.firstName.trim() || entry.lastName.trim() || entry.amount > 0 || entry.comments.trim());
+    const rows: Array<Array<string | number>> = [
+      ['Fundraising dashboard', dashboardName || selectedEvent?.name || ''],
+      ['Linked event', selectedEvent?.name || ''],
+      ['Target', targetAmount],
+      ['Current before entries', Math.max(0, Number(startingCurrent) || 0)],
+      ['Listed entry total', entryTotal],
+      ['Current total', current],
+      ['Progress', `${Math.round(percent)}%`],
+      [],
+      ['First name', 'Last name', 'Type', 'Amount', 'Comments'],
+      ...exportEntries.map((entry) => [entry.firstName, entry.lastName, entry.type, entry.amount, entry.comments]),
+    ];
+    const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`;
+    const fileNameBase = (dashboardName || selectedEvent?.name || 'fundraising-dashboard')
+      .replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'fundraising-dashboard';
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${fileNameBase}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return <div className="fundraising-dashboard">
     <section className="fundraising-hero">
       <div>
@@ -198,6 +227,7 @@ const FundraisingDashboard: React.FC<{
       </div>}
       {message && <div className="success-message">{message}</div>}
     </section>
+    {eventId && eventId !== '__new__' && <button className="secondary-btn fundraising-export" onClick={exportToExcel}>Export all data to Excel</button>}
   </div>;
 };
 

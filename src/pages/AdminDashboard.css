@@ -157,6 +157,7 @@
 .fundraising-entry-total strong { color: var(--green-700); }
 .fundraising-entry-footer { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; }
 .fundraising-save { width: 100%; }
+.fundraising-export { justify-self: stretch; width: 100%; }
 
 @media (max-width: 760px) {
   .fundraising-hero { align-items: stretch; flex-direction: column; }
