@@ -106,14 +106,14 @@
   background: linear-gradient(90deg, #7d320d, #b45f16 45%, #7d320d);
   box-shadow: 0 8px 20px rgba(112, 52, 10, 0.2);
 }
-.fundraising-donor-ticker-track { display: flex; width: max-content; animation: fundraising-ticker-scroll 40s linear infinite; }
+.fundraising-donor-ticker-track { display: flex; width: max-content; animation: fundraising-ticker-scroll 65s linear infinite; }
 .fundraising-donor-ticker-track.is-empty { animation: none; }
 .fundraising-donor-ticker:hover .fundraising-donor-ticker-track { animation-play-state: paused; }
-.fundraising-donor-ticker-group { display: flex; align-items: center; flex-shrink: 0; gap: 2.5rem; padding: 0.7rem 1.25rem; }
+.fundraising-donor-ticker-group { display: flex; align-items: center; flex-shrink: 0; gap: 2.75rem; padding: 0.85rem 1.25rem; }
 .fundraising-donor-ticker-group span { display: flex; align-items: center; gap: 0.55rem; white-space: nowrap; }
 .fundraising-donor-ticker-group span::before { content: '◆'; color: #ffe36b; font-size: 0.62rem; }
-.fundraising-donor-ticker-group strong { font-size: 0.92rem; }
-.fundraising-donor-ticker-group b { color: #ffe36b; font-size: 0.92rem; }
+.fundraising-donor-ticker-group strong { font-size: 1.15rem; }
+.fundraising-donor-ticker-group b { color: #ffe36b; font-size: 1.15rem; }
 @keyframes fundraising-ticker-scroll { to { transform: translateX(-50%); } }
 
 .fundraising-display-board {
