@@ -150,14 +150,24 @@ const FundraisingDashboard: React.FC<{
     </section>
 
     {eventId && eventId !== '__new__' && <>
+      <section className="fundraising-donor-ticker" aria-label="Donor names and amounts">
+        <div className={`fundraising-donor-ticker-track ${visibleContributions.length ? '' : 'is-empty'}`}>
+          <div className="fundraising-donor-ticker-group">
+            {visibleContributions.length ? visibleContributions.map((entry) => <span key={`primary-${entry.id}`}><strong>{[entry.firstName, entry.lastName].filter(Boolean).join(' ') || 'Anonymous'}</strong><b>{money.format(entry.amount)}</b></span>) : <span><strong>Donors will appear here as entries are added</strong></span>}
+          </div>
+          {visibleContributions.length > 0 && <div className="fundraising-donor-ticker-group" aria-hidden="true">
+            {visibleContributions.map((entry) => <span key={`repeat-${entry.id}`}><strong>{[entry.firstName, entry.lastName].filter(Boolean).join(' ') || 'Anonymous'}</strong><b>{money.format(entry.amount)}</b></span>)}
+          </div>}
+        </div>
+      </section>
       <section className={`fundraising-display-board ${percent >= 100 ? 'goal-reached' : ''}`}>
         <div className="fundraising-contribution-board">
-          <div className="fundraising-board-label">Supporters</div>
+          <div className="fundraising-board-label">Donors</div>
           <div className="fundraising-supporter-list">
             {visibleContributions.length ? visibleContributions.map((entry) => <div className="fundraising-supporter" key={entry.id}>
               <span><strong>{[entry.firstName, entry.lastName].filter(Boolean).join(' ') || 'Anonymous'}</strong><small>{entry.type}</small></span>
               <b>{money.format(entry.amount)}</b>
-            </div>) : <p className="fundraising-empty-supporters">Add pledges, loans, or donations below to see supporters here.</p>}
+            </div>) : <p className="fundraising-empty-supporters">Add pledges, loans, or donations below to see donors here.</p>}
           </div>
         </div>
 
@@ -174,7 +184,7 @@ const FundraisingDashboard: React.FC<{
           <div><span>Target</span><strong>{money.format(targetAmount)}</strong></div>
           <div><span>Current</span><strong>{money.format(current)}</strong><small>{percent >= 100 ? `${money.format(current - targetAmount)} above goal` : `${money.format(remaining)} to go`}</small></div>
           <div><span>Progress</span><strong>{Math.round(percent)}%</strong></div>
-          <div><span>Contributors</span><strong>{visibleContributions.length}</strong></div>
+          <div><span>Donors</span><strong>{visibleContributions.length}</strong></div>
         </div>
         {percent >= 100 && <div className="fundraising-board-celebration">Goal reached!</div>}
       </section>
