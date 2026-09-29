@@ -33,6 +33,7 @@ const FundraisingDashboard: React.FC<{
   const [message, setMessage] = useState('');
   const [entryValidationMessage, setEntryValidationMessage] = useState('');
   const [invalidEntryIds, setInvalidEntryIds] = useState<string[]>([]);
+  const [spotlightCycle, setSpotlightCycle] = useState(0);
 
   useEffect(() => {
     if (!eventId && events.length) setEventId(events[0].id);
@@ -58,6 +59,19 @@ const FundraisingDashboard: React.FC<{
   const remaining = Math.max(0, targetAmount - current);
   const selectedEvent = events.find((event) => event.id === eventId);
   const visibleContributions = entries.filter((entry) => entry.firstName.trim() || entry.lastName.trim() || entry.amount > 0);
+  const spotlightDonors = visibleContributions.filter((entry) => entry.amount >= 50000);
+  const spotlightSignature = spotlightDonors.map((entry) => `${entry.id}:${entry.amount}:${entry.firstName}:${entry.lastName}`).join('|');
+
+  useEffect(() => {
+    setSpotlightCycle(0);
+    if (!spotlightDonors.length) return;
+    const timer = window.setInterval(() => {
+      setSpotlightCycle((current) => current + 1);
+    }, 12000);
+    return () => window.clearInterval(timer);
+  // The signature resets the sequence when a qualifying donor's displayed data changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spotlightSignature]);
 
   const updateEntry = (id: string, patch: Partial<FundraisingEntry>) => {
     setEntries((currentEntries) => currentEntries.map((entry) => entry.id === id ? { ...entry, ...patch } : entry));
@@ -161,6 +175,11 @@ const FundraisingDashboard: React.FC<{
         </div>
       </section>
       <section className={`fundraising-display-board ${percent >= 100 ? 'goal-reached' : ''}`}>
+        {spotlightDonors.length > 0 && <div className="fundraising-donor-spotlight" key={`${spotlightDonors[spotlightCycle % spotlightDonors.length].id}-${spotlightCycle}`} aria-live="polite">
+          <span>Donor spotlight</span>
+          <strong>{[spotlightDonors[spotlightCycle % spotlightDonors.length].firstName, spotlightDonors[spotlightCycle % spotlightDonors.length].lastName].filter(Boolean).join(' ') || 'Anonymous'}</strong>
+          <b>{money.format(spotlightDonors[spotlightCycle % spotlightDonors.length].amount)}</b>
+        </div>}
         <div className="fundraising-contribution-board">
           <div className="fundraising-board-label">Donors</div>
           <div className="fundraising-supporter-list">
