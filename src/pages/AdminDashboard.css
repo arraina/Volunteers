@@ -106,7 +106,7 @@
   background: linear-gradient(90deg, #7d320d, #b45f16 45%, #7d320d);
   box-shadow: 0 8px 20px rgba(112, 52, 10, 0.2);
 }
-.fundraising-donor-ticker-track { display: flex; width: max-content; animation: fundraising-ticker-scroll 65s linear infinite; }
+.fundraising-donor-ticker-track { display: flex; width: max-content; animation: fundraising-ticker-scroll 130s linear infinite; }
 .fundraising-donor-ticker-track.is-empty { animation: none; }
 .fundraising-donor-ticker:hover .fundraising-donor-ticker-track { animation-play-state: paused; }
 .fundraising-donor-ticker-group { display: flex; align-items: center; flex-shrink: 0; gap: 2.75rem; padding: 0.85rem 1.25rem; }
