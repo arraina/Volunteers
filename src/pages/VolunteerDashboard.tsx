@@ -419,7 +419,7 @@ const VolunteerDashboard: React.FC = () => {
           </section>
         )}
         {tab === 'feedback' && (
-          <EventFeedback profile={profile} tasks={tasks} setError={setError} setMessage={setMessage} />
+          <EventFeedback profile={profile} tasks={[...historicalTasks, ...tasks]} events={events} setError={setError} setMessage={setMessage} />
         )}
       </div>
     </div>

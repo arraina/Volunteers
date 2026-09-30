@@ -243,7 +243,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'feedback', title: 'Event feedback and lessons learned', category: 'Events', roles: ['everyone'],
     summary: 'Collect free-flowing feedback and turn it into improvements.',
     sections: [
-      { heading: 'Volunteer feedback', text: 'Open Event Feedback, choose the relevant event, and enter free-flowing comments about what worked, what did not, and ideas for next time. Feedback can be submitted once per volunteer per event and updated.' },
+      { heading: 'Volunteer feedback', text: 'Open Event Feedback and choose a past event, including events no longer shown in current planning lists. Enter comments about what worked, what did not, and ideas for next time. Feedback can be submitted once per volunteer per event and updated.' },
       { heading: 'Admin review', text: 'Admins review responses in the event workspace, summarize lessons, and save improvements to carry into the next event or template.' },
     ], keywords: ['feedback', 'comments', 'lessons', 'improvements', 'event'],
   },
