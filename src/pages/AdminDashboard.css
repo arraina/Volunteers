@@ -176,10 +176,35 @@
   box-shadow: 0 18px 50px rgba(0,0,0,0.5), 0 0 38px rgba(255,227,107,0.42);
   text-align: center;
   pointer-events: none;
+  isolation: isolate;
   animation: fundraising-donor-pop 6s ease-in-out both;
 }
+.fundraising-donor-spotlight::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  left: 50%;
+  bottom: 45%;
+  width: min(54rem, 150vw);
+  height: min(38rem, 68vh);
+  transform: translateX(-50%);
+  clip-path: polygon(47% 0, 53% 0, 91% 100%, 9% 100%);
+  background: linear-gradient(to bottom, rgba(255,247,181,0.08), rgba(255,227,107,0.48));
+  filter: blur(7px);
+  animation: fundraising-spotlight-beam 6s ease-in-out both;
+}
+.fundraising-donor-spotlight::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  inset: -4rem -6rem;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255,238,139,0.42), rgba(255,211,67,0.09) 46%, transparent 72%);
+  animation: fundraising-spotlight-glow 1.3s ease-in-out infinite alternate;
+}
+.fundraising-donor-spotlight > * { position: relative; z-index: 1; }
 .fundraising-donor-spotlight span { color: #ffeaa0; font-size: 0.78rem; font-weight: 900; letter-spacing: 0.16em; text-transform: uppercase; }
-.fundraising-donor-spotlight strong { margin-top: 0.2rem; font-size: clamp(2rem, 5vw, 4.25rem); line-height: 1.05; text-wrap: balance; }
+.fundraising-donor-spotlight strong { margin-top: 0.2rem; color: transparent; background: linear-gradient(100deg, #fff7bd 12%, #fff 38%, #ffd83d 52%, #fff 66%, #fff7bd 88%); background-size: 250% 100%; background-clip: text; -webkit-background-clip: text; font-size: clamp(2rem, 5vw, 4.25rem); line-height: 1.05; text-wrap: balance; text-shadow: 0 0 24px rgba(255,234,130,0.28); animation: fundraising-name-shine 2s linear infinite; }
 .fundraising-donor-spotlight b { margin-top: 0.35rem; color: #ffe36b; font-size: clamp(1.5rem, 3vw, 2.6rem); }
 @keyframes fundraising-donor-pop {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(0.55); }
@@ -187,6 +212,12 @@
   20%, 68% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -50%) scale(0.92); }
 }
+@keyframes fundraising-spotlight-beam {
+  0%, 100% { opacity: 0; transform: translateX(-50%) scaleX(0.45); }
+  14%, 70% { opacity: 1; transform: translateX(-50%) scaleX(1); }
+}
+@keyframes fundraising-spotlight-glow { from { opacity: 0.55; transform: scale(0.94); } to { opacity: 1; transform: scale(1.06); } }
+@keyframes fundraising-name-shine { to { background-position: -250% 0; } }
 
 .fundraising-entry-header,
 .fundraising-entry-row { display: grid; grid-template-columns: 1fr 1fr minmax(7rem, 0.65fr) minmax(8rem, 0.75fr) minmax(12rem, 1.25fr) auto; gap: 0.75rem; align-items: center; }
@@ -232,6 +263,9 @@
   .fundraising-donor-ticker-track { animation: none; }
   .fundraising-donor-ticker-group[aria-hidden="true"] { display: none; }
   .fundraising-donor-spotlight { animation: fundraising-donor-fade 6s ease-in-out both; }
+  .fundraising-donor-spotlight::before,
+  .fundraising-donor-spotlight::after,
+  .fundraising-donor-spotlight strong { animation: none; }
 }
 
 @keyframes fundraising-donor-fade {

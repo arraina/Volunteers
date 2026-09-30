@@ -59,7 +59,7 @@ const FundraisingDashboard: React.FC<{
   const remaining = Math.max(0, targetAmount - current);
   const selectedEvent = events.find((event) => event.id === eventId);
   const visibleContributions = entries.filter((entry) => entry.firstName.trim() || entry.lastName.trim() || entry.amount > 0);
-  const spotlightDonors = visibleContributions.filter((entry) => entry.amount >= 50000);
+  const spotlightDonors = visibleContributions.filter((entry) => entry.amount >= 15000);
   const spotlightSignature = spotlightDonors.map((entry) => `${entry.id}:${entry.amount}:${entry.firstName}:${entry.lastName}`).join('|');
 
   useEffect(() => {
@@ -67,7 +67,7 @@ const FundraisingDashboard: React.FC<{
     if (!spotlightDonors.length) return;
     const timer = window.setInterval(() => {
       setSpotlightCycle((current) => current + 1);
-    }, 12000);
+    }, 24000);
     return () => window.clearInterval(timer);
   // The signature resets the sequence when a qualifying donor's displayed data changes.
   }, [spotlightSignature]);
