@@ -233,6 +233,14 @@
 .fundraising-entry-footer { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; }
 .fundraising-save { width: 100%; }
 .fundraising-export { justify-self: stretch; width: 100%; }
+.fundraising-bottom-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+
+.fundraising-readonly-page { min-height: 100vh; padding: clamp(0.8rem, 2vw, 1.5rem); background: var(--bg); }
+.fundraising-readonly-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; max-width: 120rem; margin: 0 auto 1rem; padding: 0.75rem 1rem; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: var(--shadow); }
+.fundraising-readonly-toolbar > div { display: grid; gap: 0.1rem; }
+.fundraising-readonly-toolbar span { color: var(--muted); font-size: 0.78rem; }
+.fundraising-readonly-page > .fundraising-dashboard,
+.fundraising-readonly-page > .panel { max-width: 120rem; margin-inline: auto; }
 
 @media (max-width: 760px) {
   .fundraising-hero { align-items: stretch; flex-direction: column; }
@@ -247,6 +255,8 @@
   .fundraising-entry-total { justify-content: space-between; }
   .fundraising-entry-footer { align-items: stretch; flex-direction: column; }
   .fundraising-entry-footer .secondary-btn { width: 100%; }
+  .fundraising-bottom-actions { grid-template-columns: 1fr; }
+  .fundraising-readonly-toolbar { align-items: stretch; flex-direction: column; }
   .fundraising-display-board { grid-template-columns: 1fr; min-height: 0; padding: 0.9rem; }
   .fundraising-contribution-board { order: 2; }
   .fundraising-supporter-list { max-height: 20rem; }

@@ -9,6 +9,7 @@ import PrivacyPolicy from './pages/PrivacyPolicy';
 import ClaimPortalInvite from './pages/ClaimPortalInvite';
 import ClaimLinkSent from './pages/ClaimLinkSent';
 import SharedTask from './pages/SharedTask';
+import SharedFundraisingDashboard from './pages/SharedFundraisingDashboard';
 import { AuthProvider, useAuth } from './helpers/useAuth';
 import { isFirebaseConfigured } from './config/firebase';
 import './App.css';
@@ -112,6 +113,7 @@ function App() {
           />
           <Route path="/help" element={<Protected><HelpCenter /></Protected>} />
           <Route path="/task/:taskId" element={<Protected><SharedTask /></Protected>} />
+          <Route path="/fundraising/:eventId" element={<Protected><SharedFundraisingDashboard /></Protected>} />
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

@@ -8,6 +8,7 @@ import {
   subscribeFundraisingCampaign,
 } from '../helpers/store';
 import { fromEasternDateTimeInput } from '../helpers/taskDateTime';
+import { copyFundraisingShareUrl } from '../helpers/fundraisingShare';
 
 const blankEntry = (): FundraisingEntry => ({
   id: crypto.randomUUID(), firstName: '', lastName: '', type: 'donation', amount: 0, comments: '',
@@ -268,7 +269,17 @@ const FundraisingDashboard: React.FC<{
       </div>}
       {message && <div className="success-message">{message}</div>}
     </section>
-    {eventId && eventId !== '__new__' && <button className="secondary-btn fundraising-export" onClick={exportToExcel}>Export all data to Excel</button>}
+    {eventId && eventId !== '__new__' && <div className="fundraising-bottom-actions">
+      <button className="secondary-btn fundraising-export" onClick={exportToExcel}>Export all data to Excel</button>
+      <button className="secondary-btn fundraising-export" onClick={async () => {
+        try {
+          await copyFundraisingShareUrl(eventId);
+          setMessage('Read-only dashboard link copied. Anyone with a verified app account can open it.');
+        } catch {
+          setError('Could not copy the read-only dashboard link.');
+        }
+      }}>Copy read-only dashboard link</button>
+    </div>}
   </div>;
 };
 
