@@ -14,6 +14,7 @@ const blankEntry = (): FundraisingEntry => ({
 });
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+const SPOTLIGHT_DISPLAY_SECONDS = 6;
 
 const FundraisingDashboard: React.FC<{
   events: TempleEvent[];
@@ -25,6 +26,8 @@ const FundraisingDashboard: React.FC<{
   const [newEventName, setNewEventName] = useState('');
   const [newEventDate, setNewEventDate] = useState('');
   const [dashboardName, setDashboardName] = useState('');
+  const [spotlightThreshold, setSpotlightThreshold] = useState('15000');
+  const [spotlightGapSeconds, setSpotlightGapSeconds] = useState('18');
   const [target, setTarget] = useState('0');
   const [startingCurrent, setStartingCurrent] = useState('0');
   const [entries, setEntries] = useState<FundraisingEntry[]>([blankEntry()]);
@@ -45,6 +48,8 @@ const FundraisingDashboard: React.FC<{
     return subscribeFundraisingCampaign(eventId, (campaign) => {
       const linkedEventName = events.find((event) => event.id === eventId)?.name || '';
       setDashboardName(campaign?.dashboardName || linkedEventName);
+      setSpotlightThreshold(String(campaign?.spotlightThreshold || 15000));
+      setSpotlightGapSeconds(String(campaign?.spotlightGapSeconds ?? 18));
       setTarget(String(campaign?.targetAmount || 0));
       setStartingCurrent(String(campaign?.startingCurrentAmount || 0));
       setEntries(campaign?.entries.length ? campaign.entries : [blankEntry()]);
@@ -59,7 +64,9 @@ const FundraisingDashboard: React.FC<{
   const remaining = Math.max(0, targetAmount - current);
   const selectedEvent = events.find((event) => event.id === eventId);
   const visibleContributions = entries.filter((entry) => entry.firstName.trim() || entry.lastName.trim() || entry.amount > 0);
-  const spotlightDonors = visibleContributions.filter((entry) => entry.amount >= 15000);
+  const spotlightThresholdAmount = Math.max(0, Number(spotlightThreshold) || 0);
+  const spotlightGap = Math.max(0, Number(spotlightGapSeconds) || 0);
+  const spotlightDonors = visibleContributions.filter((entry) => spotlightThresholdAmount > 0 && entry.amount >= spotlightThresholdAmount);
   const spotlightSignature = spotlightDonors.map((entry) => `${entry.id}:${entry.amount}:${entry.firstName}:${entry.lastName}`).join('|');
 
   useEffect(() => {
@@ -67,10 +74,10 @@ const FundraisingDashboard: React.FC<{
     if (!spotlightDonors.length) return;
     const timer = window.setInterval(() => {
       setSpotlightCycle((current) => current + 1);
-    }, 24000);
+    }, (SPOTLIGHT_DISPLAY_SECONDS + spotlightGap) * 1000);
     return () => window.clearInterval(timer);
   // The signature resets the sequence when a qualifying donor's displayed data changes.
-  }, [spotlightSignature]);
+  }, [spotlightSignature, spotlightGap]);
 
   const updateEntry = (id: string, patch: Partial<FundraisingEntry>) => {
     setEntries((currentEntries) => currentEntries.map((entry) => entry.id === id ? { ...entry, ...patch } : entry));
@@ -82,6 +89,7 @@ const FundraisingDashboard: React.FC<{
   const save = async () => {
     if (!eventId || eventId === '__new__') return setError('Select or create an event first.');
     if (!dashboardName.trim()) return setError('Enter a fundraising dashboard name.');
+    if (spotlightThresholdAmount <= 0) return setError('Enter a spotlight threshold greater than zero.');
     if (targetAmount <= 0) return setError('Enter a fundraising target greater than zero.');
     const cleanEntries = entries.filter((entry) => entry.firstName.trim() || entry.lastName.trim() || entry.amount > 0);
     const invalidEntries = cleanEntries.map((entry) => ({
@@ -98,7 +106,8 @@ const FundraisingDashboard: React.FC<{
     setSaving(true); setError(''); setMessage('');
     try {
       await saveFundraisingCampaign({
-        eventId, dashboardName: dashboardName.trim(), targetAmount, startingCurrentAmount: Math.max(0, Number(startingCurrent) || 0),
+        eventId, dashboardName: dashboardName.trim(), spotlightThreshold: spotlightThresholdAmount, spotlightGapSeconds: spotlightGap,
+        targetAmount, startingCurrentAmount: Math.max(0, Number(startingCurrent) || 0),
         entries: cleanEntries, updatedBy: uid,
       });
       setEntries(cleanEntries.length ? cleanEntries : [blankEntry()]);
@@ -132,6 +141,8 @@ const FundraisingDashboard: React.FC<{
     const rows: Array<Array<string | number>> = [
       ['Fundraising dashboard', dashboardName || selectedEvent?.name || ''],
       ['Linked event', selectedEvent?.name || ''],
+      ['Spotlight threshold', spotlightThresholdAmount],
+      ['Seconds between spotlights', spotlightGap],
       ['Target', targetAmount],
       ['Current before entries', Math.max(0, Number(startingCurrent) || 0)],
       ['Listed entry total', entryTotal],
@@ -243,6 +254,8 @@ const FundraisingDashboard: React.FC<{
           <label><span>Dashboard name</span><input value={dashboardName} onChange={(event) => { setDashboardName(event.target.value); setMessage(''); }} placeholder="Fundraising dashboard name" /></label>
           <label><span>Target</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={target} onChange={(event) => setTarget(event.target.value)} /></div></label>
           <label><span>Current before entries</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={startingCurrent} onChange={(event) => setStartingCurrent(event.target.value)} /></div><small>Funds collected before the list above.</small></label>
+          <label><span>Spotlight threshold</span><div className="money-input"><span>$</span><input type="number" min="1" step="100" value={spotlightThreshold} onChange={(event) => { setSpotlightThreshold(event.target.value); setMessage(''); }} /></div><small>Donors at or above this amount receive a spotlight.</small></label>
+          <label><span>Time between spotlights</span><input type="number" min="0" step="1" value={spotlightGapSeconds} onChange={(event) => { setSpotlightGapSeconds(event.target.value); setMessage(''); }} /><small>Quiet time in seconds after each six-second spotlight.</small></label>
         </>}
       </div>
       {creatingEvent && <div className="fundraising-new-event">

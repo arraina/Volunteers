@@ -62,6 +62,8 @@ export interface FundraisingEntry {
 export interface FundraisingCampaign {
   eventId: string;
   dashboardName: string;
+  spotlightThreshold: number;
+  spotlightGapSeconds: number;
   targetAmount: number;
   startingCurrentAmount: number;
   entries: FundraisingEntry[];
@@ -78,6 +80,8 @@ export function subscribeFundraisingCampaign(
     cb({
       eventId,
       dashboardName: String(data.dashboardName || ''),
+      spotlightThreshold: Number(data.spotlightThreshold) > 0 ? Number(data.spotlightThreshold) : 15000,
+      spotlightGapSeconds: Number(data.spotlightGapSeconds) >= 0 ? Number(data.spotlightGapSeconds) : 18,
       targetAmount: Number(data.targetAmount) || 0,
       startingCurrentAmount: Number(data.startingCurrentAmount) || 0,
       entries: Array.isArray(data.entries) ? data.entries.map((entry: any) => ({
@@ -97,6 +101,8 @@ export async function saveFundraisingCampaign(campaign: FundraisingCampaign): Pr
   await setDoc(doc(db, 'fundraisingCampaigns', campaign.eventId), {
     eventId: campaign.eventId,
     dashboardName: campaign.dashboardName.trim(),
+    spotlightThreshold: Math.max(1, campaign.spotlightThreshold),
+    spotlightGapSeconds: Math.max(0, campaign.spotlightGapSeconds),
     targetAmount: Math.max(0, campaign.targetAmount),
     startingCurrentAmount: Math.max(0, campaign.startingCurrentAmount),
     entries: campaign.entries.map((entry) => ({
