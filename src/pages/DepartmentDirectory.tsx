@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getVolunteerDirectory, VolunteerDirectoryEntry } from '../helpers/store';
 import {
   DepartmentDirectoryResult,
@@ -17,6 +18,7 @@ import './DepartmentDirectory.css';
 const emptyDirectory: DepartmentDirectoryResult = { isOwner: false, managedDepartmentIds: [], accessibleDepartmentIds: [], departments: [], memberships: [] };
 
 const DepartmentDirectory: React.FC<{ isOwner: boolean }> = ({ isOwner }) => {
+  const navigate = useNavigate();
   const [directory, setDirectory] = useState(emptyDirectory);
   const [volunteers, setVolunteers] = useState<VolunteerDirectoryEntry[]>([]);
   const [selection, setSelection] = useState<Record<string, string>>({});
@@ -83,6 +85,7 @@ const DepartmentDirectory: React.FC<{ isOwner: boolean }> = ({ isOwner }) => {
           <div className="department-card-heading"><h3>{department.name}</h3>{canManage && <span className="access-badge">Manage access</span>}</div>
           <p>{department.description}</p>
           {canOpen && <button className="secondary-btn department-open-btn" onClick={() => setOpenDepartmentId(openDepartmentId === department.id ? '' : department.id)}>{openDepartmentId === department.id ? 'Close workspace' : 'Open workspace'}</button>}
+          {department.id === 'fundraising' && canManage && <button className="primary-btn department-open-btn" onClick={() => navigate('/department/fundraising')}>Open fundraising dashboard</button>}
           {!canOpen && <p className="muted small department-private-note">Private workspace · membership required</p>}
           <div className="department-roster">
             <div><strong>Department Admins</strong>{admins.length ? admins.map((item) => <span className="department-person" key={item.id}>{item.name}{directory.isOwner && <button disabled={Boolean(busy)} onClick={() => changeAccess(department.id, item.userId, 'admin', false)}>Remove</button>}</span>) : <span className="muted small">Not assigned</span>}</div>

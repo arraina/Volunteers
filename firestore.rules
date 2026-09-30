@@ -25,6 +25,13 @@ service cloud.firestore {
           || get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.bootstrap == true);
     }
 
+    function isDepartmentAdmin(departmentId) {
+      return verifiedUser()
+        && exists(/databases/$(database)/documents/departmentMemberships/$(departmentId + '_' + request.auth.uid))
+        && get(/databases/$(database)/documents/departmentMemberships/$(departmentId + '_' + request.auth.uid)).data.active == true
+        && get(/databases/$(database)/documents/departmentMemberships/$(departmentId + '_' + request.auth.uid)).data.role == 'admin';
+    }
+
     function noAdminsYet() {
       // Allows the very first signed-in user to claim admin (bootstrap only).
       return !exists(/databases/$(database)/documents/adminsMeta/count)
@@ -343,8 +350,8 @@ service cloud.firestore {
     // Direct campaign access is restricted to Admins. Verified account holders
     // use the expiring share-token callable, which returns read-only data.
     match /fundraisingCampaigns/{eventId} {
-      allow read: if isAdmin();
-      allow create: if isAdmin()
+      allow read: if isAdmin() || isDepartmentAdmin('fundraising');
+      allow create: if (isAdmin() || isDepartmentAdmin('fundraising'))
         && request.resource.data.get('locked', false) == false
         && request.resource.data.eventId == eventId
         && request.resource.data.targetAmount is number
@@ -353,7 +360,7 @@ service cloud.firestore {
         && request.resource.data.startingCurrentAmount >= 0
         && request.resource.data.entries is list
         && request.resource.data.entries.size() <= 1000;
-      allow update: if isAdmin()
+      allow update: if (isAdmin() || isDepartmentAdmin('fundraising'))
         && resource.data.get('locked', false) == false
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'locked', 'lockedAt', 'lockedBy'

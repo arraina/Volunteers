@@ -22,8 +22,9 @@ const FundraisingDashboard: React.FC<{
   events: TempleEvent[];
   uid?: string;
   isOwner: boolean;
+  canCreateEvent?: boolean;
   setError: (message: string) => void;
-}> = ({ events, uid, isOwner, setError }) => {
+}> = ({ events, uid, isOwner, canCreateEvent = true, setError }) => {
   const [eventId, setEventId] = useState('');
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [newEventName, setNewEventName] = useState('');
@@ -275,7 +276,7 @@ const FundraisingDashboard: React.FC<{
         <label className="fundraising-event-select"><span>Fundraising event</span><select value={eventId} onChange={(event) => {
           const value = event.target.value;
           setEventId(value); setCreatingEvent(value === '__new__'); setCampaignExists(false); setLocked(false); setMessage('');
-        }}><option value="">Select an event…</option>{events.map((event) => <option value={event.id} key={event.id}>{event.name}</option>)}<option value="__new__">+ Create a new event</option></select></label>
+        }}><option value="">Select an event…</option>{events.map((event) => <option value={event.id} key={event.id}>{event.name}</option>)}{canCreateEvent && <option value="__new__">+ Create a new event</option>}</select></label>
         {eventId && eventId !== '__new__' && <>
           <label><span>Dashboard name</span><input disabled={locked} value={dashboardName} onChange={(event) => { setDashboardName(event.target.value); setMessage(''); }} placeholder="Fundraising dashboard name" /></label>
           <label><span>Target</span><div className="money-input"><span>$</span><input disabled={locked} type="number" min="0" step="0.01" value={target} onChange={(event) => setTarget(event.target.value)} /></div></label>
