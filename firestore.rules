@@ -340,10 +340,10 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
-    // One fundraising campaign per event. Every verified app account may view
-    // a shared read-only dashboard; only Admins and the Owner may change it.
+    // Direct campaign access is restricted to Admins. Verified account holders
+    // use the expiring share-token callable, which returns read-only data.
     match /fundraisingCampaigns/{eventId} {
-      allow read: if verifiedUser();
+      allow read: if isAdmin();
       allow create, update: if isAdmin()
         && request.resource.data.eventId == eventId
         && request.resource.data.targetAmount is number
@@ -353,6 +353,11 @@ service cloud.firestore {
         && request.resource.data.entries is list
         && request.resource.data.entries.size() <= 1000;
       allow delete: if isOwner();
+    }
+
+    // Share tokens are created and validated only by trusted Cloud Functions.
+    match /fundraisingShareLinks/{eventId} {
+      allow read, write: if false;
     }
 
     // Successful-login audit records are append-only. A user can record only

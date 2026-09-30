@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { FundraisingCampaign, getEvents, subscribeFundraisingCampaign } from '../helpers/store';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { FundraisingCampaign } from '../helpers/store';
+import { getSharedFundraisingDashboard } from '../helpers/fundraisingShare';
 import { useAuth } from '../helpers/useAuth';
 import './AdminDashboard.css';
 
@@ -11,7 +12,8 @@ const donorName = (firstName: string, lastName: string) =>
   [firstName, lastName].filter(Boolean).join(' ') || 'Anonymous';
 
 const SharedFundraisingDashboard: React.FC = () => {
-  const { eventId = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token') || '';
   const { isAdmin } = useAuth();
   const navigate = useNavigate();
   const [campaign, setCampaign] = useState<FundraisingCampaign | null>(null);
@@ -21,26 +23,35 @@ const SharedFundraisingDashboard: React.FC = () => {
   const [spotlightCycle, setSpotlightCycle] = useState(0);
 
   useEffect(() => {
-    if (!eventId) return;
+    if (!token) {
+      setLoadError('This fundraising dashboard link is invalid. Ask the Owner to generate a new link.');
+      setLoading(false);
+      return;
+    }
     let active = true;
     setLoading(true);
     setLoadError('');
-    getEvents()
-      .then((events) => {
-        if (active) setEventName(events.find((event) => event.id === eventId)?.name || '');
-      })
-      .catch(() => undefined);
-    const unsubscribe = subscribeFundraisingCampaign(eventId, (nextCampaign) => {
-      if (!active) return;
-      setCampaign(nextCampaign);
-      setLoading(false);
-    }, () => {
-      if (!active) return;
-      setLoadError('This dashboard could not be loaded. Sign in with a verified volunteer account, or ask an administrator to check your profile access.');
-      setLoading(false);
-    });
-    return () => { active = false; unsubscribe(); };
-  }, [eventId]);
+    const load = async () => {
+      try {
+        const result = await getSharedFundraisingDashboard(token);
+        if (!active) return;
+        setCampaign(result.campaign);
+        setEventName(result.campaign.dashboardName || '');
+        setLoadError('');
+      } catch (error: any) {
+        if (!active) return;
+        const message = String(error?.message || '');
+        setLoadError(message.includes('expired')
+          ? 'This fundraising dashboard link has expired. Ask the Owner to generate a new five-day link.'
+          : 'This dashboard could not be loaded. Sign in with a verified app account, or ask the Owner to generate a new link.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void load();
+    const refresh = window.setInterval(load, 10_000);
+    return () => { active = false; window.clearInterval(refresh); };
+  }, [token]);
 
   const entries = campaign?.entries || [];
   const entryTotal = useMemo(() => entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0), [entries]);

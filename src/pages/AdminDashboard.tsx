@@ -387,7 +387,7 @@ const AdminDashboard: React.FC = () => {
         )}
         {tab === 'history' && isOwner && <HistoryTab tasks={tasks} volunteers={volunteers} events={events} setError={setError} />}
         {tab === 'reports' && isOwner && <ReportsTab volunteers={volunteers} tasks={tasks} events={events} />}
-        {tab === 'fundraising' && <FundraisingDashboard events={events} uid={user?.uid} setError={setError} />}
+        {tab === 'fundraising' && <FundraisingDashboard events={events} uid={user?.uid} isOwner={isOwner} setError={setError} />}
         {tab === 'costs' && <CostTab events={events} uid={user?.uid} isOwner={isOwner} whatsappSettings={whatsappSettings} />}
         {tab === 'trash' && <TrashTab tasks={deletedTasks} records={deletedRecords} isOwner={isOwner} setError={setError} />}
         {tab === 'admins' && isOwner && <AdminManagementTab ownerUid={user?.uid || ''} volunteers={volunteers} setError={setError} />}

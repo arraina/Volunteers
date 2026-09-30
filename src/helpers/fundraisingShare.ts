@@ -1,13 +1,23 @@
-export function fundraisingShareUrl(eventId: string): string {
-  const base = window.location.pathname.startsWith('/Volunteers') ? '/Volunteers' : '';
-  // Enter through the Pages root so GitHub returns HTTP 200. Direct SPA paths
-  // are served through its 404 fallback and can render as a blank page in some
-  // mobile/in-app browsers.
-  return `${window.location.origin}${base}/?fundraising=${encodeURIComponent(eventId)}`;
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../config/firebase';
+import { FundraisingCampaign } from './store';
+
+interface CreatedShareLink {
+  token: string;
+  expiresAtMillis: number;
 }
 
-export async function copyFundraisingShareUrl(eventId: string): Promise<void> {
-  const url = fundraisingShareUrl(eventId);
+interface SharedDashboardResult {
+  campaign: FundraisingCampaign;
+  expiresAtMillis: number;
+}
+
+function fundraisingShareUrl(token: string): string {
+  const base = window.location.pathname.startsWith('/Volunteers') ? '/Volunteers' : '';
+  return `${window.location.origin}${base}/?fundraisingToken=${encodeURIComponent(token)}`;
+}
+
+async function copyText(url: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(url);
     return;
@@ -20,4 +30,17 @@ export async function copyFundraisingShareUrl(eventId: string): Promise<void> {
   input.select();
   document.execCommand('copy');
   input.remove();
+}
+
+export async function createAndCopyFundraisingShareUrl(eventId: string): Promise<number> {
+  const createLink = httpsCallable<{ eventId: string }, CreatedShareLink>(functions, 'createFundraisingShareLink');
+  const result = await createLink({ eventId });
+  await copyText(fundraisingShareUrl(result.data.token));
+  return result.data.expiresAtMillis;
+}
+
+export async function getSharedFundraisingDashboard(token: string): Promise<SharedDashboardResult> {
+  const getDashboard = httpsCallable<{ token: string }, SharedDashboardResult>(functions, 'getSharedFundraisingDashboard');
+  const result = await getDashboard({ token });
+  return result.data;
 }

@@ -13,6 +13,7 @@ const PORTAL_INVITE_TEMPLATE = 'volunteer_portal_invite_v1';
 const PORTAL_INVITE_LANGUAGE = 'en';
 const WHATSAPP_PHONE_NUMBER_ID = '1279758458557456';
 const PORTAL_INVITE_TTL_DAYS = 7;
+const FUNDRAISING_SHARE_TTL_DAYS = 5;
 const PORTAL_URL = 'https://arraina.github.io/Volunteers/claim';
 
 const WHATSAPP_STATUS_RANK = { accepted: 0, sent: 1, delivered: 2, read: 3 };
@@ -51,6 +52,59 @@ async function requireAdmin(request, ownerOnly = false) {
     throw new HttpsError('permission-denied', 'Owner access is required.');
   }
 }
+
+exports.createFundraisingShareLink = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
+  await requireAdmin(request, true);
+  const eventId = String(request.data?.eventId || '').trim();
+  if (!eventId || eventId.includes('/') || eventId.length > 200) {
+    throw new HttpsError('invalid-argument', 'Choose a valid fundraising dashboard.');
+  }
+  const campaign = await db.doc(`fundraisingCampaigns/${eventId}`).get();
+  if (!campaign.exists) throw new HttpsError('not-found', 'Save the fundraising dashboard before creating a link.');
+
+  const token = `${eventId}.${randomBytes(32).toString('base64url')}`;
+  const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + FUNDRAISING_SHARE_TTL_DAYS * 86400_000);
+  await db.doc(`fundraisingShareLinks/${eventId}`).set({
+    eventId,
+    tokenHash: tokenHash(token),
+    expiresAt,
+    createdBy: request.auth.uid,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { token, expiresAtMillis: expiresAt.toMillis() };
+});
+
+exports.getSharedFundraisingDashboard = onCall({ region: 'us-central1', maxInstances: 8 }, async (request) => {
+  if (!request.auth || request.auth.token.email_verified !== true) {
+    throw new HttpsError('unauthenticated', 'Sign in with a verified app account to view this dashboard.');
+  }
+  const token = String(request.data?.token || '').trim();
+  const separator = token.indexOf('.');
+  const eventId = separator > 0 ? token.slice(0, separator) : '';
+  if (!eventId || eventId.includes('/') || eventId.length > 200 || token.length > 500) {
+    throw new HttpsError('invalid-argument', 'This fundraising dashboard link is invalid.');
+  }
+  const link = await db.doc(`fundraisingShareLinks/${eventId}`).get();
+  const linkData = link.data() || {};
+  if (!link.exists || linkData.tokenHash !== tokenHash(token) || !linkData.expiresAt || linkData.expiresAt.toMillis() <= Date.now()) {
+    throw new HttpsError('failed-precondition', 'This fundraising dashboard link has expired. Ask the Owner to generate a new link.');
+  }
+  const campaign = await db.doc(`fundraisingCampaigns/${eventId}`).get();
+  if (!campaign.exists) throw new HttpsError('not-found', 'This fundraising dashboard is no longer available.');
+  const data = campaign.data() || {};
+  return {
+    campaign: {
+      eventId,
+      dashboardName: String(data.dashboardName || ''),
+      spotlightThreshold: Number(data.spotlightThreshold) > 0 ? Number(data.spotlightThreshold) : 15000,
+      spotlightGapSeconds: Number(data.spotlightGapSeconds) >= 0 ? Number(data.spotlightGapSeconds) : 18,
+      targetAmount: Number(data.targetAmount) || 0,
+      startingCurrentAmount: Number(data.startingCurrentAmount) || 0,
+      entries: Array.isArray(data.entries) ? data.entries : [],
+    },
+    expiresAtMillis: linkData.expiresAt.toMillis(),
+  };
+});
 
 exports.createOfflineVolunteer = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
   await requireAdmin(request);

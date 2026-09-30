@@ -8,7 +8,7 @@ import {
   subscribeFundraisingCampaign,
 } from '../helpers/store';
 import { fromEasternDateTimeInput } from '../helpers/taskDateTime';
-import { copyFundraisingShareUrl } from '../helpers/fundraisingShare';
+import { createAndCopyFundraisingShareUrl } from '../helpers/fundraisingShare';
 
 const blankEntry = (): FundraisingEntry => ({
   id: crypto.randomUUID(), firstName: '', lastName: '', type: 'donation', amount: 0, comments: '',
@@ -20,8 +20,9 @@ const SPOTLIGHT_DISPLAY_SECONDS = 6;
 const FundraisingDashboard: React.FC<{
   events: TempleEvent[];
   uid?: string;
+  isOwner: boolean;
   setError: (message: string) => void;
-}> = ({ events, uid, setError }) => {
+}> = ({ events, uid, isOwner, setError }) => {
   const [eventId, setEventId] = useState('');
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [newEventName, setNewEventName] = useState('');
@@ -271,14 +272,15 @@ const FundraisingDashboard: React.FC<{
     </section>
     {eventId && eventId !== '__new__' && <div className="fundraising-bottom-actions">
       <button className="secondary-btn fundraising-export" onClick={exportToExcel}>Export all data to Excel</button>
-      <button className="secondary-btn fundraising-export" onClick={async () => {
+      {isOwner && <button className="secondary-btn fundraising-export" onClick={async () => {
         try {
-          await copyFundraisingShareUrl(eventId);
-          setMessage('Read-only dashboard link copied. Anyone with a verified app account can open it.');
+          const expiresAtMillis = await createAndCopyFundraisingShareUrl(eventId);
+          const expiresAt = new Date(expiresAtMillis).toLocaleString();
+          setMessage(`New read-only link copied. It expires ${expiresAt}; any previous link for this dashboard is now invalid.`);
         } catch {
-          setError('Could not copy the read-only dashboard link.');
+          setError('Could not create the read-only dashboard link. Only the Owner can generate it, and the dashboard must be saved first.');
         }
-      }}>Copy read-only dashboard link</button>
+      }}>Generate 5-day read-only link</button>}
     </div>}
   </div>;
 };
