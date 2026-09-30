@@ -17,8 +17,28 @@
 .department-access-form { display: grid; gap: 0.65rem; padding-top: 0.75rem; border-top: 1px solid var(--line); margin-top: auto; }
 .department-access-form label { display: grid; gap: 0.35rem; }
 .department-access-form label > span { font-size: 0.82rem; font-weight: 700; }
+.department-open-btn { width: 100%; }
+.department-private-note { margin: 0; }
+.department-workspace-inner { display: grid; gap: 0.8rem; border-top: 2px solid var(--green-200); padding-top: 0.9rem; }
+.department-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; }
+.department-stats span { background: #f3f8f3; border-radius: 8px; padding: 0.55rem; text-align: center; font-size: 0.75rem; }
+.department-stats strong { display: block; color: var(--green-700); font-size: 1.15rem; }
+.department-content-section { display: grid; gap: 0.4rem; }
+.department-content-section h4, .department-create-form h4 { margin: 0; }
+.department-item { display: flex; align-items: start; justify-content: space-between; gap: 0.6rem; border: 1px solid var(--line); border-radius: 8px; padding: 0.65rem; }
+.department-item.completed { opacity: 0.65; }
+.department-item > div:first-child { display: grid; gap: 0.2rem; }
+.department-item span { color: var(--text-muted); font-size: 0.75rem; }
+.department-item p { margin: 0.2rem 0 0; font-size: 0.84rem; white-space: pre-wrap; }
+.department-item-actions { display: flex; gap: 0.25rem; }
+.department-item-actions button { border: 0; background: transparent; color: var(--green-700); cursor: pointer; }
+.department-create-form { display: grid; gap: 0.6rem; background: #f7faf7; border-radius: 10px; padding: 0.75rem; }
+.department-create-form label { display: grid; gap: 0.3rem; }
+.department-create-form label > span { font-size: 0.78rem; font-weight: 700; }
 @media (max-width: 640px) {
   .department-intro { align-items: start; flex-direction: column; }
   .department-grid { grid-template-columns: 1fr; }
   .department-access-form .row { display: grid; grid-template-columns: 1fr; }
+  .department-stats { grid-template-columns: 1fr; }
+  .department-item { flex-direction: column; }
 }

@@ -383,6 +383,10 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /departmentTasks/{itemId} { allow read, write: if false; }
+    match /departmentEvents/{itemId} { allow read, write: if false; }
+    match /departmentAnnouncements/{itemId} { allow read, write: if false; }
+
     // Successful-login audit records are append-only. A user can record only
     // their own verified login; only the Owner can view the audit history.
     match /auditLogs/{id} {
