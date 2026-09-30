@@ -373,6 +373,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /departments/{departmentId} {
+      allow read: if verifiedUser();
+      allow write: if false;
+    }
+
+    // Membership data is fail-closed and managed only by trusted functions.
+    match /departmentMemberships/{membershipId} {
+      allow read, write: if false;
+    }
+
     // Successful-login audit records are append-only. A user can record only
     // their own verified login; only the Owner can view the audit history.
     match /auditLogs/{id} {

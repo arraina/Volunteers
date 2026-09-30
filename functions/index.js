@@ -16,6 +16,18 @@ const PORTAL_INVITE_TTL_DAYS = 7;
 const FUNDRAISING_SHARE_TTL_DAYS = 5;
 const PORTAL_URL = 'https://arraina.github.io/Volunteers/claim';
 
+const DEFAULT_DEPARTMENTS = [
+  ['facilities', 'Facilities', 'Building, grounds, technology, safety, and property support.'],
+  ['finance-legal', 'Finance & Legal', 'Accounting, grants, donations, insurance, legal, and audit support.'],
+  ['communications', 'Communications', 'Website, social media, newsletters, announcements, and media.'],
+  ['festivals-events', 'Festivals & Events', 'Festival planning, programs, hospitality, prasadam, and parking.'],
+  ['congregation-development', 'Congregation Development', 'Devotee care, education, youth, children, and community engagement.'],
+  ['temple-operations', 'Temple Operations', 'Pujari services, bhoga, Sunday programs, catering, rentals, and daily operations.'],
+  ['new-temple', 'New Temple', 'Design, project management, construction, vendors, technology, and compliance.'],
+  ['fundraising', 'Fundraising', 'Campaigns, donor stewardship, pledges, loans, and donations.'],
+  ['govindas', "Govinda's", 'Weekly menus, food ordering, fulfillment, and customer service.'],
+];
+
 const WHATSAPP_STATUS_RANK = { accepted: 0, sent: 1, delivered: 2, read: 3 };
 
 function normalizePhone(value) {
@@ -52,6 +64,100 @@ async function requireAdmin(request, ownerOnly = false) {
     throw new HttpsError('permission-denied', 'Owner access is required.');
   }
 }
+
+async function requireVerifiedUser(request) {
+  if (!request.auth || request.auth.token.email_verified !== true) {
+    throw new HttpsError('unauthenticated', 'A verified account is required.');
+  }
+}
+
+async function callerAccess(uid) {
+  const snapshot = await db.doc(`admins/${uid}`).get();
+  const data = snapshot.data() || {};
+  return { isOwner: snapshot.exists && data.isAdmin === true && (data.role === 'owner' || data.bootstrap === true) };
+}
+
+exports.initializeDepartments = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
+  await requireAdmin(request, true);
+  const batch = db.batch();
+  const existing = await db.collection('departments').get();
+  const existingIds = new Set(existing.docs.map((item) => item.id));
+  let created = 0;
+  DEFAULT_DEPARTMENTS.forEach(([id, name, description], index) => {
+    if (existingIds.has(id)) return;
+    batch.set(db.doc(`departments/${id}`), {
+      name, description, active: true, sortOrder: index + 1,
+      createdBy: request.auth.uid, createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    created += 1;
+  });
+  if (created) await batch.commit();
+  return { created };
+});
+
+exports.getDepartmentDirectory = onCall({ region: 'us-central1', maxInstances: 8 }, async (request) => {
+  await requireVerifiedUser(request);
+  const access = await callerAccess(request.auth.uid);
+  const [departmentsSnapshot, membershipsSnapshot] = await Promise.all([
+    db.collection('departments').where('active', '==', true).get(), db.collection('departmentMemberships').get(),
+  ]);
+  const callerAdminDepartmentIds = new Set(membershipsSnapshot.docs
+    .filter((item) => item.data().userId === request.auth.uid && item.data().active === true && item.data().role === 'admin')
+    .map((item) => item.data().departmentId));
+  const visibleMemberships = membershipsSnapshot.docs.filter((item) => {
+    const data = item.data();
+    return data.active === true && (access.isOwner || callerAdminDepartmentIds.has(data.departmentId) || data.userId === request.auth.uid);
+  });
+  const userIds = [...new Set(visibleMemberships.map((item) => item.data().userId).filter(Boolean))];
+  const volunteers = new Map();
+  for (let i = 0; i < userIds.length; i += 100) {
+    const snapshots = await Promise.all(userIds.slice(i, i + 100).map((uid) => db.doc(`volunteers/${uid}`).get()));
+    snapshots.forEach((item) => {
+      const data = item.data() || {};
+      volunteers.set(item.id, data.name || `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'Volunteer');
+    });
+  }
+  return {
+    isOwner: access.isOwner,
+    managedDepartmentIds: [...callerAdminDepartmentIds],
+    departments: departmentsSnapshot.docs.map((item) => ({ id: item.id, ...item.data() })).sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder)),
+    memberships: visibleMemberships.map((item) => {
+      const data = item.data();
+      return { id: item.id, departmentId: data.departmentId, userId: data.userId, role: data.role, name: volunteers.get(data.userId) || 'Unknown volunteer' };
+    }),
+  };
+});
+
+exports.setDepartmentMembership = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  await requireVerifiedUser(request);
+  const departmentId = String(request.data?.departmentId || '').trim();
+  const userId = String(request.data?.userId || '').trim();
+  const role = String(request.data?.role || '').trim();
+  const active = request.data?.active === true;
+  if (!departmentId || !userId || !['admin', 'member'].includes(role) || departmentId.includes('/') || userId.includes('/')) {
+    throw new HttpsError('invalid-argument', 'Choose a valid department, volunteer, and access level.');
+  }
+  const [department, volunteer, access, callerMembership] = await Promise.all([
+    db.doc(`departments/${departmentId}`).get(), db.doc(`volunteers/${userId}`).get(), callerAccess(request.auth.uid),
+    db.doc(`departmentMemberships/${departmentId}_${request.auth.uid}`).get(),
+  ]);
+  if (!department.exists || department.data().active !== true) throw new HttpsError('not-found', 'Department was not found.');
+  if (!volunteer.exists || volunteer.data().deleted === true) throw new HttpsError('not-found', 'Active volunteer was not found.');
+  const isDepartmentAdmin = callerMembership.exists && callerMembership.data().active === true && callerMembership.data().role === 'admin';
+  if (role === 'admin' && !access.isOwner) throw new HttpsError('permission-denied', 'Only the Owner can change Department Admin access.');
+  if (role === 'member' && !access.isOwner && !isDepartmentAdmin) throw new HttpsError('permission-denied', 'Department Admin access is required.');
+  const ref = db.doc(`departmentMemberships/${departmentId}_${userId}`);
+  if (active) {
+    await ref.set({ departmentId, userId, role, active: true, updatedBy: request.auth.uid,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(), createdAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  } else {
+    const current = await ref.get();
+    if (current.exists && current.data().role === 'admin' && !access.isOwner) throw new HttpsError('permission-denied', 'Only the Owner can remove a Department Admin.');
+    await ref.delete();
+  }
+  return { updated: true };
+});
 
 exports.createFundraisingShareLink = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
   await requireAdmin(request, true);
@@ -619,13 +725,14 @@ exports.deleteVolunteerAccount = onCall({ region: 'us-central1', maxInstances: 2
 // Immutable, server-generated activity ledger. Auth context identifies the
 // principal that performed each Firestore write, including future UI paths.
 const AUDITED_COLLECTIONS = new Set([
-  'admins', 'announcements', 'appValueReports', 'eventActionItems',
+  'admins', 'announcements', 'appValueReports', 'departmentMemberships', 'departments', 'eventActionItems',
   'costEntries', 'eventFeedback', 'eventMeetings', 'events', 'eventTemplates', 'hourLogs',
   'notificationSettings', 'reminders', 'sentMessages', 'tasks', 'taskSeries', 'volunteers',
 ]);
 
 const CATEGORY_BY_COLLECTION = {
-  admins: 'Administration', announcements: 'Communications', appValueReports: 'Reporting', costEntries: 'Costs',
+  admins: 'Administration', announcements: 'Communications', appValueReports: 'Reporting',
+  departmentMemberships: 'Departments', departments: 'Departments', costEntries: 'Costs',
   eventActionItems: 'Event planning', eventFeedback: 'Feedback', eventMeetings: 'Event planning',
   events: 'Events', eventTemplates: 'Event planning', hourLogs: 'Service hours',
   notificationSettings: 'Notifications', reminders: 'Notifications', sentMessages: 'Notifications', tasks: 'Tasks',
@@ -633,7 +740,8 @@ const CATEGORY_BY_COLLECTION = {
 };
 
 const TYPE_BY_COLLECTION = {
-  admins: 'administrator', announcements: 'announcement', appValueReports: 'value report', costEntries: 'cost entry',
+  admins: 'administrator', announcements: 'announcement', appValueReports: 'value report',
+  departmentMemberships: 'department access', departments: 'department', costEntries: 'cost entry',
   eventActionItems: 'action item', eventFeedback: 'feedback', eventMeetings: 'meeting',
   events: 'event', eventTemplates: 'event template', hourLogs: 'hour log',
   notificationSettings: 'notification setting', reminders: 'reminder', sentMessages: 'message', tasks: 'task',

@@ -39,11 +39,12 @@ import '../pages/AdminDashboard.css';
 import './VolunteerDashboard.css';
 import EventFeedback from './EventFeedback';
 import EventCalendar from './EventCalendar';
+import DepartmentDirectory from './DepartmentDirectory';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
 import ReminderDeliveryNotice from '../components/ReminderDeliveryNotice';
 
-type Tab = 'open' | 'mine' | 'create' | 'calendar' | 'past' | 'feedback' | 'profile';
-const VOLUNTEER_TABS: Tab[] = ['open', 'mine', 'create', 'calendar', 'past', 'feedback', 'profile'];
+type Tab = 'open' | 'mine' | 'create' | 'calendar' | 'departments' | 'past' | 'feedback' | 'profile';
+const VOLUNTEER_TABS: Tab[] = ['open', 'mine', 'create', 'calendar', 'departments', 'past', 'feedback', 'profile'];
 
 const VolunteerDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -237,6 +238,9 @@ const VolunteerDashboard: React.FC = () => {
         <button className={tab === 'calendar' ? 'active' : ''} onClick={() => chooseTab('calendar')}>
           Event Calendar
         </button>
+        <button className={tab === 'departments' ? 'active' : ''} onClick={() => chooseTab('departments')}>
+          Departments
+        </button>
         <button className={tab === 'past' ? 'active' : ''} onClick={() => chooseTab('past')}>
           Past Tasks ({pastTasks.length})
         </button>
@@ -366,6 +370,8 @@ const VolunteerDashboard: React.FC = () => {
         {tab === 'profile' && (
           <ProfileTab profile={profile} onSaved={reload} setError={setError} setMessage={setMessage} />
         )}
+
+        {tab === 'departments' && <DepartmentDirectory isOwner={false} />}
 
         {tab === 'create' && (
           <VolunteerTaskManagement

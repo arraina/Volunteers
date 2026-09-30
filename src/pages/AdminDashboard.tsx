@@ -86,17 +86,18 @@ import AICreateTab from './AICreate';
 import EventWorkspace from './EventWorkspace';
 import EventCalendar from './EventCalendar';
 import FundraisingDashboard from './FundraisingDashboard';
+import DepartmentDirectory from './DepartmentDirectory';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
 import ReminderDeliveryNotice from '../components/ReminderDeliveryNotice';
 import { assertTaskStartNotPast, fromEasternDateTimeInput, toEasternDateTimeInput } from '../helpers/taskDateTime';
 import { normalizePhoneNumber } from '../helpers/phone';
 import './AdminDashboard.css';
 
-type Tab = 'tasks' | 'ai' | 'events' | 'calendar' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'fundraising' | 'costs' | 'trash' | 'admins' | 'audit' | 'value';
+type Tab = 'tasks' | 'ai' | 'events' | 'calendar' | 'departments' | 'volunteers' | 'announcements' | 'history' | 'reports' | 'fundraising' | 'costs' | 'trash' | 'admins' | 'audit' | 'value';
 type TaskWorkspaceView = 'browse' | 'assigned' | 'manage';
 type VolunteerWorkspaceView = 'directory' | 'invitations';
 
-const ADMIN_TABS: Tab[] = ['tasks', 'ai', 'events', 'calendar', 'volunteers', 'announcements', 'history', 'reports', 'fundraising', 'costs', 'trash', 'admins', 'audit', 'value'];
+const ADMIN_TABS: Tab[] = ['tasks', 'ai', 'events', 'calendar', 'departments', 'volunteers', 'announcements', 'history', 'reports', 'fundraising', 'costs', 'trash', 'admins', 'audit', 'value'];
 const TASK_VIEWS: TaskWorkspaceView[] = ['browse', 'assigned', 'manage'];
 const VOLUNTEER_VIEWS: VolunteerWorkspaceView[] = ['directory', 'invitations'];
 
@@ -283,7 +284,7 @@ const AdminDashboard: React.FC = () => {
 
   const taskTabs: Tab[] = ['tasks', 'ai'];
   const eventTabs: Tab[] = ['calendar', 'events'];
-  const peopleTabs: Tab[] = ['volunteers', 'admins'];
+  const peopleTabs: Tab[] = ['departments', 'volunteers', 'admins'];
   const reportTabs: Tab[] = ['reports', 'fundraising', 'costs', 'value'];
   const moreTabs: Tab[] = ['history', 'trash', 'audit'];
 
@@ -322,6 +323,7 @@ const AdminDashboard: React.FC = () => {
         <details className={`nav-group ${peopleTabs.includes(tab) && !(tab === 'volunteers' && volunteerWorkspaceView === 'invitations') ? 'active' : ''}`} onToggle={handleNavToggle}>
           <summary>People</summary>
           <div className="nav-menu">
+            <button className={tab === 'departments' ? 'active' : ''} onClick={(event) => chooseTab('departments', event)}>Departments</button>
             <button className={tab === 'volunteers' && volunteerWorkspaceView === 'directory' ? 'active' : ''} onClick={(event) => chooseVolunteerView('directory', event)}>Volunteers</button>
             {isOwner && <button className={tab === 'admins' ? 'active' : ''} onClick={(event) => chooseTab('admins', event)}>Admin Management</button>}
           </div>
@@ -381,6 +383,7 @@ const AdminDashboard: React.FC = () => {
         )}
         {tab === 'events' && <EventWorkspace uid={user?.uid} events={events} tasks={tasks} setError={setError} />}
         {tab === 'calendar' && <EventCalendar uid={user?.uid} events={events} tasks={tasks} volunteers={volunteers} setError={setError} canManage={isOwner} />}
+        {tab === 'departments' && <DepartmentDirectory isOwner={isOwner} />}
         {tab === 'volunteers' && <VolunteersTab volunteers={volunteers} uid={user?.uid} isOwner={isOwner} setError={setError} view={volunteerWorkspaceView} />}
         {tab === 'announcements' && isOwner && (
           <AnnouncementsTab uid={user?.uid} setError={setError} />
