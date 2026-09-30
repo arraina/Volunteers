@@ -21,6 +21,9 @@ export async function getPublicGovindasMenu(token: string): Promise<{ menu: Govi
 export async function placeGovindasOrder(input: { token: string; customerName: string; phoneNumber: string; zelleReference: string; items: { itemId: string; quantity: number }[] }): Promise<{ orderId: string; confirmationToken: string; totalCents: number; status: string }> {
   return (await httpsCallable<typeof input, { orderId: string; confirmationToken: string; totalCents: number; status: string }>(functions, 'placeGovindasOrder')(input)).data;
 }
+export async function getPublicGovindasOrderStatus(orderId: string, confirmationToken: string): Promise<{ order: Pick<GovindasOrder, 'id' | 'menuTitle' | 'customerName' | 'items' | 'totalCents' | 'status' | 'createdAtMillis'> }> {
+  return (await httpsCallable<{ orderId: string; confirmationToken: string }, { order: Pick<GovindasOrder, 'id' | 'menuTitle' | 'customerName' | 'items' | 'totalCents' | 'status' | 'createdAtMillis'> }>(functions, 'getPublicGovindasOrderStatus')({ orderId, confirmationToken })).data;
+}
 export async function updateGovindasOrderStatus(orderId: string, status: string): Promise<void> {
   await httpsCallable<{ orderId: string; status: string }, { updated: boolean }>(functions, 'updateGovindasOrderStatus')({ orderId, status });
 }

@@ -13,6 +13,7 @@ import SharedFundraisingDashboard from './pages/SharedFundraisingDashboard';
 import FundraisingDepartmentPage from './pages/FundraisingDepartmentPage';
 import GovindasAdminPage from './pages/GovindasAdminPage';
 import GovindasOrderPage from './pages/GovindasOrderPage';
+import GovindasOrderStatusPage from './pages/GovindasOrderStatusPage';
 import { AuthProvider, useAuth } from './helpers/useAuth';
 import { isFirebaseConfigured } from './config/firebase';
 import './App.css';
@@ -129,6 +130,7 @@ function App() {
           <Route path="/department/fundraising" element={<Protected><FundraisingDepartmentPage /></Protected>} />
           <Route path="/department/govindas" element={<Protected><GovindasAdminPage /></Protected>} />
           <Route path="/govindas/order" element={<GovindasOrderPage />} />
+          <Route path="/govindas/order-status" element={<GovindasOrderStatusPage />} />
           <Route path="/" element={<RootRoute />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

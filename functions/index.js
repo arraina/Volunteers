@@ -345,6 +345,22 @@ exports.placeGovindasOrder = onCall({ region: 'us-central1', maxInstances: 12 },
   return { orderId: ref.id, confirmationToken, totalCents, status: 'received' };
 });
 
+exports.getPublicGovindasOrderStatus = onCall({ region: 'us-central1', maxInstances: 12 }, async (request) => {
+  const orderId = String(request.data?.orderId || '').trim();
+  const confirmationToken = String(request.data?.confirmationToken || '').trim();
+  if (!orderId || orderId.includes('/') || orderId.length > 200 || !confirmationToken || confirmationToken.length > 500) {
+    throw new HttpsError('invalid-argument', 'This order confirmation link is invalid.');
+  }
+  const order = await db.doc(`govindasOrders/${orderId}`).get();
+  const data = order.data() || {};
+  if (!order.exists || !data.confirmationTokenHash || data.confirmationTokenHash !== tokenHash(confirmationToken)) {
+    throw new HttpsError('not-found', 'This order confirmation could not be found.');
+  }
+  return { order: { id: order.id, menuTitle: data.menuTitle, customerName: data.customerName,
+    items: data.items || [], totalCents: data.totalCents, status: data.status,
+    createdAtMillis: data.createdAt?.toMillis?.() || null } };
+});
+
 exports.updateGovindasOrderStatus = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
   await requireDepartmentAccess(request, 'govindas', true);
   const orderId = String(request.data?.orderId || '').trim();

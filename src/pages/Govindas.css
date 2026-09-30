@@ -22,4 +22,8 @@
 .govindas-customer-form { display: grid; gap: 0.75rem; }
 .govindas-submit { width: 100%; margin-top: 1rem; }
 .govindas-confirmation > div { display: grid; gap: 0.25rem; background: #eff8ee; border-radius: 10px; padding: 1rem; overflow-wrap: anywhere; }
+.govindas-status-link { display: block; width: 100%; margin-top: 0.75rem; text-align: center; text-decoration: none; }
+.govindas-status-badge { display: inline-block; border-radius: 999px; padding: 0.35rem 0.8rem; background: #e7f5e5; color: #17692d; font-weight: 800; text-transform: capitalize; }
+.govindas-status-items { display: grid; gap: 0.5rem; margin: 1rem 0; }
+.govindas-status-items > div { display: flex; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; }
 @media (max-width: 700px) { .govindas-menu-form { grid-template-columns: 1fr; } .govindas-menu-form label:nth-last-child(-n+2) { grid-column: auto; } .govindas-item-edit { grid-template-columns: 1fr; } .govindas-saved-list > div, .govindas-public-items > div { align-items: stretch; flex-direction: column; } .govindas-public-items label { width: 100%; } }
