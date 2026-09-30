@@ -14,6 +14,7 @@ const PORTAL_INVITE_LANGUAGE = 'en';
 const WHATSAPP_PHONE_NUMBER_ID = '1279758458557456';
 const PORTAL_INVITE_TTL_DAYS = 7;
 const FUNDRAISING_SHARE_TTL_DAYS = 5;
+const GOVINDAS_SHARE_TTL_DAYS = 14;
 const PORTAL_URL = 'https://arraina.github.io/Volunteers/claim';
 
 const DEFAULT_DEPARTMENTS = [
@@ -234,6 +235,122 @@ exports.updateDepartmentItem = onCall({ region: 'us-central1', maxInstances: 4 }
   if (!snapshot.exists || snapshot.data().departmentId !== departmentId) throw new HttpsError('not-found', 'Department item was not found.');
   const change = action === 'archive' ? { archived: true } : { status: action === 'complete' ? 'completed' : 'open' };
   await ref.update({ ...change, updatedBy: request.auth.uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+  return { updated: true };
+});
+
+function cleanGovindasItems(value) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 50) throw new HttpsError('invalid-argument', 'Add between 1 and 50 menu items.');
+  return value.map((item, index) => {
+    const id = String(item?.id || `item-${index + 1}`).trim().slice(0, 80);
+    const name = String(item?.name || '').trim().slice(0, 120);
+    const description = String(item?.description || '').trim().slice(0, 500);
+    const priceCents = Math.round(Number(item?.priceCents));
+    if (!id || !name || !Number.isInteger(priceCents) || priceCents < 0 || priceCents > 10000000) throw new HttpsError('invalid-argument', `Check menu item ${index + 1}.`);
+    return { id, name, description, priceCents, available: item?.available !== false };
+  });
+}
+
+exports.saveGovindasMenu = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  await requireDepartmentAccess(request, 'govindas', true);
+  const menuId = String(request.data?.menuId || '').trim();
+  const title = String(request.data?.title || '').trim().slice(0, 160);
+  const pickupDetails = String(request.data?.pickupDetails || '').trim().slice(0, 1000);
+  const zelleInstructions = String(request.data?.zelleInstructions || '').trim().slice(0, 500);
+  const cutoffMillis = Number(request.data?.cutoffMillis);
+  const pickupMillis = Number(request.data?.pickupMillis);
+  const items = cleanGovindasItems(request.data?.items);
+  if (!title || !Number.isFinite(cutoffMillis) || !Number.isFinite(pickupMillis) || cutoffMillis <= Date.now() || pickupMillis <= cutoffMillis) {
+    throw new HttpsError('invalid-argument', 'Enter a title, a future order cutoff, and a pickup time after the cutoff.');
+  }
+  const ref = menuId && !menuId.includes('/') ? db.doc(`govindasMenus/${menuId}`) : db.collection('govindasMenus').doc();
+  const existing = await ref.get();
+  if (existing.exists && existing.data().locked === true) throw new HttpsError('failed-precondition', 'This menu is locked and cannot be changed.');
+  await ref.set({ title, pickupDetails, zelleInstructions, items, cutoffAt: admin.firestore.Timestamp.fromMillis(cutoffMillis),
+    pickupAt: admin.firestore.Timestamp.fromMillis(pickupMillis), active: true, locked: false,
+    createdBy: existing.exists ? existing.data().createdBy : request.auth.uid,
+    createdAt: existing.exists ? existing.data().createdAt : admin.firestore.FieldValue.serverTimestamp(),
+    updatedBy: request.auth.uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  return { menuId: ref.id };
+});
+
+exports.getGovindasAdminData = onCall({ region: 'us-central1', maxInstances: 8 }, async (request) => {
+  await requireDepartmentAccess(request, 'govindas', true);
+  const [menus, orders] = await Promise.all([db.collection('govindasMenus').get(), db.collection('govindasOrders').get()]);
+  const menuData = menus.docs.map((item) => { const data = item.data(); return { id: item.id, title: data.title,
+    pickupDetails: data.pickupDetails, zelleInstructions: data.zelleInstructions, items: data.items || [],
+    active: data.active === true, locked: data.locked === true, cutoffMillis: data.cutoffAt?.toMillis?.() || null,
+    pickupMillis: data.pickupAt?.toMillis?.() || null }; }).sort((a, b) => (b.pickupMillis || 0) - (a.pickupMillis || 0));
+  const orderData = orders.docs.map((item) => { const data = item.data(); return { id: item.id, menuId: data.menuId,
+    menuTitle: data.menuTitle, customerName: data.customerName, phoneNumber: data.phoneNumber,
+    zelleReference: data.zelleReference, items: data.items || [], totalCents: data.totalCents, status: data.status,
+    createdAtMillis: data.createdAt?.toMillis?.() || null }; }).sort((a, b) => (b.createdAtMillis || 0) - (a.createdAtMillis || 0));
+  return { menus: menuData, orders: orderData };
+});
+
+exports.createGovindasShareLink = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  await requireDepartmentAccess(request, 'govindas', true);
+  const menuId = String(request.data?.menuId || '').trim();
+  if (!menuId || menuId.includes('/')) throw new HttpsError('invalid-argument', 'Choose a valid menu.');
+  const menu = await db.doc(`govindasMenus/${menuId}`).get();
+  if (!menu.exists) throw new HttpsError('not-found', 'Menu was not found.');
+  const token = `${menuId}.${randomBytes(32).toString('base64url')}`;
+  const expiresMillis = Math.min(Date.now() + GOVINDAS_SHARE_TTL_DAYS * 86400_000, (menu.data().pickupAt?.toMillis?.() || Date.now()) + 86400_000);
+  const expiresAt = admin.firestore.Timestamp.fromMillis(expiresMillis);
+  await db.doc(`govindasShareLinks/${menuId}`).set({ menuId, tokenHash: tokenHash(token), expiresAt,
+    createdBy: request.auth.uid, createdAt: admin.firestore.FieldValue.serverTimestamp() });
+  return { token, expiresAtMillis: expiresMillis };
+});
+
+async function publicGovindasMenu(token) {
+  const value = String(token || '').trim();
+  const separator = value.indexOf('.');
+  const menuId = separator > 0 ? value.slice(0, separator) : '';
+  if (!menuId || menuId.includes('/') || value.length > 500) throw new HttpsError('invalid-argument', 'This Govinda’s menu link is invalid.');
+  const [link, menu] = await Promise.all([db.doc(`govindasShareLinks/${menuId}`).get(), db.doc(`govindasMenus/${menuId}`).get()]);
+  const linkData = link.data() || {};
+  if (!link.exists || linkData.tokenHash !== tokenHash(value) || !linkData.expiresAt || linkData.expiresAt.toMillis() <= Date.now()) throw new HttpsError('failed-precondition', 'This Govinda’s menu link has expired.');
+  if (!menu.exists || menu.data().active !== true) throw new HttpsError('not-found', 'This menu is no longer available.');
+  return { menuId, menu: menu.data(), expiresAtMillis: linkData.expiresAt.toMillis() };
+}
+
+exports.getPublicGovindasMenu = onCall({ region: 'us-central1', maxInstances: 12 }, async (request) => {
+  const result = await publicGovindasMenu(request.data?.token);
+  const data = result.menu;
+  return { menu: { id: result.menuId, title: data.title, pickupDetails: data.pickupDetails,
+    zelleInstructions: data.zelleInstructions, cutoffMillis: data.cutoffAt?.toMillis?.() || null,
+    pickupMillis: data.pickupAt?.toMillis?.() || null, items: (data.items || []).filter((item) => item.available !== false) }, expiresAtMillis: result.expiresAtMillis };
+});
+
+exports.placeGovindasOrder = onCall({ region: 'us-central1', maxInstances: 12 }, async (request) => {
+  const result = await publicGovindasMenu(request.data?.token);
+  const customerName = String(request.data?.customerName || '').trim().slice(0, 160);
+  const phoneNumber = normalizePhone(request.data?.phoneNumber);
+  const zelleReference = String(request.data?.zelleReference || '').trim().slice(0, 160);
+  const requested = Array.isArray(request.data?.items) ? request.data.items : [];
+  if (!customerName || !zelleReference || result.menu.cutoffAt.toMillis() <= Date.now()) throw new HttpsError('failed-precondition', 'Enter your name and Zelle reference before the order cutoff.');
+  const menuItems = new Map((result.menu.items || []).filter((item) => item.available !== false).map((item) => [item.id, item]));
+  const items = requested.map((item) => {
+    const menuItem = menuItems.get(String(item?.itemId || ''));
+    const quantity = Math.floor(Number(item?.quantity));
+    if (!menuItem || !Number.isInteger(quantity) || quantity < 1 || quantity > 50) throw new HttpsError('invalid-argument', 'Check the selected quantities.');
+    return { itemId: menuItem.id, name: menuItem.name, quantity, unitPriceCents: menuItem.priceCents, lineTotalCents: menuItem.priceCents * quantity };
+  });
+  if (!items.length || items.length > 50) throw new HttpsError('invalid-argument', 'Select at least one menu item.');
+  const totalCents = items.reduce((sum, item) => sum + item.lineTotalCents, 0);
+  const confirmationToken = randomBytes(24).toString('base64url');
+  const ref = db.collection('govindasOrders').doc();
+  await ref.set({ menuId: result.menuId, menuTitle: result.menu.title, customerName, phoneNumber, zelleReference,
+    items, totalCents, status: 'received', confirmationTokenHash: tokenHash(confirmationToken),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+  return { orderId: ref.id, confirmationToken, totalCents, status: 'received' };
+});
+
+exports.updateGovindasOrderStatus = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  await requireDepartmentAccess(request, 'govindas', true);
+  const orderId = String(request.data?.orderId || '').trim();
+  const status = String(request.data?.status || '').trim();
+  if (!orderId || orderId.includes('/') || !['received', 'confirmed', 'ready', 'completed', 'cancelled'].includes(status)) throw new HttpsError('invalid-argument', 'Choose a valid order status.');
+  await db.doc(`govindasOrders/${orderId}`).update({ status, updatedBy: request.auth.uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
   return { updated: true };
 });
 
@@ -804,7 +921,7 @@ exports.deleteVolunteerAccount = onCall({ region: 'us-central1', maxInstances: 2
 // principal that performed each Firestore write, including future UI paths.
 const AUDITED_COLLECTIONS = new Set([
   'admins', 'announcements', 'appValueReports', 'departmentAnnouncements', 'departmentEvents',
-  'departmentMemberships', 'departmentTasks', 'departments', 'eventActionItems',
+  'departmentMemberships', 'departmentTasks', 'departments', 'eventActionItems', 'govindasMenus', 'govindasOrders',
   'costEntries', 'eventFeedback', 'eventMeetings', 'events', 'eventTemplates', 'hourLogs',
   'notificationSettings', 'reminders', 'sentMessages', 'tasks', 'taskSeries', 'volunteers',
 ]);
@@ -813,6 +930,7 @@ const CATEGORY_BY_COLLECTION = {
   admins: 'Administration', announcements: 'Communications', appValueReports: 'Reporting',
   departmentAnnouncements: 'Departments', departmentEvents: 'Departments', departmentMemberships: 'Departments',
   departmentTasks: 'Departments', departments: 'Departments', costEntries: 'Costs',
+  govindasMenus: "Govinda's", govindasOrders: "Govinda's",
   eventActionItems: 'Event planning', eventFeedback: 'Feedback', eventMeetings: 'Event planning',
   events: 'Events', eventTemplates: 'Event planning', hourLogs: 'Service hours',
   notificationSettings: 'Notifications', reminders: 'Notifications', sentMessages: 'Notifications', tasks: 'Tasks',
@@ -823,6 +941,7 @@ const TYPE_BY_COLLECTION = {
   admins: 'administrator', announcements: 'announcement', appValueReports: 'value report',
   departmentAnnouncements: 'department announcement', departmentEvents: 'department event',
   departmentMemberships: 'department access', departmentTasks: 'department task', departments: 'department', costEntries: 'cost entry',
+  govindasMenus: 'Govinda’s menu', govindasOrders: 'Govinda’s order',
   eventActionItems: 'action item', eventFeedback: 'feedback', eventMeetings: 'meeting',
   events: 'event', eventTemplates: 'event template', hourLogs: 'hour log',
   notificationSettings: 'notification setting', reminders: 'reminder', sentMessages: 'message', tasks: 'task',
