@@ -70,7 +70,6 @@ const FundraisingDashboard: React.FC<{
     }, 12000);
     return () => window.clearInterval(timer);
   // The signature resets the sequence when a qualifying donor's displayed data changes.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spotlightSignature]);
 
   const updateEntry = (id: string, patch: Partial<FundraisingEntry>) => {
