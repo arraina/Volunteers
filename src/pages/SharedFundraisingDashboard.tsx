@@ -49,8 +49,7 @@ const SharedFundraisingDashboard: React.FC = () => {
       }
     };
     void load();
-    const refresh = window.setInterval(load, 10_000);
-    return () => { active = false; window.clearInterval(refresh); };
+    return () => { active = false; };
   }, [token]);
 
   const entries = campaign?.entries || [];
