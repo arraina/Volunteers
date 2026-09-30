@@ -1,0 +1,31 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function verifiedUser() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function isOwner() {
+      return verifiedUser()
+        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.isAdmin == true
+        && (firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.role == 'owner'
+          || firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.bootstrap == true);
+    }
+    function isGovindasAdmin() {
+      return verifiedUser()
+        && firestore.exists(/databases/(default)/documents/departmentMemberships/$("govindas_" + request.auth.uid))
+        && firestore.get(/databases/(default)/documents/departmentMemberships/$("govindas_" + request.auth.uid)).data.active == true
+        && firestore.get(/databases/(default)/documents/departmentMemberships/$("govindas_" + request.auth.uid)).data.role == 'admin';
+    }
+    match /govindas/menu-items/{fileName} {
+      allow read: if true;
+      allow create, update: if (isOwner() || isGovindasAdmin())
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
+      allow delete: if isOwner() || isGovindasAdmin();
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

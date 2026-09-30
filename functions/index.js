@@ -244,9 +244,14 @@ function cleanGovindasItems(value) {
     const id = String(item?.id || `item-${index + 1}`).trim().slice(0, 80);
     const name = String(item?.name || '').trim().slice(0, 120);
     const description = String(item?.description || '').trim().slice(0, 500);
+    const imageUrl = String(item?.imageUrl || '').trim().slice(0, 2000);
+    const imagePath = String(item?.imagePath || '').trim().slice(0, 500);
     const priceCents = Math.round(Number(item?.priceCents));
     if (!id || !name || !Number.isInteger(priceCents) || priceCents < 0 || priceCents > 10000000) throw new HttpsError('invalid-argument', `Check menu item ${index + 1}.`);
-    return { id, name, description, priceCents, available: item?.available !== false };
+    if ((imageUrl || imagePath) && (!imageUrl.startsWith('https://firebasestorage.googleapis.com/') || !/^govindas\/menu-items\/[^/]+$/.test(imagePath))) {
+      throw new HttpsError('invalid-argument', `Check the image for menu item ${index + 1}.`);
+    }
+    return { id, name, description, imageUrl, imagePath, priceCents, available: item?.available !== false };
   });
 }
 

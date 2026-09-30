@@ -1,7 +1,7 @@
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../config/firebase';
 
-export interface GovindasMenuItem { id: string; name: string; description: string; priceCents: number; available: boolean; }
+export interface GovindasMenuItem { id: string; name: string; description: string; imageUrl?: string; imagePath?: string; priceCents: number; available: boolean; }
 export interface GovindasMenu { id: string; title: string; pickupDetails: string; zelleInstructions: string; cutoffMillis: number; pickupMillis: number; items: GovindasMenuItem[]; }
 export interface GovindasOrderItem { itemId: string; name: string; quantity: number; unitPriceCents: number; lineTotalCents: number; }
 export interface GovindasOrder { id: string; menuId: string; menuTitle: string; customerName: string; phoneNumber: string; zelleReference: string; items: GovindasOrderItem[]; totalCents: number; status: string; createdAtMillis: number | null; }
