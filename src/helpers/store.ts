@@ -72,7 +72,8 @@ export interface FundraisingCampaign {
 
 export function subscribeFundraisingCampaign(
   eventId: string,
-  cb: (campaign: FundraisingCampaign | null) => void
+  cb: (campaign: FundraisingCampaign | null) => void,
+  onError?: (error: Error) => void
 ) {
   return onSnapshot(doc(db, 'fundraisingCampaigns', eventId), (snapshot) => {
     if (!snapshot.exists()) return cb(null);
@@ -94,7 +95,7 @@ export function subscribeFundraisingCampaign(
       })) : [],
       updatedBy: data.updatedBy || undefined,
     });
-  });
+  }, (error) => onError?.(error));
 }
 
 export async function saveFundraisingCampaign(campaign: FundraisingCampaign): Promise<void> {

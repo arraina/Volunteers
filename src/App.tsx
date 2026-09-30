@@ -16,6 +16,15 @@ import './App.css';
 
 const Loading = () => <div className="loading">Loading...</div>;
 
+const RootRoute = () => {
+  const location = useLocation();
+  const fundraisingEventId = new URLSearchParams(location.search).get('fundraising');
+  if (fundraisingEventId) {
+    return <Navigate to={`/fundraising/${encodeURIComponent(fundraisingEventId)}`} replace />;
+  }
+  return <Navigate to="/login" replace />;
+};
+
 const routerBasename =
   typeof window !== 'undefined' && window.location.pathname.startsWith('/Volunteers')
     ? '/Volunteers'
@@ -114,7 +123,7 @@ function App() {
           <Route path="/help" element={<Protected><HelpCenter /></Protected>} />
           <Route path="/task/:taskId" element={<Protected><SharedTask /></Protected>} />
           <Route path="/fundraising/:eventId" element={<Protected><SharedFundraisingDashboard /></Protected>} />
-          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/" element={<RootRoute />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </Router>

@@ -17,11 +17,14 @@ const SharedFundraisingDashboard: React.FC = () => {
   const [campaign, setCampaign] = useState<FundraisingCampaign | null>(null);
   const [eventName, setEventName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [spotlightCycle, setSpotlightCycle] = useState(0);
 
   useEffect(() => {
     if (!eventId) return;
     let active = true;
+    setLoading(true);
+    setLoadError('');
     getEvents()
       .then((events) => {
         if (active) setEventName(events.find((event) => event.id === eventId)?.name || '');
@@ -30,6 +33,10 @@ const SharedFundraisingDashboard: React.FC = () => {
     const unsubscribe = subscribeFundraisingCampaign(eventId, (nextCampaign) => {
       if (!active) return;
       setCampaign(nextCampaign);
+      setLoading(false);
+    }, () => {
+      if (!active) return;
+      setLoadError('This dashboard could not be loaded. Sign in with a verified volunteer account, or ask an administrator to check your profile access.');
       setLoading(false);
     });
     return () => { active = false; unsubscribe(); };
@@ -61,7 +68,7 @@ const SharedFundraisingDashboard: React.FC = () => {
       <div><strong>Fundraising dashboard</strong><span>Read-only view</span></div>
       <button className="secondary-btn" onClick={() => navigate(isAdmin ? '/admin' : '/dashboard')}>Go to my dashboard</button>
     </div>
-    {!campaign ? <section className="panel empty-state"><strong>Dashboard not found</strong><span>The link may be incorrect, or this fundraising dashboard has not been saved yet.</span></section> : <div className="fundraising-dashboard">
+    {loadError ? <section className="panel empty-state"><strong>Unable to load dashboard</strong><span>{loadError}</span></section> : !campaign ? <section className="panel empty-state"><strong>Dashboard not found</strong><span>The link may be incorrect, or this fundraising dashboard has not been saved yet.</span></section> : <div className="fundraising-dashboard">
       <section className="fundraising-hero"><div><p className="fundraising-kicker">Fundraising dashboard</p><h2>{campaign.dashboardName || eventName || 'Fundraising'}</h2></div></section>
       <section className="fundraising-donor-ticker" aria-label="Donor names and amounts">
         <div className={`fundraising-donor-ticker-track ${donors.length ? '' : 'is-empty'}`}>
