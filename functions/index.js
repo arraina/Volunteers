@@ -106,6 +106,25 @@ exports.getSharedFundraisingDashboard = onCall({ region: 'us-central1', maxInsta
   };
 });
 
+exports.setFundraisingCampaignLock = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
+  await requireAdmin(request, true);
+  const eventId = String(request.data?.eventId || '').trim();
+  const locked = request.data?.locked === true;
+  if (!eventId || eventId.includes('/') || eventId.length > 200) {
+    throw new HttpsError('invalid-argument', 'Choose a valid fundraising dashboard.');
+  }
+  const campaignRef = db.doc(`fundraisingCampaigns/${eventId}`);
+  const campaign = await campaignRef.get();
+  if (!campaign.exists) throw new HttpsError('not-found', 'Save the fundraising dashboard before freezing it.');
+  await campaignRef.update({
+    locked,
+    lockedAt: locked ? admin.firestore.FieldValue.serverTimestamp() : null,
+    lockedBy: locked ? request.auth.uid : null,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { locked };
+});
+
 exports.createOfflineVolunteer = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
   await requireAdmin(request);
   const firstName = String(request.data?.firstName || '').trim();

@@ -83,6 +83,14 @@
 .fundraising-target-card small { color: rgba(255,255,255,0.86); }
 
 .fundraising-settings { display: grid; gap: 1rem; }
+.fundraising-lock-status { align-items: center; border: 1px solid; border-radius: 14px; display: flex; gap: 1rem; justify-content: space-between; padding: 0.9rem 1rem; }
+.fundraising-lock-status > div { display: grid; gap: 0.2rem; }
+.fundraising-lock-status span { font-size: 0.86rem; }
+.fundraising-lock-status.is-open { background: #f0fdf4; border-color: #86efac; color: #166534; }
+.fundraising-lock-status.is-locked { background: #fff7ed; border-color: #fdba74; color: #9a3412; }
+.fundraising-dashboard.is-frozen .fundraising-entries input:disabled,
+.fundraising-dashboard.is-frozen .fundraising-entries select:disabled,
+.fundraising-dashboard.is-frozen .fundraising-settings input:disabled { background: #f3f4f6; color: #6b7280; cursor: not-allowed; opacity: 0.78; }
 .fundraising-settings-grid { display: grid; grid-template-columns: 1.2fr 1.2fr 1fr 1fr; gap: 1rem; align-items: start; }
 .fundraising-settings-grid label { display: grid; gap: 0.4rem; font-weight: 700; }
 .fundraising-settings-grid small { color: var(--muted); font-weight: 400; }

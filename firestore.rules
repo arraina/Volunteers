@@ -344,7 +344,20 @@ service cloud.firestore {
     // use the expiring share-token callable, which returns read-only data.
     match /fundraisingCampaigns/{eventId} {
       allow read: if isAdmin();
-      allow create, update: if isAdmin()
+      allow create: if isAdmin()
+        && request.resource.data.get('locked', false) == false
+        && request.resource.data.eventId == eventId
+        && request.resource.data.targetAmount is number
+        && request.resource.data.targetAmount >= 0
+        && request.resource.data.startingCurrentAmount is number
+        && request.resource.data.startingCurrentAmount >= 0
+        && request.resource.data.entries is list
+        && request.resource.data.entries.size() <= 1000;
+      allow update: if isAdmin()
+        && resource.data.get('locked', false) == false
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'locked', 'lockedAt', 'lockedBy'
+        ])
         && request.resource.data.eventId == eventId
         && request.resource.data.targetAmount is number
         && request.resource.data.targetAmount >= 0

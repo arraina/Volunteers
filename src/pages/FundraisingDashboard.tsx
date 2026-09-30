@@ -5,6 +5,7 @@ import {
   createEvent,
   FundraisingEntry,
   saveFundraisingCampaign,
+  setFundraisingCampaignLock,
   subscribeFundraisingCampaign,
 } from '../helpers/store';
 import { fromEasternDateTimeInput } from '../helpers/taskDateTime';
@@ -39,6 +40,9 @@ const FundraisingDashboard: React.FC<{
   const [entryValidationMessage, setEntryValidationMessage] = useState('');
   const [invalidEntryIds, setInvalidEntryIds] = useState<string[]>([]);
   const [spotlightCycle, setSpotlightCycle] = useState(0);
+  const [campaignExists, setCampaignExists] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const [changingLock, setChangingLock] = useState(false);
 
   useEffect(() => {
     if (!eventId && events.length) setEventId(events[0].id);
@@ -55,6 +59,8 @@ const FundraisingDashboard: React.FC<{
       setTarget(String(campaign?.targetAmount || 0));
       setStartingCurrent(String(campaign?.startingCurrentAmount || 0));
       setEntries(campaign?.entries.length ? campaign.entries : [blankEntry()]);
+      setCampaignExists(Boolean(campaign));
+      setLocked(campaign?.locked === true);
       setLoading(false);
     });
   }, [eventId]);
@@ -89,6 +95,7 @@ const FundraisingDashboard: React.FC<{
   };
 
   const save = async () => {
+    if (locked) return setError('This fundraising dashboard is frozen. The Owner must unfreeze it before changes can be saved.');
     if (!eventId || eventId === '__new__') return setError('Select or create an event first.');
     if (!dashboardName.trim()) return setError('Enter a fundraising dashboard name.');
     if (spotlightThresholdAmount <= 0) return setError('Enter a spotlight threshold greater than zero.');
@@ -117,6 +124,18 @@ const FundraisingDashboard: React.FC<{
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not save fundraising dashboard.');
     } finally { setSaving(false); }
+  };
+
+  const changeLock = async () => {
+    if (!eventId || eventId === '__new__' || !campaignExists || !isOwner) return;
+    if (!locked && !window.confirm('Freeze this fundraising dashboard? Admins will not be able to save changes until you unfreeze it.')) return;
+    setChangingLock(true); setError(''); setMessage('');
+    try {
+      await setFundraisingCampaignLock(eventId, !locked);
+      setMessage(locked ? 'Fundraising dashboard unfrozen. Changes can be saved again.' : 'Fundraising dashboard frozen. No changes can be saved until the Owner unfreezes it.');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not change the dashboard lock.');
+    } finally { setChangingLock(false); }
   };
 
   const createNewEvent = async () => {
@@ -167,13 +186,18 @@ const FundraisingDashboard: React.FC<{
     URL.revokeObjectURL(url);
   };
 
-  return <div className="fundraising-dashboard">
+  return <div className={`fundraising-dashboard ${locked ? 'is-frozen' : ''}`}>
     <section className="fundraising-hero">
       <div>
         <p className="fundraising-kicker">Fundraising dashboard</p>
         <h2>{dashboardName || selectedEvent?.name || 'Choose an event'}</h2>
       </div>
     </section>
+
+    {campaignExists && <section className={`fundraising-lock-status ${locked ? 'is-locked' : 'is-open'}`}>
+      <div><strong>{locked ? 'Dashboard frozen' : 'Dashboard open for changes'}</strong><span>{locked ? 'No fundraising entries or settings can be changed until the Owner unfreezes it.' : 'Admins and the Owner can continue updating and saving this dashboard.'}</span></div>
+      {isOwner && <button className={locked ? 'secondary-btn' : 'danger-btn'} disabled={changingLock} onClick={changeLock}>{changingLock ? 'Updating…' : locked ? 'Unfreeze dashboard' : 'Freeze dashboard'}</button>}
+    </section>}
 
     {eventId && eventId !== '__new__' && <>
       <section className="fundraising-donor-ticker" aria-label="Donor names and amounts">
@@ -225,39 +249,39 @@ const FundraisingDashboard: React.FC<{
         {entryValidationMessage && <div className="fundraising-validation-message" role="alert"><strong>Unable to save:</strong> {entryValidationMessage}</div>}
         <div className="fundraising-entry-header"><span>First name *</span><span>Last name (optional)</span><span>Type *</span><span>Amount *</span><span>Comments (optional)</span><span /></div>
         {entries.map((entry, index) => <div className={`fundraising-entry-row ${invalidEntryIds.includes(entry.id) ? 'has-error' : ''}`} key={entry.id}>
-          <input aria-label={`First name row ${index + 1}`} aria-invalid={invalidEntryIds.includes(entry.id) && !entry.firstName.trim()} value={entry.firstName} onChange={(event) => updateEntry(entry.id, { firstName: event.target.value })} placeholder="First name *" />
-          <input aria-label={`Last name row ${index + 1}`} value={entry.lastName} onChange={(event) => updateEntry(entry.id, { lastName: event.target.value })} placeholder="Last name (optional)" />
-          <select aria-label={`Type row ${index + 1}`} value={entry.type} onChange={(event) => updateEntry(entry.id, { type: event.target.value as FundraisingEntry['type'] })}>
+          <input disabled={locked} aria-label={`First name row ${index + 1}`} aria-invalid={invalidEntryIds.includes(entry.id) && !entry.firstName.trim()} value={entry.firstName} onChange={(event) => updateEntry(entry.id, { firstName: event.target.value })} placeholder="First name *" />
+          <input disabled={locked} aria-label={`Last name row ${index + 1}`} value={entry.lastName} onChange={(event) => updateEntry(entry.id, { lastName: event.target.value })} placeholder="Last name (optional)" />
+          <select disabled={locked} aria-label={`Type row ${index + 1}`} value={entry.type} onChange={(event) => updateEntry(entry.id, { type: event.target.value as FundraisingEntry['type'] })}>
             <option value="pledge">Pledge</option>
             <option value="loan">Loan</option>
             <option value="donation">Donation</option>
           </select>
-          <div className="money-input"><span>$</span><input aria-label={`Amount row ${index + 1}`} aria-invalid={invalidEntryIds.includes(entry.id) && entry.amount <= 0} type="number" min="0.01" step="0.01" value={entry.amount || ''} onChange={(event) => updateEntry(entry.id, { amount: Math.max(0, Number(event.target.value) || 0) })} placeholder="0.00 *" /></div>
-          <input aria-label={`Comments row ${index + 1}`} value={entry.comments} onChange={(event) => updateEntry(entry.id, { comments: event.target.value })} placeholder="Comments" />
-          <button className="link-btn danger" aria-label={`Remove row ${index + 1}`} onClick={() => { setEntries((currentEntries) => currentEntries.length === 1 ? [blankEntry()] : currentEntries.filter((item) => item.id !== entry.id)); setInvalidEntryIds((currentIds) => currentIds.filter((entryId) => entryId !== entry.id)); setEntryValidationMessage(''); }}>Remove</button>
+          <div className="money-input"><span>$</span><input disabled={locked} aria-label={`Amount row ${index + 1}`} aria-invalid={invalidEntryIds.includes(entry.id) && entry.amount <= 0} type="number" min="0.01" step="0.01" value={entry.amount || ''} onChange={(event) => updateEntry(entry.id, { amount: Math.max(0, Number(event.target.value) || 0) })} placeholder="0.00 *" /></div>
+          <input disabled={locked} aria-label={`Comments row ${index + 1}`} value={entry.comments} onChange={(event) => updateEntry(entry.id, { comments: event.target.value })} placeholder="Comments" />
+          <button disabled={locked} className="link-btn danger" aria-label={`Remove row ${index + 1}`} onClick={() => { setEntries((currentEntries) => currentEntries.length === 1 ? [blankEntry()] : currentEntries.filter((item) => item.id !== entry.id)); setInvalidEntryIds((currentIds) => currentIds.filter((entryId) => entryId !== entry.id)); setEntryValidationMessage(''); }}>Remove</button>
         </div>)}
         <div className="fundraising-entry-footer">
           <div className="fundraising-entry-total"><span>Listed pledges, loans, and donations</span><strong>{money.format(entryTotal)}</strong></div>
-          <button className="secondary-btn" onClick={() => setEntries((currentEntries) => [...currentEntries, blankEntry()])}>+ Add row</button>
+          <button disabled={locked} className="secondary-btn" onClick={() => setEntries((currentEntries) => [...currentEntries, blankEntry()])}>+ Add row</button>
         </div>
       </section>
     </>}
 
-    {eventId && eventId !== '__new__' && <button className="primary-btn fundraising-save" disabled={saving || loading} onClick={save}>{saving ? 'Saving…' : loading ? 'Loading…' : 'Save fundraising dashboard'}</button>}
+    {eventId && eventId !== '__new__' && <button className="primary-btn fundraising-save" disabled={saving || loading || locked} onClick={save}>{locked ? 'Dashboard frozen' : saving ? 'Saving…' : loading ? 'Loading…' : 'Save fundraising dashboard'}</button>}
 
     <section className="panel fundraising-settings">
       <div className="panel-head"><div><h3>Fundraising setup</h3><p className="muted small">Choose the event and maintain the amounts used by the dashboard.</p></div></div>
       <div className="fundraising-settings-grid">
         <label className="fundraising-event-select"><span>Fundraising event</span><select value={eventId} onChange={(event) => {
           const value = event.target.value;
-          setEventId(value); setCreatingEvent(value === '__new__'); setMessage('');
+          setEventId(value); setCreatingEvent(value === '__new__'); setCampaignExists(false); setLocked(false); setMessage('');
         }}><option value="">Select an event…</option>{events.map((event) => <option value={event.id} key={event.id}>{event.name}</option>)}<option value="__new__">+ Create a new event</option></select></label>
         {eventId && eventId !== '__new__' && <>
-          <label><span>Dashboard name</span><input value={dashboardName} onChange={(event) => { setDashboardName(event.target.value); setMessage(''); }} placeholder="Fundraising dashboard name" /></label>
-          <label><span>Target</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={target} onChange={(event) => setTarget(event.target.value)} /></div></label>
-          <label><span>Current before entries</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={startingCurrent} onChange={(event) => setStartingCurrent(event.target.value)} /></div><small>Funds collected before the list above.</small></label>
-          <label><span>Spotlight threshold</span><div className="money-input"><span>$</span><input type="number" min="1" step="100" value={spotlightThreshold} onChange={(event) => { setSpotlightThreshold(event.target.value); setMessage(''); }} /></div><small>Donors at or above this amount receive a spotlight.</small></label>
-          <label><span>Time between spotlights</span><input type="number" min="0" step="1" value={spotlightGapSeconds} onChange={(event) => { setSpotlightGapSeconds(event.target.value); setMessage(''); }} /><small>Quiet time in seconds after each six-second spotlight.</small></label>
+          <label><span>Dashboard name</span><input disabled={locked} value={dashboardName} onChange={(event) => { setDashboardName(event.target.value); setMessage(''); }} placeholder="Fundraising dashboard name" /></label>
+          <label><span>Target</span><div className="money-input"><span>$</span><input disabled={locked} type="number" min="0" step="0.01" value={target} onChange={(event) => setTarget(event.target.value)} /></div></label>
+          <label><span>Current before entries</span><div className="money-input"><span>$</span><input disabled={locked} type="number" min="0" step="0.01" value={startingCurrent} onChange={(event) => setStartingCurrent(event.target.value)} /></div><small>Funds collected before the list above.</small></label>
+          <label><span>Spotlight threshold</span><div className="money-input"><span>$</span><input disabled={locked} type="number" min="1" step="100" value={spotlightThreshold} onChange={(event) => { setSpotlightThreshold(event.target.value); setMessage(''); }} /></div><small>Donors at or above this amount receive a spotlight.</small></label>
+          <label><span>Time between spotlights</span><input disabled={locked} type="number" min="0" step="1" value={spotlightGapSeconds} onChange={(event) => { setSpotlightGapSeconds(event.target.value); setMessage(''); }} /><small>Quiet time in seconds after each six-second spotlight.</small></label>
         </>}
       </div>
       {creatingEvent && <div className="fundraising-new-event">

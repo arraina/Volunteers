@@ -68,6 +68,9 @@ export interface FundraisingCampaign {
   startingCurrentAmount: number;
   entries: FundraisingEntry[];
   updatedBy?: string;
+  locked?: boolean;
+  lockedAt?: Date | null;
+  lockedBy?: string;
 }
 
 export function subscribeFundraisingCampaign(
@@ -94,8 +97,16 @@ export function subscribeFundraisingCampaign(
         comments: String(entry.comments || ''),
       })) : [],
       updatedBy: data.updatedBy || undefined,
+      locked: data.locked === true,
+      lockedAt: data.lockedAt ? firestoreTimestampToDate(data.lockedAt) : null,
+      lockedBy: data.lockedBy || undefined,
     });
   }, (error) => onError?.(error));
+}
+
+export async function setFundraisingCampaignLock(eventId: string, locked: boolean): Promise<void> {
+  const call = httpsCallable<{ eventId: string; locked: boolean }, { locked: boolean }>(functions, 'setFundraisingCampaignLock');
+  await call({ eventId, locked });
 }
 
 export async function saveFundraisingCampaign(campaign: FundraisingCampaign): Promise<void> {
