@@ -19,10 +19,7 @@ service firebase.storage {
     }
     match /govindas/menu-items/{fileName} {
       allow read: if true;
-      allow create, update: if (isOwner() || isGovindasAdmin())
-        && request.resource.size < 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
-      allow delete: if isOwner() || isGovindasAdmin();
+      allow write: if false;
     }
     match /{allPaths=**} {
       allow read, write: if false;

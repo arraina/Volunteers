@@ -255,6 +255,31 @@ function cleanGovindasItems(value) {
   });
 }
 
+exports.uploadGovindasItemImage = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  await requireDepartmentAccess(request, 'govindas', true);
+  const dataUrl = String(request.data?.dataUrl || '');
+  const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) throw new HttpsError('invalid-argument', 'Choose a JPG, PNG, WebP, or GIF image.');
+  const bytes = Buffer.from(match[2], 'base64');
+  if (!bytes.length || bytes.length >= 5 * 1024 * 1024) throw new HttpsError('invalid-argument', 'The image must be smaller than 5 MB.');
+  const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }[match[1]];
+  const imagePath = `govindas/menu-items/${randomUUID()}.${extension}`;
+  const downloadToken = randomUUID();
+  await admin.storage().bucket().file(imagePath).save(bytes, { resumable: false, metadata: {
+    contentType: match[1], cacheControl: 'public,max-age=31536000,immutable', metadata: { firebaseStorageDownloadTokens: downloadToken },
+  } });
+  const bucketName = admin.storage().bucket().name;
+  return { imagePath, imageUrl: `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(imagePath)}?alt=media&token=${downloadToken}` };
+});
+
+exports.deleteGovindasItemImage = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  await requireDepartmentAccess(request, 'govindas', true);
+  const imagePath = String(request.data?.imagePath || '').trim();
+  if (!/^govindas\/menu-items\/[^/]+$/.test(imagePath)) throw new HttpsError('invalid-argument', 'Choose a valid Govinda’s item image.');
+  await admin.storage().bucket().file(imagePath).delete({ ignoreNotFound: true });
+  return { deleted: true };
+});
+
 exports.saveGovindasMenu = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
   await requireDepartmentAccess(request, 'govindas', true);
   const menuId = String(request.data?.menuId || '').trim();

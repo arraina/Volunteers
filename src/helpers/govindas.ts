@@ -12,6 +12,12 @@ export async function getGovindasAdminData(): Promise<{ menus: GovindasMenu[]; o
 export async function saveGovindasMenu(menu: Omit<GovindasMenu, 'id'> & { menuId?: string }): Promise<string> {
   return (await httpsCallable<typeof menu, { menuId: string }>(functions, 'saveGovindasMenu')(menu)).data.menuId;
 }
+export async function uploadGovindasItemImage(dataUrl: string): Promise<{ imageUrl: string; imagePath: string }> {
+  return (await httpsCallable<{ dataUrl: string }, { imageUrl: string; imagePath: string }>(functions, 'uploadGovindasItemImage')({ dataUrl })).data;
+}
+export async function deleteGovindasItemImage(imagePath: string): Promise<void> {
+  await httpsCallable<{ imagePath: string }, { deleted: boolean }>(functions, 'deleteGovindasItemImage')({ imagePath });
+}
 export async function createGovindasShareLink(menuId: string): Promise<{ token: string; expiresAtMillis: number }> {
   return (await httpsCallable<{ menuId: string }, { token: string; expiresAtMillis: number }>(functions, 'createGovindasShareLink')({ menuId })).data;
 }

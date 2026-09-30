@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
-import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import { auth, storage } from '../config/firebase';
+import { auth } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
 import { getDepartmentWorkspace } from '../helpers/departments';
-import { createGovindasShareLink, getGovindasAdminData, GovindasMenu, GovindasMenuItem, GovindasOrder, saveGovindasMenu, updateGovindasOrderStatus } from '../helpers/govindas';
+import { createGovindasShareLink, deleteGovindasItemImage, getGovindasAdminData, GovindasMenu, GovindasMenuItem, GovindasOrder, saveGovindasMenu, updateGovindasOrderStatus, uploadGovindasItemImage } from '../helpers/govindas';
 import './AdminDashboard.css';
 import './Govindas.css';
 
@@ -26,11 +25,8 @@ const GovindasAdminPage: React.FC = () => {
     if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size >= 5 * 1024 * 1024) { setError('Choose a JPG, PNG, WebP, or GIF image smaller than 5 MB.'); return; }
     setBusy(true); setError('');
     try {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-').slice(-100);
-      const imagePath = `govindas/menu-items/${crypto.randomUUID()}-${safeName}`;
-      const imageRef = ref(storage, imagePath);
-      await uploadBytes(imageRef, file, { contentType: file.type });
-      const imageUrl = await getDownloadURL(imageRef);
+      const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result || '')); reader.onerror = () => reject(new Error('The image could not be read.')); reader.readAsDataURL(file); });
+      const { imagePath, imageUrl } = await uploadGovindasItemImage(dataUrl);
       setItems((current) => current.map((item) => item.id === itemId ? { ...item, imageUrl, imagePath } : item));
       setMessage('Image uploaded. Save the weekly menu to publish it.');
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Image could not be uploaded.'); } finally { setBusy(false); }
@@ -38,7 +34,7 @@ const GovindasAdminPage: React.FC = () => {
   const removeImage = async (itemId: string) => {
     const item = items.find((value) => value.id === itemId);
     setItems((current) => current.map((value) => value.id === itemId ? { ...value, imageUrl: '', imagePath: '' } : value));
-    if (item?.imagePath) { try { await deleteObject(ref(storage, item.imagePath)); } catch { /* Saving still removes the image from the menu. */ } }
+    if (item?.imagePath) { try { await deleteGovindasItemImage(item.imagePath); } catch { /* Saving still removes the image from the menu. */ } }
   };
   const editMenu = (menu?: GovindasMenu) => { setMenuId(menu?.id || ''); setTitle(menu?.title || ''); setCutoff(localValue(menu?.cutoffMillis)); setPickup(localValue(menu?.pickupMillis)); setPickupDetails(menu?.pickupDetails || ''); setZelleInstructions(menu?.zelleInstructions || ''); setItems(menu?.items?.length ? menu.items : [blankItem()]); setError(''); setMessage(''); };
   const save = async () => { setBusy(true); setError(''); try { const savedId = await saveGovindasMenu({ menuId: menuId || undefined, title, cutoffMillis: new Date(cutoff).getTime(), pickupMillis: new Date(pickup).getTime(), pickupDetails, zelleInstructions, items }); setMenuId(savedId); setMessage('Weekly menu saved.'); await load(); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Menu could not be saved.'); } finally { setBusy(false); } };
