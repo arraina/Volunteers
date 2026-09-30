@@ -239,7 +239,7 @@ const VolunteerDashboard: React.FC = () => {
           Event Calendar
         </button>
         <button className={tab === 'departments' ? 'active' : ''} onClick={() => chooseTab('departments')}>
-          Departments
+          Community Hub
         </button>
         <button className={tab === 'past' ? 'active' : ''} onClick={() => chooseTab('past')}>
           Past Tasks ({pastTasks.length})

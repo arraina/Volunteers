@@ -44,10 +44,21 @@ export const HELP_ARTICLES: HelpArticle[] = [
     sections: [
       { heading: 'Tasks', text: 'Browse & Sign Up is the shared opportunity list, My Assignments is your personal schedule, Create & Manage combines task creation with all management controls, and Create with AI opens the reviewed AI workflow.' },
       { heading: 'Events', text: 'Event Calendar provides year, month, week, and day views. Event Workspace holds planning details, meetings, action items, feedback, and templates.' },
-      { heading: 'People', text: 'Volunteers contains add, CSV import, editing, search, and duplicate-phone information. Admin Management is Owner-only.' },
+      { heading: 'Community', text: 'Community Hub opens the department directory and authorized department workspaces. Volunteers contains add, CSV import, editing, search, and duplicate-phone information. Admin Management is Owner-only.' },
       { heading: 'Communication', text: 'For the Owner, Announcements and Invitation Queue are grouped under Communication. The queue is for phone-only volunteers who still need to add an email.' },
       { heading: 'Reports and More', text: 'Reports contains Analytics, Costs, and App Value according to role. More contains History, Trash, Audit, and Help according to role.' },
-    ], keywords: ['navigation', 'menu', 'tasks menu', 'events menu', 'people', 'communication', 'reports', 'more'],
+    ], keywords: ['navigation', 'menu', 'tasks menu', 'events menu', 'community hub', 'departments', 'people', 'communication', 'reports', 'more'],
+  },
+  {
+    id: 'community-hub-departments', title: 'Community Hub and department workspaces', category: 'Departments', roles: ['volunteer', 'admin', 'owner'],
+    summary: 'Understand department membership, administration, private workspaces, Fundraising, and Govinda’s.',
+    sections: [
+      { heading: 'Open the Community Hub', text: 'Use Community Hub in the navigation to see the temple department directory. The directory itself is visible to signed-in community members, while private workspace content requires department membership.' },
+      { heading: 'Department access', text: 'The Owner appoints Department Admins and can manage every department. Department Admins may add or remove ordinary members in their own department, but cannot appoint another Department Admin.' },
+      { heading: 'Private department work', text: 'Authorized members can review department announcements, tasks, and events. Department Admins can create, complete, reopen, and archive workspace items.' },
+      { heading: 'Fundraising', text: 'The Fundraising department has its own dashboard. Its Department Admin can maintain existing unlocked campaigns; only the Owner controls campaign locking and public share links.' },
+      { heading: 'Govinda’s', text: 'The Govinda’s Department Admin or Owner can create weekly menus, add food images, generate expiring public ordering links, and privately manage orders. Customers see menu information and their own token-protected order status, but never the private order list.' },
+    ], keywords: ['community hub', 'department', 'department admin', 'membership', 'fundraising', 'govindas', 'menu', 'orders'],
   },
   {
     id: 'owner-quick-start', title: 'How to get started as the Owner', category: 'Quick Start', roles: ['owner'],

@@ -66,8 +66,8 @@ const DepartmentDirectory: React.FC<{ isOwner: boolean }> = ({ isOwner }) => {
 
   return <section className="department-workspace">
     <div className="panel department-intro">
-      <div><p className="eyebrow">COMMUNITY DIRECTORY</p><h2>Departments</h2></div>
-      <p className="muted">Explore the teams serving the community. Existing tasks and events remain in their current workspaces.</p>
+      <div><p className="eyebrow">SERVE · CONNECT · GROW</p><h2>Community Hub</h2></div>
+      <p className="muted">Explore temple departments, find your team, and open the private workspaces you are authorized to use. Existing tasks and events remain unchanged.</p>
     </div>
     {error && <div className="error-message" role="alert">{error}</div>}
     {message && <div className="success-message" role="status">{message}</div>}

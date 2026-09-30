@@ -31,7 +31,7 @@ const FundraisingDepartmentPage: React.FC = () => {
   if (!allowed) return <main className="auth-page"><section className="panel auth-card"><h1>Fundraising access required</h1><p>Only the Owner or an assigned Fundraising Department Admin can manage this dashboard.</p><button className="primary-btn" onClick={() => navigate(isAdmin ? '/admin?tab=departments' : '/dashboard?tab=departments')}>Back to departments</button></section></main>;
 
   return <div className="admin-dashboard">
-    <header className="dashboard-header"><div><h1>ISKCON Parsippany Community Hub</h1><p>Serve. Connect. Grow. · Fundraising</p></div><div className="header-actions"><button className="logout-btn" onClick={() => navigate(isAdmin ? '/admin?tab=departments' : '/dashboard?tab=departments')}>Departments</button><button className="logout-btn" onClick={async () => { await signOut(auth); navigate('/login'); }}>Logout</button></div></header>
+    <header className="dashboard-header"><div><h1>ISKCON Parsippany Community Hub</h1><p>Serve. Connect. Grow. · Fundraising</p></div><div className="header-actions"><button className="logout-btn" onClick={() => navigate(isAdmin ? '/admin?tab=departments' : '/dashboard?tab=departments')}>Community Hub</button><button className="logout-btn" onClick={async () => { await signOut(auth); navigate('/login'); }}>Logout</button></div></header>
     <main className="dashboard-content">{error && <div className="error-message">{error}</div>}<FundraisingDashboard events={events} uid={user?.uid} isOwner={isOwner} canCreateEvent={isAdmin} setError={setError} /></main>
   </div>;
 };

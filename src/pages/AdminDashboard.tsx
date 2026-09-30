@@ -321,9 +321,9 @@ const AdminDashboard: React.FC = () => {
           </div>
         </details>
         <details className={`nav-group ${peopleTabs.includes(tab) && !(tab === 'volunteers' && volunteerWorkspaceView === 'invitations') ? 'active' : ''}`} onToggle={handleNavToggle}>
-          <summary>People</summary>
+          <summary>Community</summary>
           <div className="nav-menu">
-            <button className={tab === 'departments' ? 'active' : ''} onClick={(event) => chooseTab('departments', event)}>Departments</button>
+            <button className={tab === 'departments' ? 'active' : ''} onClick={(event) => chooseTab('departments', event)}>Community Hub</button>
             <button className={tab === 'volunteers' && volunteerWorkspaceView === 'directory' ? 'active' : ''} onClick={(event) => chooseVolunteerView('directory', event)}>Volunteers</button>
             {isOwner && <button className={tab === 'admins' ? 'active' : ''} onClick={(event) => chooseTab('admins', event)}>Admin Management</button>}
           </div>
