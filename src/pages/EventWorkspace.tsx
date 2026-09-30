@@ -366,7 +366,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
       task.endDateTime ? `DTEND:${stamp(task.endDateTime)}` : '', `SUMMARY:${escape(task.title)}`,
       `DESCRIPTION:${escape(task.description || '')}`, `LOCATION:${escape(task.location || '')}`, 'END:VEVENT',
     ].filter(Boolean).join('\r\n')).join('\r\n');
-    const blob = new Blob([`BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//ISKCON Towaco//Volunteers//EN\r\n${items}\r\nEND:VCALENDAR\r\n`], { type: 'text/calendar' });
+    const blob = new Blob([`BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//ISKCON Parsippany Community Hub//EN\r\n${items}\r\nEND:VCALENDAR\r\n`], { type: 'text/calendar' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob); link.download = `${event.name.replace(/[^a-z0-9]+/gi, '-')}.ics`; link.click();
     URL.revokeObjectURL(link.href);

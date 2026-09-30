@@ -82,7 +82,7 @@ const VerifyEmail: React.FC = () => {
     <main className="auth-page verification-page">
       <section className="auth-panel">
         <div className="auth-card verification-card">
-          <p className="auth-kicker">ISKCON Towaco Volunteer Management System</p>
+          <p className="auth-kicker">ISKCON Parsippany Community Hub</p>
           <h1>Verify your email</h1>
           <p className="auth-subtitle">
             We sent a verification link to <strong>{email || 'your email address'}</strong>.

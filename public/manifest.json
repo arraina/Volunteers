@@ -1,9 +1,9 @@
 {
-  "short_name": "ISKCON Towaco",
-  "name": "ISKCON Towaco Volunteer Management System",
+  "short_name": "Community Hub",
+  "name": "ISKCON Parsippany Community Hub",
   "icons": [],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#7c3aed",
+  "theme_color": "#3f9142",
   "background_color": "#ffffff"
 }

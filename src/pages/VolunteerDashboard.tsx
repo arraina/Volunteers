@@ -213,7 +213,7 @@ const VolunteerDashboard: React.FC = () => {
     <div className="admin-dashboard">
       <header className="dashboard-header">
         <div>
-          <h1>ISKCON Towaco Volunteer Management System</h1>
+          <h1>ISKCON Parsippany Community Hub</h1>
           <p>Welcome, {profile.firstName || profile.name}</p>
         </div>
         <div className="header-actions">

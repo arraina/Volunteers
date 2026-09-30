@@ -291,8 +291,8 @@ const AdminDashboard: React.FC = () => {
     <div className="admin-dashboard">
       <header className="dashboard-header">
         <div>
-          <h1>ISKCON Towaco Volunteer Management System</h1>
-          <p>{isOwner ? 'Owner' : 'Admin'}</p>
+          <h1>ISKCON Parsippany Community Hub</h1>
+          <p>Serve. Connect. Grow. · {isOwner ? 'Owner' : 'Admin'}</p>
         </div>
         <div className="header-actions">
           <span className="user-info">{user?.email}</span>

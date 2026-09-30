@@ -6,13 +6,13 @@ const PrivacyPolicy: React.FC = () => (
   <main className="privacy-page">
     <article className="privacy-card">
       <header className="privacy-header">
-        <p className="privacy-eyebrow">ISKCON of New Jersey · Towaco</p>
-        <h1>Volunteer Management System Privacy Policy</h1>
+        <p className="privacy-eyebrow">ISKCON Parsippany Community Hub</p>
+        <h1>Community Hub Privacy Policy</h1>
         <p>Effective September 13, 2026</p>
       </header>
 
       <p>
-        This policy explains how the ISKCON of New Jersey Volunteer Management System
+        This policy explains how the ISKCON Parsippany Community Hub
         (the “Application”) collects, uses, shares, and protects information about
         volunteers, administrators, and owners who use it.
       </p>
@@ -99,7 +99,7 @@ const PrivacyPolicy: React.FC = () => (
       </address>
 
       <footer className="privacy-footer">
-        <Link to="/login">Return to Volunteer Management System</Link>
+        <Link to="/login">Return to Community Hub</Link>
       </footer>
     </article>
   </main>

@@ -64,7 +64,7 @@ const HelpCenter: React.FC = () => {
   return (
     <div className="help-page">
       <header className="help-header">
-        <div><p className="help-eyebrow">ISKCON Towaco Volunteer Management System</p><h1>Help Center</h1><p>Guidance for your {role} access</p></div>
+        <div><p className="help-eyebrow">ISKCON Parsippany Community Hub · Serve. Connect. Grow.</p><h1>Help Center</h1><p>Guidance for your {role} access</p></div>
         <button onClick={() => navigate(isAdmin ? '/admin' : '/dashboard')} className="help-back">Back to dashboard</button>
       </header>
       <main className="help-content">

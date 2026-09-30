@@ -1,4 +1,6 @@
-# ISKCON Towaco Volunteer Management System
+# ISKCON Parsippany Community Hub
+
+**Serve. Connect. Grow.**
 
 A zero-cost volunteer coordination app for a temple/nonprofit. Admins create
 **tasks** and assign volunteers; volunteers can register themselves and sign up

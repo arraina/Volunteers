@@ -178,12 +178,12 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
     <div className="auth-page">
       <aside className="auth-hero">
         <div className="brand">
-          <span className="leaf">🌿</span> ISKCON Towaco Volunteer Management System
+          <span className="leaf">🌿</span> ISKCON Parsippany Community Hub
         </div>
-        <h1>Simple, friendly volunteer signups for your temple.</h1>
+        <h1>Serve. Connect. Grow.</h1>
         <p className="lede">
-          Organize seva, let volunteers sign up for tasks in a tap, and send automatic
-          reminders — all in one place.
+          One community hub for seva, events, volunteers, communication, fundraising,
+          and future community services.
         </p>
         <div className="hero-features">
           <div className="hero-feature">
@@ -194,7 +194,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
           <div className="hero-feature">
             <div className="icon">🔔</div>
             <strong>Auto reminders</strong>
-            <span>WhatsApp and email reminders before every task.</span>
+            <span>WhatsApp reminders before every task.</span>
           </div>
           <div className="hero-feature">
             <div className="icon">✨</div>
