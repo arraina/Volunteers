@@ -340,13 +340,10 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
-    // One fundraising campaign per event. Verified account holders may view a
-    // shared read-only dashboard; only Admins and the Owner may change it.
+    // One fundraising campaign per event. Every verified app account may view
+    // a shared read-only dashboard; only Admins and the Owner may change it.
     match /fundraisingCampaigns/{eventId} {
-      allow read: if isAdmin()
-        || (verifiedUser()
-          && exists(/databases/$(database)/documents/volunteers/$(request.auth.uid))
-          && get(/databases/$(database)/documents/volunteers/$(request.auth.uid)).data.deleted != true);
+      allow read: if verifiedUser();
       allow create, update: if isAdmin()
         && request.resource.data.eventId == eventId
         && request.resource.data.targetAmount is number
