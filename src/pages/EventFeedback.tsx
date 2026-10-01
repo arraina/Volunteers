@@ -28,12 +28,13 @@ const EventFeedback: React.FC<{
   const [feedbackText, setFeedbackText] = useState('');
   const [anonymous, setAnonymous] = useState(false);
   const [rating, setRating] = useState(0);
+  const [respondentName, setRespondentName] = useState(() => `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || profile.name || '');
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eventId) return setError('Select an event.');
     try {
-      await submitAuthenticatedEventFeedback({ eventId, rating, feedbackText: feedbackText.trim(), anonymous });
+      await submitAuthenticatedEventFeedback({ eventId, rating, feedbackText: feedbackText.trim(), respondentName, anonymous });
       setMessage('Thank you. Your event feedback was saved.');
       setFeedbackText('');
       setRating(0);
@@ -51,6 +52,8 @@ const EventFeedback: React.FC<{
           <option value="">Select an event</option>
           {feedbackEvents.map((event) => <option key={event.id} value={event.id}>{event.name}{event.date ? ` — ${event.date.toLocaleDateString()}` : ''}</option>)}
         </select>
+        <label className="field-label" htmlFor="feedback-name">Name (optional)</label>
+        <input id="feedback-name" maxLength={120} value={respondentName} onChange={(e) => setRespondentName(e.target.value)} placeholder="Your name" disabled={anonymous} />
         <fieldset className="feedback-stars"><legend>Your rating</legend>{[1, 2, 3, 4, 5].map((value) => <button type="button" key={value} className={value <= rating ? 'selected' : ''} aria-label={`${value} star${value === 1 ? '' : 's'}`} onClick={() => setRating(value)}>★</button>)}</fieldset>
         <label className="field-label">Your feedback</label>
         <textarea

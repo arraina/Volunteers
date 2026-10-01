@@ -284,10 +284,11 @@ exports.deleteGovindasItemImage = onCall({ region: 'us-central1', maxInstances: 
 function cleanFeedbackInput(data) {
   const rating = Math.round(Number(data?.rating));
   const feedbackText = String(data?.feedbackText || '').trim().slice(0, 5000);
+  const respondentName = String(data?.respondentName || '').trim().replace(/\s+/g, ' ').slice(0, 120);
   if (!Number.isInteger(rating) || rating < 1 || rating > 5 || !feedbackText) {
     throw new HttpsError('invalid-argument', 'Choose a 1–5 star rating and enter feedback.');
   }
-  return { rating, feedbackText };
+  return { rating, feedbackText, respondentName };
 }
 
 exports.submitAuthenticatedEventFeedback = onCall({ region: 'us-central1', maxInstances: 8 }, async (request) => {
@@ -297,8 +298,9 @@ exports.submitAuthenticatedEventFeedback = onCall({ region: 'us-central1', maxIn
   const event = await db.doc(`events/${eventId}`).get();
   if (!event.exists || event.data().deleted === true) throw new HttpsError('not-found', 'Event was not found.');
   const input = cleanFeedbackInput(request.data);
+  const anonymous = request.data?.anonymous === true;
   await db.doc(`eventFeedback/${eventId}_${request.auth.uid}`).set({ eventId, volunteerId: request.auth.uid,
-    ...input, anonymous: request.data?.anonymous === true, source: 'signed-in',
+    ...input, respondentName: anonymous ? '' : input.respondentName, anonymous, source: 'signed-in',
     updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
   return { saved: true };
 });
@@ -338,7 +340,7 @@ exports.getPublicEventFeedbackForm = onCall({ region: 'us-central1', maxInstance
 exports.submitPublicEventFeedback = onCall({ region: 'us-central1', maxInstances: 12 }, async (request) => {
   const result = await publicFeedbackEvent(request.data?.token);
   const input = cleanFeedbackInput(request.data);
-  await db.collection('eventFeedback').add({ eventId: result.eventId, ...input, anonymous: true,
+  await db.collection('eventFeedback').add({ eventId: result.eventId, ...input, anonymous: !input.respondentName,
     source: 'public-link', createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp() });
   return { saved: true };

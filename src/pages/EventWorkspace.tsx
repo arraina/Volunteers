@@ -45,6 +45,7 @@ interface Feedback {
   comments?: string;
   anonymous: boolean;
   rating?: number;
+  respondentName?: string;
 }
 
 interface EventTemplate {
@@ -546,7 +547,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, isOwner = false, 
       <section className="panel">
         <h2>Feedback</h2><p>{feedback.length} response(s)</p>
         {feedback.map((item) => <div className="task-card" key={item.id}>
-          {item.anonymous && <strong>Anonymous</strong>}
+          <strong>{item.anonymous || !item.respondentName ? 'Anonymous' : item.respondentName}</strong>
           {item.rating && <p className="feedback-result-rating" aria-label={`${item.rating} out of 5 stars`}>{'★'.repeat(item.rating)}{'☆'.repeat(5 - item.rating)}</p>}
           <p>{item.feedbackText || [item.wentWell, item.improve, item.comments].filter(Boolean).join('\n\n')}</p>
           <button className="link-btn danger" onClick={() => moveToTrash('eventFeedback', item.id, 'this feedback')}>Move to Trash</button>
