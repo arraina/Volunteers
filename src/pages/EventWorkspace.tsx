@@ -15,11 +15,14 @@ import { createEvent, createTask, trashRecord } from '../helpers/store';
 import { TempleEvent, VolunteerTask, formatDate } from '../helpers/types';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
 import { assertTaskStartNotPast, fromEasternDateTimeInput, toEasternDateTimeInput } from '../helpers/taskDateTime';
+import { createEventFeedbackShareLink } from '../helpers/eventFeedback';
+import './EventFeedback.css';
 
 interface Props {
   events: TempleEvent[];
   tasks: VolunteerTask[];
   uid?: string;
+  isOwner?: boolean;
   setError: (message: string) => void;
 }
 
@@ -41,6 +44,7 @@ interface Feedback {
   improve?: string;
   comments?: string;
   anonymous: boolean;
+  rating?: number;
 }
 
 interface EventTemplate {
@@ -101,7 +105,7 @@ const eventIsPast = (event: TempleEvent, now = new Date()) => {
   return lastDate < now;
 };
 
-const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
+const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, isOwner = false, setError }) => {
   const [eventId, setEventId] = useState(events[0]?.id || '');
   const [creatorFilter, setCreatorFilter] = useState<'all' | 'mine'>('mine');
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -119,6 +123,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
   const [action, setAction] = useState(emptyAction);
   const [actionFilter, setActionFilter] = useState<'active' | 'all' | ActionStatus>('active');
   const [actionSearch, setActionSearch] = useState('');
+  const [feedbackLinkMessage, setFeedbackLinkMessage] = useState('');
 
   const visibleEvents = useMemo(
     () => {
@@ -178,6 +183,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
   useEffect(() => {
     setPlanningDoc({ ...emptyPlanningDoc, ...(event?.planningDoc || {}) });
     setPlanningSaved('');
+    setFeedbackLinkMessage('');
   }, [eventId]); // Load the selected event's living document without replacing in-progress typing.
 
   useEffect(() => {
@@ -378,6 +384,18 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
     URL.revokeObjectURL(link.href);
   };
 
+  const copyFeedbackLink = async () => {
+    if (!event) return;
+    setFeedbackLinkMessage('');
+    try {
+      const result = await createEventFeedbackShareLink(event.id);
+      const base = window.location.pathname.startsWith('/Volunteers') ? '/Volunteers' : '';
+      const url = `${window.location.origin}${base}/event-feedback/shared?token=${encodeURIComponent(result.token)}`;
+      await navigator.clipboard.writeText(url);
+      setFeedbackLinkMessage(`Public feedback link copied. It expires ${new Date(result.expiresAtMillis).toLocaleDateString()}.`);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Feedback link could not be created.'); }
+  };
+
   return <div className="stacked-form">
     <section className="panel">
       <h2>Event Workspace</h2>
@@ -398,8 +416,10 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
       {event && <div className="row">
         <button className="secondary-btn" onClick={exportCalendar}>Download calendar (.ics)</button>
         <button className="secondary-btn" onClick={saveTemplate} disabled={!eventTasks.length}>Save as template</button>
+        {(isOwner || event.createdBy === uid) && <button className="primary-btn" onClick={copyFeedbackLink}>Copy public feedback link</button>}
         <button className="danger-btn" onClick={() => moveToTrash('events', event.id, `event “${event.name}”`)}>Move event to Trash</button>
       </div>}
+      {feedbackLinkMessage && <p className="success-message" role="status">{feedbackLinkMessage}</p>}
     </section>
 
     {event && <>
@@ -527,6 +547,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
         <h2>Feedback</h2><p>{feedback.length} response(s)</p>
         {feedback.map((item) => <div className="task-card" key={item.id}>
           {item.anonymous && <strong>Anonymous</strong>}
+          {item.rating && <p className="feedback-result-rating" aria-label={`${item.rating} out of 5 stars`}>{'★'.repeat(item.rating)}{'☆'.repeat(5 - item.rating)}</p>}
           <p>{item.feedbackText || [item.wentWell, item.improve, item.comments].filter(Boolean).join('\n\n')}</p>
           <button className="link-btn danger" onClick={() => moveToTrash('eventFeedback', item.id, 'this feedback')}>Move to Trash</button>
         </div>)}

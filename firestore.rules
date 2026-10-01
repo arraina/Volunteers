@@ -396,6 +396,7 @@ service cloud.firestore {
     match /govindasMenus/{itemId} { allow read, write: if false; }
     match /govindasOrders/{itemId} { allow read, write: if false; }
     match /govindasShareLinks/{itemId} { allow read, write: if false; }
+    match /eventFeedbackShareLinks/{itemId} { allow read, write: if false; }
 
     // Successful-login audit records are append-only. A user can record only
     // their own verified login; only the Owner can view the audit history.

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { db } from '../config/firebase';
 import { TempleEvent, VolunteerProfile, VolunteerTask } from '../helpers/types';
+import { submitAuthenticatedEventFeedback } from '../helpers/eventFeedback';
+import './EventFeedback.css';
 
 const EventFeedback: React.FC<{
   profile: VolunteerProfile;
@@ -27,20 +27,16 @@ const EventFeedback: React.FC<{
   const [eventId, setEventId] = useState('');
   const [feedbackText, setFeedbackText] = useState('');
   const [anonymous, setAnonymous] = useState(false);
+  const [rating, setRating] = useState(0);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eventId) return setError('Select an event.');
     try {
-      await setDoc(doc(db, 'eventFeedback', `${eventId}_${profile.uid}`), {
-        eventId,
-        volunteerId: profile.uid,
-        feedbackText: feedbackText.trim(),
-        anonymous,
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
+      await submitAuthenticatedEventFeedback({ eventId, rating, feedbackText: feedbackText.trim(), anonymous });
       setMessage('Thank you. Your event feedback was saved.');
       setFeedbackText('');
+      setRating(0);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not save feedback.');
     }
@@ -55,6 +51,7 @@ const EventFeedback: React.FC<{
           <option value="">Select an event</option>
           {feedbackEvents.map((event) => <option key={event.id} value={event.id}>{event.name}{event.date ? ` — ${event.date.toLocaleDateString()}` : ''}</option>)}
         </select>
+        <fieldset className="feedback-stars"><legend>Your rating</legend>{[1, 2, 3, 4, 5].map((value) => <button type="button" key={value} className={value <= rating ? 'selected' : ''} aria-label={`${value} star${value === 1 ? '' : 's'}`} onClick={() => setRating(value)}>★</button>)}</fieldset>
         <label className="field-label">Your feedback</label>
         <textarea
           className="event-feedback-textarea"
@@ -65,7 +62,7 @@ const EventFeedback: React.FC<{
           required
         />
         <label className="checkbox-row"><input type="checkbox" checked={anonymous} onChange={(e) => setAnonymous(e.target.checked)} /> Show this response as anonymous to event coordinators</label>
-        <button className="primary-btn" type="submit">Submit feedback</button>
+        <button className="primary-btn" type="submit" disabled={!rating}>Submit feedback</button>
       </form>}
   </section>;
 };

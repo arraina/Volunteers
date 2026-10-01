@@ -1,0 +1,10 @@
+.feedback-stars { border: 0; margin: 0; padding: 0.25rem 0; }
+.feedback-stars legend { color: #334155; font-size: 0.85rem; font-weight: 700; margin-bottom: 0.25rem; }
+.feedback-stars button { background: transparent; border: 0; color: #cbd5e1; cursor: pointer; font-size: clamp(2rem, 6vw, 3rem); line-height: 1; padding: 0.1rem 0.2rem; }
+.feedback-stars button.selected { color: #f4b400; }
+.feedback-stars button:focus-visible { border-radius: 6px; outline: 3px solid rgba(46, 125, 50, 0.3); }
+.public-feedback-page { min-height: 100vh; padding: clamp(1rem, 4vw, 3rem); background: linear-gradient(145deg, #eff8ed, #fff9eb); }
+.public-feedback-card { background: #fff; border-radius: 18px; box-shadow: 0 16px 45px rgba(35, 75, 42, 0.12); margin: 0 auto; max-width: 780px; padding: clamp(1rem, 4vw, 2.25rem); }
+.public-feedback-card h1 { margin: 0.25rem 0; }
+.public-feedback-card .event-feedback-textarea { min-height: 260px; line-height: 1.55; }
+.feedback-result-rating { color: #f4b400; font-size: 1.5rem; letter-spacing: 0.08em; margin: 0.35rem 0; }

@@ -15,6 +15,7 @@ const WHATSAPP_PHONE_NUMBER_ID = '1279758458557456';
 const PORTAL_INVITE_TTL_DAYS = 7;
 const FUNDRAISING_SHARE_TTL_DAYS = 5;
 const GOVINDAS_SHARE_TTL_DAYS = 14;
+const EVENT_FEEDBACK_SHARE_TTL_DAYS = 30;
 const PORTAL_URL = 'https://arraina.github.io/Volunteers/claim';
 
 const DEFAULT_DEPARTMENTS = [
@@ -278,6 +279,69 @@ exports.deleteGovindasItemImage = onCall({ region: 'us-central1', maxInstances: 
   if (!/^govindas\/menu-items\/[^/]+$/.test(imagePath)) throw new HttpsError('invalid-argument', 'Choose a valid Govinda’s item image.');
   await admin.storage().bucket().file(imagePath).delete({ ignoreNotFound: true });
   return { deleted: true };
+});
+
+function cleanFeedbackInput(data) {
+  const rating = Math.round(Number(data?.rating));
+  const feedbackText = String(data?.feedbackText || '').trim().slice(0, 5000);
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5 || !feedbackText) {
+    throw new HttpsError('invalid-argument', 'Choose a 1–5 star rating and enter feedback.');
+  }
+  return { rating, feedbackText };
+}
+
+exports.submitAuthenticatedEventFeedback = onCall({ region: 'us-central1', maxInstances: 8 }, async (request) => {
+  await requireVerifiedUser(request);
+  const eventId = String(request.data?.eventId || '').trim();
+  if (!eventId || eventId.includes('/')) throw new HttpsError('invalid-argument', 'Choose a valid event.');
+  const event = await db.doc(`events/${eventId}`).get();
+  if (!event.exists || event.data().deleted === true) throw new HttpsError('not-found', 'Event was not found.');
+  const input = cleanFeedbackInput(request.data);
+  await db.doc(`eventFeedback/${eventId}_${request.auth.uid}`).set({ eventId, volunteerId: request.auth.uid,
+    ...input, anonymous: request.data?.anonymous === true, source: 'signed-in',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  return { saved: true };
+});
+
+exports.createEventFeedbackShareLink = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  await requireVerifiedUser(request);
+  const eventId = String(request.data?.eventId || '').trim();
+  if (!eventId || eventId.includes('/')) throw new HttpsError('invalid-argument', 'Choose a valid event.');
+  const [event, access] = await Promise.all([db.doc(`events/${eventId}`).get(), callerAccess(request.auth.uid)]);
+  if (!event.exists || event.data().deleted === true) throw new HttpsError('not-found', 'Event was not found.');
+  if (!access.isOwner && event.data().createdBy !== request.auth.uid) throw new HttpsError('permission-denied', 'Only the event creator or Owner can create this feedback link.');
+  const token = `${eventId}.${randomBytes(32).toString('base64url')}`;
+  const expiresAtMillis = Date.now() + EVENT_FEEDBACK_SHARE_TTL_DAYS * 86400_000;
+  await db.doc(`eventFeedbackShareLinks/${eventId}`).set({ eventId, tokenHash: tokenHash(token),
+    expiresAt: admin.firestore.Timestamp.fromMillis(expiresAtMillis), createdBy: request.auth.uid,
+    createdAt: admin.firestore.FieldValue.serverTimestamp() });
+  return { token, expiresAtMillis };
+});
+
+async function publicFeedbackEvent(token) {
+  const value = String(token || '').trim(); const separator = value.indexOf('.');
+  const eventId = separator > 0 ? value.slice(0, separator) : '';
+  if (!eventId || eventId.includes('/') || value.length > 500) throw new HttpsError('invalid-argument', 'This feedback link is invalid.');
+  const [link, event] = await Promise.all([db.doc(`eventFeedbackShareLinks/${eventId}`).get(), db.doc(`events/${eventId}`).get()]);
+  const linkData = link.data() || {};
+  if (!link.exists || linkData.tokenHash !== tokenHash(value) || !linkData.expiresAt || linkData.expiresAt.toMillis() <= Date.now()) throw new HttpsError('failed-precondition', 'This feedback link has expired.');
+  if (!event.exists || event.data().deleted === true) throw new HttpsError('not-found', 'Event was not found.');
+  return { eventId, event: event.data(), expiresAtMillis: linkData.expiresAt.toMillis() };
+}
+
+exports.getPublicEventFeedbackForm = onCall({ region: 'us-central1', maxInstances: 12 }, async (request) => {
+  const result = await publicFeedbackEvent(request.data?.token);
+  return { event: { id: result.eventId, name: result.event.name,
+    dateMillis: result.event.date?.toMillis?.() || null }, expiresAtMillis: result.expiresAtMillis };
+});
+
+exports.submitPublicEventFeedback = onCall({ region: 'us-central1', maxInstances: 12 }, async (request) => {
+  const result = await publicFeedbackEvent(request.data?.token);
+  const input = cleanFeedbackInput(request.data);
+  await db.collection('eventFeedback').add({ eventId: result.eventId, ...input, anonymous: true,
+    source: 'public-link', createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+  return { saved: true };
 });
 
 exports.saveGovindasMenu = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
