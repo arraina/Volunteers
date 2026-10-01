@@ -591,6 +591,11 @@
   line-height: 1.55;
 }
 
+.stacked-form .event-lessons-textarea {
+  min-height: 260px;
+  line-height: 1.55;
+}
+
 .field-label {
   font-size: 0.8rem;
   color: #64748b;

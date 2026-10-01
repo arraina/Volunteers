@@ -532,7 +532,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
         </div>)}
         <div className="stacked-form">
           <label className="field-label">Lessons for next time</label>
-          <textarea aria-label="Lessons for next time" value={lessons} onChange={(e) => setLessons(e.target.value)} placeholder="Summarize improvements to carry into the next event" />
+          <textarea className="event-lessons-textarea" rows={12} aria-label="Lessons for next time" value={lessons} onChange={(e) => setLessons(e.target.value)} placeholder="Summarize improvements to carry into the next event" />
           <button className="primary-btn" onClick={saveLessons}>Save lessons</button>
         </div>
       </section>
