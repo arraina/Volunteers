@@ -94,6 +94,13 @@ const toDateTimeInput = (date?: Date) => {
   return local.toISOString().slice(0, 16);
 };
 
+const eventIsPast = (event: TempleEvent, now = new Date()) => {
+  if (!event.date) return false;
+  const lastDate = new Date((event.endDate || event.date).getTime());
+  if (event.allDay) lastDate.setHours(23, 59, 59, 999);
+  return lastDate < now;
+};
+
 const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
   const [eventId, setEventId] = useState(events[0]?.id || '');
   const [creatorFilter, setCreatorFilter] = useState<'all' | 'mine'>('mine');
@@ -116,14 +123,13 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
   const visibleEvents = useMemo(
     () => {
       const now = new Date();
-      return events.filter((item) => {
-        if (!item.date) return false;
-        const lastDate = item.endDate || item.date;
-        const currentOrFuture = item.allDay
-          ? new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate() + 1) > now
-          : lastDate >= now;
-        return currentOrFuture && (creatorFilter === 'all' || Boolean(uid && item.createdBy === uid));
-      });
+      return events.filter((item) => item.date && (creatorFilter === 'all' || Boolean(uid && item.createdBy === uid)))
+        .sort((a, b) => {
+          const aPast = eventIsPast(a, now); const bPast = eventIsPast(b, now);
+          if (aPast !== bPast) return aPast ? 1 : -1;
+          const difference = (a.date?.getTime() || 0) - (b.date?.getTime() || 0);
+          return aPast ? -difference : difference;
+        });
     },
     [events, creatorFilter, uid]
   );
@@ -384,7 +390,7 @@ const EventWorkspace: React.FC<Props> = ({ events, tasks, uid, setError }) => {
       </label>
       <select value={eventId} onChange={(e) => setEventId(e.target.value)}>
         <option value="">Select an event</option>
-        {visibleEvents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        {visibleEvents.map((item) => <option key={item.id} value={item.id}>{item.name}{eventIsPast(item) ? ' — Past event' : ''}</option>)}
       </select>
       {creatorFilter === 'mine' && visibleEvents.length === 0 && (
         <p className="muted small">You have not created any events yet.</p>
