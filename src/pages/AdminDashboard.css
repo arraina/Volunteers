@@ -586,6 +586,11 @@
   resize: vertical;
 }
 
+.stacked-form .event-feedback-textarea {
+  min-height: 260px;
+  line-height: 1.55;
+}
+
 .field-label {
   font-size: 0.8rem;
   color: #64748b;

@@ -57,6 +57,8 @@ const EventFeedback: React.FC<{
         </select>
         <label className="field-label">Your feedback</label>
         <textarea
+          className="event-feedback-textarea"
+          rows={12}
           placeholder="Share anything that went well, anything that could improve, and ideas for the next event."
           value={feedbackText}
           onChange={(e) => setFeedbackText(e.target.value)}
