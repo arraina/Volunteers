@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { TempleEvent } from '../helpers/types';
 import { CampaignSummary, donorDuplicateKeys, FundraisingDonor, loadCampaignSummaries, saveFundraisingDonor, subscribeFundraisingDonors } from '../helpers/fundraisingCrm';
 
-const blankDonor = (): FundraisingDonor => ({ id: '', firstName: '', lastName: '', email: '', phone: '', organization: '', status: 'active', tags: [], notes: '', nextFollowUp: null, assignedTo: '', archived: false, createdAt: null, updatedAt: null });
+const blankDonor = (): FundraisingDonor => ({ id: '', firstName: '', lastName: '', email: '', phone: '', organization: '', address: '', status: 'active', tags: [], notes: '', nextFollowUp: null, assignedTo: '', archived: false, createdAt: null, updatedAt: null });
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const dateValue = (date: Date | null) => date ? date.toISOString().slice(0, 10) : '';
 
@@ -24,7 +24,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     donors.filter((donor) => !donor.archived).forEach((donor) => donorDuplicateKeys(donor).forEach((key) => seen.set(key, [...(seen.get(key) || []), donor.id])));
     return new Set(Array.from(seen.values()).filter((ids) => ids.length > 1).flat());
   }, [donors]);
-  const filtered = donors.filter((donor) => (showArchived || !donor.archived) && `${donor.firstName} ${donor.lastName} ${donor.email} ${donor.phone} ${donor.organization} ${donor.tags.join(' ')}`.toLowerCase().includes(search.toLowerCase()));
+  const filtered = donors.filter((donor) => (showArchived || !donor.archived) && `${donor.firstName} ${donor.lastName} ${donor.email} ${donor.phone} ${donor.organization} ${donor.address} ${donor.tags.join(' ')}`.toLowerCase().includes(search.toLowerCase()));
   const followups = donors.filter((donor) => !donor.archived && donor.nextFollowUp).sort((a, b) => Number(a.nextFollowUp) - Number(b.nextFollowUp));
   const totals = campaigns.reduce((result, campaign) => ({ current: result.current + campaign.current, target: result.target + campaign.target, pledges: result.pledges + campaign.pledges, donations: result.donations + campaign.donations, loans: result.loans + campaign.loans }), { current: 0, target: 0, pledges: 0, donations: 0, loans: 0 });
 
@@ -72,6 +72,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <label><span>First name</span><input value={editing.firstName} onChange={(event) => setEditing({ ...editing, firstName: event.target.value })} /></label><label><span>Last name</span><input value={editing.lastName} onChange={(event) => setEditing({ ...editing, lastName: event.target.value })} /></label>
       <label><span>Organization</span><input value={editing.organization} onChange={(event) => setEditing({ ...editing, organization: event.target.value })} /></label><label><span>Status</span><select value={editing.status} onChange={(event) => setEditing({ ...editing, status: event.target.value as FundraisingDonor['status'] })}><option value="active">Active</option><option value="prospect">Prospect</option><option value="inactive">Inactive</option></select></label>
       <label><span>Email</span><input type="email" value={editing.email} onChange={(event) => setEditing({ ...editing, email: event.target.value })} /></label><label><span>Phone</span><input type="tel" value={editing.phone} onChange={(event) => setEditing({ ...editing, phone: event.target.value })} /></label>
+      <label className="full"><span>Address (optional)</span><textarea rows={3} value={editing.address} onChange={(event) => setEditing({ ...editing, address: event.target.value })} placeholder="Street address, city, state, ZIP code" /></label>
       <label><span>Tags (comma separated)</span><input value={editing.tags.join(', ')} onChange={(event) => setEditing({ ...editing, tags: event.target.value.split(',') })} /></label><label><span>Assigned fundraiser</span><input value={editing.assignedTo} onChange={(event) => setEditing({ ...editing, assignedTo: event.target.value })} /></label>
       <label><span>Next follow-up</span><input type="date" value={dateValue(editing.nextFollowUp)} onChange={(event) => setEditing({ ...editing, nextFollowUp: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null })} /></label><label className="checkbox-label"><input type="checkbox" checked={editing.archived} onChange={(event) => setEditing({ ...editing, archived: event.target.checked })} /> Archive this donor</label>
       <label className="full"><span>Private stewardship notes</span><textarea rows={5} value={editing.notes} onChange={(event) => setEditing({ ...editing, notes: event.target.value })} /></label>

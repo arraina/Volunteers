@@ -11,6 +11,7 @@ export interface FundraisingDonor {
   email: string;
   phone: string;
   organization: string;
+  address: string;
   status: DonorStatus;
   tags: string[];
   notes: string;
@@ -47,7 +48,7 @@ export function subscribeFundraisingDonors(cb: (donors: FundraisingDonor[]) => v
       return {
         id: item.id,
         firstName: String(data.firstName || ''), lastName: String(data.lastName || ''),
-        email: String(data.email || ''), phone: String(data.phone || ''), organization: String(data.organization || ''),
+        email: String(data.email || ''), phone: String(data.phone || ''), organization: String(data.organization || ''), address: String(data.address || ''),
         status: ['active', 'prospect', 'inactive'].includes(data.status) ? data.status : 'active',
         tags: Array.isArray(data.tags) ? data.tags.map(String) : [], notes: String(data.notes || ''),
         nextFollowUp: data.nextFollowUp ? firestoreTimestampToDate(data.nextFollowUp) : null,
@@ -63,7 +64,7 @@ export function subscribeFundraisingDonors(cb: (donors: FundraisingDonor[]) => v
 export async function saveFundraisingDonor(donor: Omit<FundraisingDonor, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }, uid?: string) {
   const payload = {
     firstName: donor.firstName.trim(), lastName: donor.lastName.trim(), email: cleanEmail(donor.email), phone: donor.phone.trim(),
-    normalizedEmail: cleanEmail(donor.email), normalizedPhone: cleanPhone(donor.phone), organization: donor.organization.trim(),
+    normalizedEmail: cleanEmail(donor.email), normalizedPhone: cleanPhone(donor.phone), organization: donor.organization.trim(), address: donor.address.trim(),
     status: donor.status, tags: donor.tags.map((tag) => tag.trim()).filter(Boolean).slice(0, 20), notes: donor.notes.trim(),
     nextFollowUp: donor.nextFollowUp, assignedTo: donor.assignedTo.trim(), archived: donor.archived,
     updatedAt: serverTimestamp(), updatedBy: uid || null,
