@@ -78,6 +78,16 @@
 .fundraising-pledge-list span { display: grid; gap: 0.15rem; }
 .fundraising-pledge-list small { color: var(--muted); }
 .fundraising-pledge-list .overdue span:last-child small { color: #b45309; font-weight: 800; }
+.quickbooks-connect { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.quickbooks-connect > div { max-width: 48rem; }
+.quickbooks-controls { display: grid; grid-template-columns: 1.2fr repeat(2, minmax(9rem, 0.8fr)) auto auto; align-items: end; gap: 0.75rem; margin-bottom: 1rem; }
+.quickbooks-controls label { display: grid; gap: 0.35rem; font-weight: 700; }
+.quickbooks-report-table { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+.quickbooks-report-title { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem; background: #eff8f1; }
+.quickbooks-report-table table { width: 100%; border-collapse: collapse; background: #fff; }
+.quickbooks-report-table th, .quickbooks-report-table td { padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.quickbooks-report-table th:first-child, .quickbooks-report-table td:first-child { text-align: left; }
+.quickbooks-report-table tr.heading td { color: var(--green-700); background: #f7fbf8; font-weight: 800; }
 
 .fundraising-hero {
   display: flex;
@@ -297,6 +307,8 @@
   .fundraising-donor-form .full { grid-column: auto; }
   .fundraising-pledge-list > button { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fundraising-pledge-list > button > span:first-child { grid-column: 1 / -1; }
+  .quickbooks-connect { align-items: stretch; flex-direction: column; }
+  .quickbooks-controls { grid-template-columns: 1fr; }
   .fundraising-hero { align-items: stretch; flex-direction: column; }
   .fundraising-event-select { min-width: 0; width: 100%; }
   .fundraising-new-event-fields,

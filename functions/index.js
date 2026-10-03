@@ -8,6 +8,8 @@ admin.initializeApp();
 const db = admin.firestore();
 const whatsappWebhookVerifyToken = defineSecret('WHATSAPP_WEBHOOK_VERIFY_TOKEN');
 const whatsappAccessToken = defineSecret('WHATSAPP_ACCESS_TOKEN');
+const quickBooksClientId = defineSecret('QUICKBOOKS_CLIENT_ID');
+const quickBooksClientSecret = defineSecret('QUICKBOOKS_CLIENT_SECRET');
 
 const PORTAL_INVITE_TEMPLATE = 'volunteer_portal_invite_v1';
 const PORTAL_INVITE_LANGUAGE = 'en';
@@ -17,6 +19,10 @@ const FUNDRAISING_SHARE_TTL_DAYS = 5;
 const GOVINDAS_SHARE_TTL_DAYS = 14;
 const EVENT_FEEDBACK_SHARE_TTL_DAYS = 30;
 const PORTAL_URL = 'https://arraina.github.io/Volunteers/claim';
+const QUICKBOOKS_REDIRECT_URI = 'https://us-central1-temple-volunteers-8ff23.cloudfunctions.net/quickBooksOAuthCallback';
+const QUICKBOOKS_APP_RETURN_URL = 'https://arraina.github.io/Volunteers/department/fundraising';
+const QUICKBOOKS_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
+const QUICKBOOKS_AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2';
 
 const DEFAULT_DEPARTMENTS = [
   ['facilities', 'Facilities', 'Building, grounds, technology, safety, and property support.'],
@@ -536,6 +542,122 @@ exports.setFundraisingCampaignLock = onCall({ region: 'us-central1', maxInstance
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   return { locked };
+});
+
+function quickBooksBasicAuth() {
+  return Buffer.from(`${quickBooksClientId.value()}:${quickBooksClientSecret.value()}`).toString('base64');
+}
+
+async function quickBooksTokenRequest(parameters) {
+  const response = await fetch(QUICKBOOKS_TOKEN_URL, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${quickBooksBasicAuth()}`, Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(parameters).toString(),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.access_token) {
+    console.error('QuickBooks token request failed', response.status, payload.error || 'unknown_error');
+    throw new Error(payload.error_description || 'QuickBooks authorization failed.');
+  }
+  return payload;
+}
+
+async function usableQuickBooksConnection() {
+  const ref = db.doc('quickbooksConnections/primary');
+  const snapshot = await ref.get();
+  if (!snapshot.exists) throw new HttpsError('failed-precondition', 'Connect QuickBooks before loading reports.');
+  let connection = snapshot.data() || {};
+  const expiresAtMillis = connection.accessTokenExpiresAt?.toMillis?.() || 0;
+  if (expiresAtMillis > Date.now() + 120000) return connection;
+  try {
+    const tokens = await quickBooksTokenRequest({ grant_type: 'refresh_token', refresh_token: String(connection.refreshToken || '') });
+    connection = {
+      ...connection, accessToken: tokens.access_token, refreshToken: tokens.refresh_token || connection.refreshToken,
+      accessTokenExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + Number(tokens.expires_in || 3600) * 1000),
+      refreshTokenExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + Number(tokens.x_refresh_token_expires_in || 8726400) * 1000),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    await ref.set(connection, { merge: true });
+    return connection;
+  } catch (error) {
+    console.error('QuickBooks refresh failed', error?.message || error);
+    throw new HttpsError('unauthenticated', 'QuickBooks authorization expired. Reconnect QuickBooks.');
+  }
+}
+
+exports.getQuickBooksStatus = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
+  await requireAdmin(request, true);
+  const snapshot = await db.doc('quickbooksConnections/primary').get();
+  const data = snapshot.data() || {};
+  return { connected: snapshot.exists, companyId: snapshot.exists ? String(data.realmId || '') : '', environment: 'sandbox', connectedAtMillis: data.connectedAt?.toMillis?.() || null };
+});
+
+exports.startQuickBooksOAuth = onCall({ region: 'us-central1', maxInstances: 2, secrets: [quickBooksClientId] }, async (request) => {
+  await requireAdmin(request, true);
+  const state = randomBytes(32).toString('base64url');
+  await db.doc(`quickbooksOAuthStates/${tokenHash(state)}`).set({
+    createdBy: request.auth.uid, environment: 'sandbox',
+    expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 10 * 60 * 1000),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  const params = new URLSearchParams({
+    client_id: quickBooksClientId.value(), redirect_uri: QUICKBOOKS_REDIRECT_URI, response_type: 'code',
+    scope: 'com.intuit.quickbooks.accounting', state,
+  });
+  return { authorizationUrl: `${QUICKBOOKS_AUTH_URL}?${params.toString()}` };
+});
+
+exports.quickBooksOAuthCallback = onRequest({ region: 'us-central1', maxInstances: 2, secrets: [quickBooksClientId, quickBooksClientSecret] }, async (request, response) => {
+  const state = String(request.query.state || ''); const code = String(request.query.code || ''); const realmId = String(request.query.realmId || '');
+  const stateRef = db.doc(`quickbooksOAuthStates/${tokenHash(state)}`);
+  try {
+    if (!state || !code || !/^\d+$/.test(realmId)) throw new Error('Missing or invalid QuickBooks authorization response.');
+    const stateSnapshot = await stateRef.get(); const stateData = stateSnapshot.data() || {};
+    if (!stateSnapshot.exists || !stateData.expiresAt || stateData.expiresAt.toMillis() < Date.now()) throw new Error('The QuickBooks connection request expired. Start again.');
+    await stateRef.delete();
+    const tokens = await quickBooksTokenRequest({ grant_type: 'authorization_code', code, redirect_uri: QUICKBOOKS_REDIRECT_URI });
+    await db.doc('quickbooksConnections/primary').set({
+      realmId, environment: 'sandbox', accessToken: tokens.access_token, refreshToken: tokens.refresh_token,
+      accessTokenExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + Number(tokens.expires_in || 3600) * 1000),
+      refreshTokenExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + Number(tokens.x_refresh_token_expires_in || 8726400) * 1000),
+      connectedBy: stateData.createdBy || null, connectedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    response.redirect(`${QUICKBOOKS_APP_RETURN_URL}?quickbooks=connected`);
+  } catch (error) {
+    console.error('QuickBooks callback failed', error?.message || error);
+    if (state) await stateRef.delete().catch(() => undefined);
+    response.redirect(`${QUICKBOOKS_APP_RETURN_URL}?quickbooks=error`);
+  }
+});
+
+exports.getQuickBooksReport = onCall({ region: 'us-central1', maxInstances: 4, secrets: [quickBooksClientId, quickBooksClientSecret] }, async (request) => {
+  await requireAdmin(request, true);
+  const report = String(request.data?.report || 'ProfitAndLoss');
+  if (!['ProfitAndLoss', 'BalanceSheet', 'TransactionList'].includes(report)) throw new HttpsError('invalid-argument', 'Choose a supported QuickBooks report.');
+  const startDate = String(request.data?.startDate || ''); const endDate = String(request.data?.endDate || '');
+  if ((startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) || (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate))) throw new HttpsError('invalid-argument', 'Use valid report dates.');
+  const connection = await usableQuickBooksConnection();
+  const params = new URLSearchParams({ minorversion: '75' });
+  if (startDate) params.set('start_date', startDate); if (endDate) params.set('end_date', endDate);
+  const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${encodeURIComponent(connection.realmId)}/reports/${report}?${params.toString()}`;
+  const apiResponse = await fetch(url, { headers: { Authorization: `Bearer ${connection.accessToken}`, Accept: 'application/json' } });
+  const payload = await apiResponse.json().catch(() => ({}));
+  if (!apiResponse.ok) {
+    console.error('QuickBooks report failed', apiResponse.status, payload?.Fault?.type || 'unknown');
+    throw new HttpsError('internal', payload?.Fault?.Error?.[0]?.Message || 'QuickBooks could not create this report.');
+  }
+  return { report: payload, fetchedAtMillis: Date.now() };
+});
+
+exports.disconnectQuickBooks = onCall({ region: 'us-central1', maxInstances: 2, secrets: [quickBooksClientId, quickBooksClientSecret] }, async (request) => {
+  await requireAdmin(request, true);
+  const ref = db.doc('quickbooksConnections/primary'); const snapshot = await ref.get();
+  if (snapshot.exists) {
+    const token = String(snapshot.data()?.refreshToken || '');
+    if (token) await fetch('https://developer.api.intuit.com/v2/oauth2/tokens/revoke', { method: 'POST', headers: { Authorization: `Basic ${quickBooksBasicAuth()}`, Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) }).catch(() => undefined);
+    await ref.delete();
+  }
+  return { disconnected: true };
 });
 
 exports.createOfflineVolunteer = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {

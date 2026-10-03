@@ -37,7 +37,7 @@ const FundraisingDepartmentPage: React.FC = () => {
     <main className="dashboard-content">
       {error && <div className="error-message">{error}</div>}
       <nav className="fundraising-space-tabs" aria-label="Fundraising workspace"><button className={section === 'crm' ? 'active' : ''} onClick={() => setSection('crm')}>Fundraising CRM</button><button className={section === 'dashboard' ? 'active' : ''} onClick={() => setSection('dashboard')}>Live dashboard</button></nav>
-      {section === 'crm' ? <FundraisingCrm events={events} uid={user?.uid} setError={setError} /> : <FundraisingDashboard events={events} uid={user?.uid} isOwner={isOwner} canCreateEvent={isAdmin} setError={setError} />}
+      {section === 'crm' ? <FundraisingCrm events={events} uid={user?.uid} isOwner={isOwner} setError={setError} /> : <FundraisingDashboard events={events} uid={user?.uid} isOwner={isOwner} canCreateEvent={isAdmin} setError={setError} />}
     </main>
   </div>;
 };
