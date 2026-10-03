@@ -15,6 +15,7 @@ import GovindasAdminPage from './pages/GovindasAdminPage';
 import GovindasOrderPage from './pages/GovindasOrderPage';
 import GovindasOrderStatusPage from './pages/GovindasOrderStatusPage';
 import PublicEventFeedback from './pages/PublicEventFeedback';
+import DepartmentWorkspacePage from './pages/DepartmentWorkspacePage';
 import { AuthProvider, useAuth } from './helpers/useAuth';
 import { isFirebaseConfigured } from './config/firebase';
 import './App.css';
@@ -130,6 +131,7 @@ function App() {
           <Route path="/fundraising/shared" element={<Protected><SharedFundraisingDashboard /></Protected>} />
           <Route path="/department/fundraising" element={<Protected><FundraisingDepartmentPage /></Protected>} />
           <Route path="/department/govindas" element={<Protected><GovindasAdminPage /></Protected>} />
+          <Route path="/department/:departmentId/workspace" element={<Protected><DepartmentWorkspacePage /></Protected>} />
           <Route path="/govindas/order" element={<GovindasOrderPage />} />
           <Route path="/govindas/order-status" element={<GovindasOrderStatusPage />} />
           <Route path="/event-feedback/shared" element={<PublicEventFeedback />} />
