@@ -33,7 +33,7 @@ const DepartmentDirectory: React.FC<{ isOwner: boolean }> = ({ isOwner }) => {
     setError('');
     try {
       if (isOwner) await initializeDepartments();
-      const [departments, people] = await Promise.all([getDepartmentDirectory(), getVolunteerDirectory()]);
+      const [departments, people] = await Promise.all([getDepartmentDirectory(), getVolunteerDirectory('department')]);
       setDirectory(departments);
       setVolunteers(people.sort((a, b) => a.name.localeCompare(b.name)));
     } catch (cause) {

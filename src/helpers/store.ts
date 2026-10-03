@@ -1030,9 +1030,9 @@ export interface VolunteerDirectoryEntry {
   name: string;
 }
 
-export async function getVolunteerDirectory(): Promise<VolunteerDirectoryEntry[]> {
-  const call = httpsCallable<Record<string, never>, { volunteers: VolunteerDirectoryEntry[] }>(functions, 'getVolunteerDirectory');
-  const result = await call({});
+export async function getVolunteerDirectory(purpose: 'task' | 'department' = 'task'): Promise<VolunteerDirectoryEntry[]> {
+  const call = httpsCallable<{ purpose: 'task' | 'department' }, { volunteers: VolunteerDirectoryEntry[] }>(functions, 'getVolunteerDirectory');
+  const result = await call({ purpose });
   return result.data.volunteers;
 }
 

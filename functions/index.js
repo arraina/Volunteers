@@ -745,13 +745,16 @@ exports.getVolunteerDirectory = onCall({ region: 'us-central1', maxInstances: 4 
   if (!request.auth || request.auth.token.email_verified !== true) {
     throw new HttpsError('unauthenticated', 'A verified portal account is required.');
   }
+  const purpose = request.data?.purpose === 'department' ? 'department' : 'task';
   const snapshot = await db.collection('volunteers').get();
   return {
     volunteers: snapshot.docs
       .filter((item) => {
         const data = item.data();
-        return data.deleted !== true && data.participationStatus !== 'inactive'
-          && data.whatsappOptIn === true && Boolean(data.phoneNumber);
+        const active = data.deleted !== true && data.participationStatus !== 'inactive';
+        return purpose === 'department'
+          ? active
+          : active && data.whatsappOptIn === true && Boolean(data.phoneNumber);
       })
       .map((item) => ({ uid: item.id, name: item.data().name || `${item.data().firstName || ''} ${item.data().lastName || ''}`.trim() || 'Volunteer' }))
       .sort((a, b) => a.name.localeCompare(b.name)),
