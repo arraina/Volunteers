@@ -586,14 +586,14 @@ async function usableQuickBooksConnection() {
 }
 
 exports.getQuickBooksStatus = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
-  await requireAdmin(request, true);
+  await requireDepartmentAccess(request, 'fundraising', true);
   const snapshot = await db.doc('quickbooksConnections/primary').get();
   const data = snapshot.data() || {};
   return { connected: snapshot.exists, companyId: snapshot.exists ? String(data.realmId || '') : '', environment: 'sandbox', connectedAtMillis: data.connectedAt?.toMillis?.() || null };
 });
 
 exports.startQuickBooksOAuth = onCall({ region: 'us-central1', maxInstances: 2, secrets: [quickBooksClientId] }, async (request) => {
-  await requireAdmin(request, true);
+  await requireDepartmentAccess(request, 'fundraising', true);
   const state = randomBytes(32).toString('base64url');
   await db.doc(`quickbooksOAuthStates/${tokenHash(state)}`).set({
     createdBy: request.auth.uid, environment: 'sandbox',
@@ -631,7 +631,7 @@ exports.quickBooksOAuthCallback = onRequest({ region: 'us-central1', maxInstance
 });
 
 exports.getQuickBooksReport = onCall({ region: 'us-central1', maxInstances: 4, secrets: [quickBooksClientId, quickBooksClientSecret] }, async (request) => {
-  await requireAdmin(request, true);
+  await requireDepartmentAccess(request, 'fundraising', true);
   const report = String(request.data?.report || 'ProfitAndLoss');
   if (!['ProfitAndLoss', 'BalanceSheet', 'TransactionList'].includes(report)) throw new HttpsError('invalid-argument', 'Choose a supported QuickBooks report.');
   const startDate = String(request.data?.startDate || ''); const endDate = String(request.data?.endDate || '');
@@ -650,7 +650,7 @@ exports.getQuickBooksReport = onCall({ region: 'us-central1', maxInstances: 4, s
 });
 
 exports.disconnectQuickBooks = onCall({ region: 'us-central1', maxInstances: 2, secrets: [quickBooksClientId, quickBooksClientSecret] }, async (request) => {
-  await requireAdmin(request, true);
+  await requireDepartmentAccess(request, 'fundraising', true);
   const ref = db.doc('quickbooksConnections/primary'); const snapshot = await ref.get();
   if (snapshot.exists) {
     const token = String(snapshot.data()?.refreshToken || '');
