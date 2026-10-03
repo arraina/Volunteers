@@ -396,6 +396,20 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    match /fundraisingPledges/{pledgeId} {
+      allow read: if isOwner() || isDepartmentAdmin('fundraising');
+      allow create, update: if (isOwner() || isDepartmentAdmin('fundraising'))
+        && request.resource.data.donorId is string
+        && request.resource.data.donorId.size() > 0
+        && request.resource.data.eventId is string
+        && request.resource.data.pledgedAmount is number
+        && request.resource.data.pledgedAmount > 0
+        && request.resource.data.paidAmount is number
+        && request.resource.data.paidAmount >= 0
+        && request.resource.data.paidAmount <= request.resource.data.pledgedAmount;
+      allow delete: if isOwner();
+    }
+
     match /departments/{departmentId} {
       allow read: if verifiedUser();
       allow write: if false;
