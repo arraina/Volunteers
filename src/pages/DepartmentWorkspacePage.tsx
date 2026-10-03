@@ -83,7 +83,7 @@ const DepartmentWorkspacePage: React.FC = () => {
       </section>
       {(departmentId === 'fundraising' || departmentId === 'govindas') && workspace.canManage && <section className="panel department-tools-panel">
         <div><h2>Department tools</h2><p className="muted">Open the specialized management tools for this department.</p></div>
-        <button className="primary-btn" onClick={() => navigate(departmentId === 'fundraising' ? '/department/fundraising' : '/department/govindas')}>{departmentId === 'fundraising' ? 'Open fundraising dashboard' : 'Manage menus and orders'}</button>
+        <button className="primary-btn" onClick={() => navigate(departmentId === 'fundraising' ? '/department/fundraising' : '/department/govindas')}>{departmentId === 'fundraising' ? 'Open CRM' : 'Manage menus and orders'}</button>
       </section>}
       <div className="department-workspace-columns">
         <section className="panel department-content-section"><div className="panel-head"><div><p className="eyebrow">TEAM UPDATES</p><h2>Announcements</h2></div><span className="workspace-count">{workspace.announcements.length}</span></div>{workspace.announcements.length ? workspace.announcements.map((item) => <DepartmentItemRow key={item.id} item={item} type="announcement" canManage={workspace.canManage} busy={busy} act={act} />) : <div className="empty-state"><strong>No announcements yet</strong><span>Department updates will appear here.</span></div>}</section>

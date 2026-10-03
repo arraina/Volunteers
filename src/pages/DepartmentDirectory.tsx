@@ -79,7 +79,7 @@ const DepartmentDirectory: React.FC<{ isOwner: boolean }> = ({ isOwner }) => {
           <div className="department-card-heading"><h3>{department.name}</h3>{canManage && <span className="access-badge">Manage access</span>}</div>
           <p>{department.description}</p>
           {canOpen && <button className="secondary-btn department-open-btn" onClick={() => navigate(`/department/${department.id}/workspace`)}>Open workspace</button>}
-          {department.id === 'fundraising' && canManage && <button className="primary-btn department-open-btn" onClick={() => navigate('/department/fundraising')}>Open fundraising dashboard</button>}
+          {department.id === 'fundraising' && canManage && <button className="primary-btn department-open-btn" onClick={() => navigate('/department/fundraising')}>Open CRM</button>}
           {department.id === 'govindas' && canManage && <button className="primary-btn department-open-btn" onClick={() => navigate('/department/govindas')}>Manage menus and orders</button>}
           {!canOpen && <p className="muted small department-private-note">Private workspace · membership required</p>}
           <div className="department-roster">
