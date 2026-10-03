@@ -40,6 +40,35 @@
   gap: 1.25rem;
 }
 
+.fundraising-space-tabs, .fundraising-crm-tabs { display: flex; gap: 0.45rem; overflow-x: auto; padding: 0.3rem; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.fundraising-space-tabs { margin-bottom: 1rem; }
+.fundraising-space-tabs button, .fundraising-crm-tabs button { flex: 0 0 auto; padding: 0.65rem 1rem; border: 0; border-radius: 10px; color: var(--muted); background: transparent; font-weight: 800; }
+.fundraising-space-tabs button.active, .fundraising-crm-tabs button.active { color: #fff; background: var(--green-600); }
+.fundraising-crm { display: grid; gap: 1rem; }
+.fundraising-crm-summary, .fundraising-report-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.8rem; }
+.fundraising-crm-summary > div, .fundraising-report-grid > div { display: grid; gap: 0.25rem; padding: 1rem; border: 1px solid #cfe2d2; border-radius: 14px; background: linear-gradient(145deg, #fff, #f2faf4); }
+.fundraising-crm-summary span, .fundraising-report-grid span { color: var(--muted); font-size: 0.8rem; font-weight: 700; }
+.fundraising-crm-summary strong, .fundraising-report-grid strong { color: var(--green-700); font-size: 1.45rem; }
+.fundraising-crm-summary .attention { border-color: #f3c27a; background: #fff8eb; }
+.fundraising-crm-filters { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.fundraising-crm-filters input:first-child { flex: 1; }
+.fundraising-crm-filters label { display: flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
+.fundraising-crm-list, .fundraising-followups, .fundraising-campaign-list { display: grid; gap: 0.65rem; }
+.fundraising-donor-card, .fundraising-followups button { display: grid; grid-template-columns: minmax(12rem, 1.2fr) minmax(12rem, 1fr) auto auto; align-items: center; gap: 0.8rem; width: 100%; padding: 0.85rem; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fbfefb; text-align: left; }
+.fundraising-donor-card:hover, .fundraising-followups button:hover { border-color: var(--green-500); box-shadow: 0 4px 12px rgba(20, 80, 45, 0.08); }
+.fundraising-donor-card > span:first-child, .fundraising-followups span { display: grid; gap: 0.15rem; }
+.fundraising-donor-card small, .fundraising-followups small, .fundraising-campaign-list span { color: var(--muted); }
+.fundraising-donor-card b { color: #9a3412; font-size: 0.78rem; }
+.status-pill { padding: 0.25rem 0.55rem; border-radius: 999px; color: #166534; background: #dcfce7; font-size: 0.75rem; font-weight: 800; text-transform: capitalize; }
+.fundraising-campaign-list article { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 12px; }
+.fundraising-campaign-list article > div { display: grid; }
+.fundraising-campaign-list article > b { color: var(--green-700); font-size: 1.2rem; }
+.fundraising-donor-editor { width: min(54rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow-y: auto; }
+.fundraising-donor-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem; }
+.fundraising-donor-form label { display: grid; gap: 0.35rem; font-weight: 700; }
+.fundraising-donor-form .full { grid-column: 1 / -1; }
+.fundraising-donor-form .checkbox-label { display: flex; align-items: center; }
+
 .fundraising-hero {
   display: flex;
   align-items: end;
@@ -251,6 +280,11 @@
 .fundraising-readonly-page > .panel { max-width: 120rem; margin-inline: auto; }
 
 @media (max-width: 760px) {
+  .fundraising-crm-summary, .fundraising-report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fundraising-crm-filters { align-items: stretch; flex-direction: column; }
+  .fundraising-donor-card, .fundraising-followups button, .fundraising-campaign-list article { grid-template-columns: 1fr; }
+  .fundraising-donor-form { grid-template-columns: 1fr; }
+  .fundraising-donor-form .full { grid-column: auto; }
   .fundraising-hero { align-items: stretch; flex-direction: column; }
   .fundraising-event-select { min-width: 0; width: 100%; }
   .fundraising-new-event-fields,

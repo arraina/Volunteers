@@ -380,6 +380,22 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Donor CRM data is private to the Owner and Fundraising Department Admins.
+    match /fundraisingDonors/{donorId} {
+      allow read: if isOwner() || isDepartmentAdmin('fundraising');
+      allow create: if (isOwner() || isDepartmentAdmin('fundraising'))
+        && request.resource.data.firstName is string
+        && request.resource.data.organization is string
+        && (request.resource.data.firstName.size() > 0 || request.resource.data.organization.size() > 0)
+        && request.resource.data.status in ['active', 'prospect', 'inactive'];
+      allow update: if (isOwner() || isDepartmentAdmin('fundraising'))
+        && request.resource.data.firstName is string
+        && request.resource.data.organization is string
+        && (request.resource.data.firstName.size() > 0 || request.resource.data.organization.size() > 0)
+        && request.resource.data.status in ['active', 'prospect', 'inactive'];
+      allow delete: if isOwner();
+    }
+
     match /departments/{departmentId} {
       allow read: if verifiedUser();
       allow write: if false;

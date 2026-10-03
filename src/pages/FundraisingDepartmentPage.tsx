@@ -7,6 +7,7 @@ import { getDepartmentWorkspace } from '../helpers/departments';
 import { subscribeEvents } from '../helpers/store';
 import { TempleEvent } from '../helpers/types';
 import FundraisingDashboard from './FundraisingDashboard';
+import FundraisingCrm from './FundraisingCrm';
 import './AdminDashboard.css';
 
 const FundraisingDepartmentPage: React.FC = () => {
@@ -15,6 +16,7 @@ const FundraisingDepartmentPage: React.FC = () => {
   const [events, setEvents] = useState<TempleEvent[]>([]);
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [error, setError] = useState('');
+  const [section, setSection] = useState<'crm' | 'dashboard'>('crm');
 
   useEffect(() => {
     getDepartmentWorkspace('fundraising')
@@ -32,7 +34,11 @@ const FundraisingDepartmentPage: React.FC = () => {
 
   return <div className="admin-dashboard">
     <header className="dashboard-header"><div><h1>ISKCON Parsippany Community Hub</h1><p>Serve. Connect. Grow. · Fundraising</p></div><div className="header-actions"><button className="logout-btn" onClick={() => navigate(isAdmin ? '/admin?tab=departments' : '/dashboard?tab=departments')}>Community Hub</button><button className="logout-btn" onClick={async () => { await signOut(auth); navigate('/login'); }}>Logout</button></div></header>
-    <main className="dashboard-content">{error && <div className="error-message">{error}</div>}<FundraisingDashboard events={events} uid={user?.uid} isOwner={isOwner} canCreateEvent={isAdmin} setError={setError} /></main>
+    <main className="dashboard-content">
+      {error && <div className="error-message">{error}</div>}
+      <nav className="fundraising-space-tabs" aria-label="Fundraising workspace"><button className={section === 'crm' ? 'active' : ''} onClick={() => setSection('crm')}>Fundraising CRM</button><button className={section === 'dashboard' ? 'active' : ''} onClick={() => setSection('dashboard')}>Live dashboard</button></nav>
+      {section === 'crm' ? <FundraisingCrm events={events} uid={user?.uid} setError={setError} /> : <FundraisingDashboard events={events} uid={user?.uid} isOwner={isOwner} canCreateEvent={isAdmin} setError={setError} />}
+    </main>
   </div>;
 };
 
