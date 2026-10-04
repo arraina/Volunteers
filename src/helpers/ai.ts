@@ -23,6 +23,19 @@ export interface ParsedEventPlan {
   tasks: ParsedTask[];
 }
 
+export interface DonorQueryPlan {
+  intent: 'search' | 'count';
+  terms: string[];
+  assignedFundraiser: string;
+  followUp: 'any' | 'missing' | 'scheduled' | 'overdue' | 'upcoming';
+  dateFrom: string;
+  dateTo: string;
+  status: 'any' | 'active' | 'prospect' | 'inactive';
+  duplicatesOnly: boolean;
+  hasEmail: 'any' | 'yes' | 'no';
+  limit: number;
+}
+
 export type TaskManagementAction =
   | {
       type: 'update_task';
@@ -78,6 +91,31 @@ Return valid minified JSON exactly as {"answer":string}. Keep the answer concise
   const raw = extractJson(await generateWithResilience(`QUESTION:\n${question}\n\nAPPLICATION MANUAL:\n${manual}`, system));
   if (!raw || typeof raw.answer !== 'string' || !raw.answer.trim()) throw new Error('AI did not return a help answer.');
   return raw.answer.trim();
+}
+
+export async function parseDonorQuestion(question: string): Promise<DonorQueryPlan> {
+  if (!isAiConfigured) throw new Error('The AI donor assistant is not configured.');
+  const today = new Date().toISOString().slice(0, 10);
+  const system = `You interpret questions from an authorized fundraising administrator into a donor-directory query. Today is ${today}.
+Return ONLY valid minified JSON exactly matching:
+{"intent":"search"|"count","terms":string[],"assignedFundraiser":string,"followUp":"any"|"missing"|"scheduled"|"overdue"|"upcoming","dateFrom":string,"dateTo":string,"status":"any"|"active"|"prospect"|"inactive","duplicatesOnly":boolean,"hasEmail":"any"|"yes"|"no","limit":number}
+Use terms for names, initiated names, email, phone, organization, address, tags, or notes explicitly mentioned by the user. Use ISO dates for dateFrom/dateTo and an empty string when unspecified. Choose count only when the user asks how many. Limit must be 1-50 and defaults to 20. Do not answer the question and do not invent donor data.`;
+  const raw = extractJson(await generateWithResilience(question, system));
+  const allowedFollowUp = ['any', 'missing', 'scheduled', 'overdue', 'upcoming'];
+  const allowedStatus = ['any', 'active', 'prospect', 'inactive'];
+  const allowedEmail = ['any', 'yes', 'no'];
+  return {
+    intent: raw?.intent === 'count' ? 'count' : 'search',
+    terms: Array.isArray(raw?.terms) ? raw.terms.filter((term: unknown) => typeof term === 'string' && term.trim()).map((term: string) => term.trim()).slice(0, 10) : [],
+    assignedFundraiser: typeof raw?.assignedFundraiser === 'string' ? raw.assignedFundraiser.trim() : '',
+    followUp: allowedFollowUp.includes(raw?.followUp) ? raw.followUp : 'any',
+    dateFrom: typeof raw?.dateFrom === 'string' ? raw.dateFrom : '',
+    dateTo: typeof raw?.dateTo === 'string' ? raw.dateTo : '',
+    status: allowedStatus.includes(raw?.status) ? raw.status : 'any',
+    duplicatesOnly: raw?.duplicatesOnly === true,
+    hasEmail: allowedEmail.includes(raw?.hasEmail) ? raw.hasEmail : 'any',
+    limit: Math.min(50, Math.max(1, Number(raw?.limit) || 20)),
+  };
 }
 
 const SYSTEM_INSTRUCTION = `You convert a temple volunteer coordinator's plain-language request into structured JSON.

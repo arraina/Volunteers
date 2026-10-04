@@ -77,6 +77,13 @@
 .fundraising-donor-form .checkbox-label { display: flex; align-items: center; }
 .fundraising-import-btn { cursor: pointer; }
 .fundraising-import-btn input { display: none; }
+.fundraising-donor-assistant { display: grid; gap: 0.75rem; margin-bottom: 1rem; padding: 1rem; border: 1px solid #b9d7c1; border-radius: 14px; background: linear-gradient(135deg, #f2fbf4, #f8fbff); }
+.fundraising-donor-assistant h3, .fundraising-donor-assistant p { margin: 0; }
+.fundraising-donor-question { display: grid; grid-template-columns: 1fr auto; gap: 0.65rem; }
+.fundraising-donor-answer { display: grid; gap: 0.5rem; padding-top: 0.25rem; }
+.fundraising-donor-answer > button { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(10rem, .7fr) minmax(9rem, .6fr); gap: 0.75rem; padding: 0.7rem; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: white; text-align: left; }
+.fundraising-donor-answer > button span { display: grid; gap: 0.15rem; }
+.fundraising-donor-answer small { color: var(--muted); }
 .fundraising-pledge-totals { margin-bottom: 1rem; }
 .fundraising-pledge-list { display: grid; gap: 0.65rem; }
 .fundraising-pledge-list > button { display: grid; grid-template-columns: minmax(12rem, 1.4fr) repeat(4, minmax(7rem, 0.6fr)); align-items: center; gap: 0.8rem; width: 100%; padding: 0.9rem; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fbfefb; text-align: left; }
@@ -310,6 +317,7 @@
   .fundraising-crm-summary, .fundraising-report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fundraising-crm-filters { align-items: stretch; flex-direction: column; }
   .fundraising-donor-card, .fundraising-followups button, .fundraising-campaign-list article { grid-template-columns: 1fr; }
+  .fundraising-donor-question, .fundraising-donor-answer > button { grid-template-columns: 1fr; }
   .fundraising-donor-form { grid-template-columns: 1fr; }
   .fundraising-donor-form .full { grid-column: auto; }
   .fundraising-pledge-list > button { grid-template-columns: repeat(2, minmax(0, 1fr)); }

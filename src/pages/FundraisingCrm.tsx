@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TempleEvent } from '../helpers/types';
 import { CampaignSummary, donorDuplicateKeys, FundraisingDonor, FundraisingPledge, loadCampaignSummaries, saveFundraisingDonor, saveFundraisingPledge, subscribeFundraisingDonors, subscribeFundraisingPledges } from '../helpers/fundraisingCrm';
+import { isAiConfigured, parseDonorQuestion } from '../helpers/ai';
 import QuickBooksReports from './QuickBooksReports';
 
 const blankDonor = (): FundraisingDonor => ({ id: '', firstName: '', lastName: '', initiatedName: '', email: '', phone: '', organization: '', address: '', status: 'active', tags: [], notes: '', nextFollowUp: null, assignedTo: '', archived: false, createdAt: null, updatedAt: null });
@@ -57,8 +58,17 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   const [donorDisplayLimit, setDonorDisplayLimit] = useState(100);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [donorLoadComplete, setDonorLoadComplete] = useState(false);
+  const [donorRefresh, setDonorRefresh] = useState(0);
+  const [donorQuestion, setDonorQuestion] = useState('');
+  const [donorAnswer, setDonorAnswer] = useState('');
+  const [donorQueryResults, setDonorQueryResults] = useState<FundraisingDonor[]>([]);
+  const [donorQueryLoading, setDonorQueryLoading] = useState(false);
 
-  useEffect(() => subscribeFundraisingDonors(setDonors, (error) => setError(error.message)), [setError]);
+  useEffect(() => {
+    setDonors([]); setDonorLoadComplete(false);
+    return subscribeFundraisingDonors((records, complete) => { setDonors(records); setDonorLoadComplete(complete); }, (error) => setError(error.message));
+  }, [setError, donorRefresh]);
   useEffect(() => subscribeFundraisingPledges(setPledges, (error) => setError(error.message)), [setError]);
   useEffect(() => { loadCampaignSummaries(Object.fromEntries(events.map((event) => [event.id, event.name]))).then(setCampaigns).catch((error) => setError(error.message)); }, [events, setError]);
 
@@ -80,7 +90,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     const duplicate = donors.find((donor) => donor.id !== editing.id && !donor.archived && possibleDuplicateKeys(donor).some((key) => keys.includes(key)));
     if (duplicate && !window.confirm(`Possible duplicate: ${duplicate.firstName} ${duplicate.lastName}. Save this donor anyway?`)) return;
     setSaving(true); setError(''); setMessage('');
-    try { await saveFundraisingDonor(editing, uid); setEditing(null); setMessage('Donor profile saved.'); }
+    try { await saveFundraisingDonor(editing, uid); setEditing(null); setMessage('Donor profile saved.'); setDonorRefresh((value) => value + 1); }
     catch (error) { setError(error instanceof Error ? error.message : 'Could not save donor.'); }
     finally { setSaving(false); }
   };
@@ -92,6 +102,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     try {
       await saveFundraisingDonor({ ...donor, archived }, uid);
       setMessage(`${donorName(donor)} was ${action === 'remove' ? 'removed from the active donor list' : 'restored'}.`);
+      setDonorRefresh((value) => value + 1);
     } catch (error) { setError(error instanceof Error ? error.message : `Could not ${action} donor.`); }
     finally { setSaving(false); }
   };
@@ -145,6 +156,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
         await saveFundraisingDonor(donor, uid); keys.forEach((key) => existingKeys.add(key)); imported += 1;
       }
       setMessage(`${imported} donor${imported === 1 ? '' : 's'} imported. Recognized donor fields were mapped; missing fields were left blank. ${skipped} skipped as duplicates or incomplete rows.`);
+      setDonorRefresh((value) => value + 1);
     } catch (error) { setError(error instanceof Error ? error.message : 'Could not import donor CSV.'); }
     finally { setSaving(false); }
   };
@@ -163,6 +175,38 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     });
     const url = URL.createObjectURL(new Blob([`\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a'); link.href = url; link.download = `fundraising-donors-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+  };
+
+  const askDonorAssistant = async () => {
+    if (!donorQuestion.trim()) return;
+    if (!donorLoadComplete) return setError('Please wait until the donor directory finishes loading before asking a question.');
+    setDonorQueryLoading(true); setError(''); setDonorAnswer(''); setDonorQueryResults([]);
+    try {
+      const plan = await parseDonorQuestion(donorQuestion.trim());
+      const now = new Date();
+      const from = plan.dateFrom ? new Date(`${plan.dateFrom}T00:00:00`) : null;
+      const to = plan.dateTo ? new Date(`${plan.dateTo}T23:59:59`) : null;
+      const matched = donors.filter((donor) => {
+        if (donor.archived) return false;
+        const haystack = `${donor.firstName} ${donor.lastName} ${donor.initiatedName} ${donor.email} ${donor.phone} ${donor.organization} ${donor.address} ${donor.tags.join(' ')} ${donor.notes}`.toLowerCase();
+        if (plan.terms.length && !plan.terms.every((term) => haystack.includes(term.toLowerCase()))) return false;
+        if (plan.assignedFundraiser && !donor.assignedTo.toLowerCase().includes(plan.assignedFundraiser.toLowerCase())) return false;
+        if (plan.status !== 'any' && donor.status !== plan.status) return false;
+        if (plan.hasEmail === 'yes' && !donor.email) return false;
+        if (plan.hasEmail === 'no' && donor.email) return false;
+        if (plan.duplicatesOnly && !duplicateIds.has(donor.id)) return false;
+        if (plan.followUp === 'missing' && donor.nextFollowUp) return false;
+        if (plan.followUp === 'scheduled' && !donor.nextFollowUp) return false;
+        if (plan.followUp === 'overdue' && (!donor.nextFollowUp || donor.nextFollowUp >= now)) return false;
+        if (plan.followUp === 'upcoming' && (!donor.nextFollowUp || donor.nextFollowUp < now)) return false;
+        if (from && (!donor.nextFollowUp || donor.nextFollowUp < from)) return false;
+        if (to && (!donor.nextFollowUp || donor.nextFollowUp > to)) return false;
+        return true;
+      });
+      setDonorAnswer(plan.intent === 'count' ? `${matched.length.toLocaleString()} donor${matched.length === 1 ? '' : 's'} matched your question.` : `${matched.length.toLocaleString()} donor${matched.length === 1 ? '' : 's'} matched. Showing up to ${plan.limit}.`);
+      setDonorQueryResults(matched.slice(0, plan.limit));
+    } catch (error) { setError(error instanceof Error ? error.message : 'The donor assistant could not answer that question.'); }
+    finally { setDonorQueryLoading(false); }
   };
 
   const savePledge = async () => {
@@ -192,6 +236,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     {message && <div className="success-message">{message}</div>}
     {view === 'donors' && <section className="panel">
       <div className="panel-head"><div><h2>Donor CRM</h2><p className="muted small">Contact details, ownership, notes, tags, and next follow-up.</p></div><div className="row"><label className="secondary-btn fundraising-import-btn">{saving ? 'Importing…' : 'Import donors'}<input type="file" accept=".csv,text/csv" disabled={saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) importDonors(file); event.target.value = ''; }} /></label><button className="secondary-btn" onClick={exportDonors}>Export donor data</button><button className="primary-btn" onClick={() => setEditing(blankDonor())}>Add donor</button></div></div>
+      <section className="fundraising-donor-assistant" aria-label="Donor assistant"><div><h3>Ask about donors</h3><p className="muted small">Gemini interprets your question; donor records stay in this authenticated page.</p></div><div className="fundraising-donor-question"><input value={donorQuestion} onChange={(event) => setDonorQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') askDonorAssistant(); }} placeholder="Example: Which donors assigned to Priya have an overdue follow-up?" /><button className="primary-btn" disabled={!isAiConfigured || !donorLoadComplete || donorQueryLoading} onClick={askDonorAssistant}>{donorQueryLoading ? 'Searching…' : 'Ask'}</button></div><p className="muted small">{donorLoadComplete ? `${donors.length.toLocaleString()} donor records ready to search.` : `Loading donor directory… ${donors.length.toLocaleString()} records available.`}</p>{donorAnswer && <div className="fundraising-donor-answer"><strong>{donorAnswer}</strong>{donorQueryResults.map((donor) => <button key={donor.id} onClick={() => setEditing({ ...donor })}><span><b>{donorName(donor)}</b><small>{donor.initiatedName || donor.email || donor.phone || 'No contact information'}</small></span><span><small>Assigned fundraiser</small><b>{donor.assignedTo || 'Unassigned'}</b></span><span><small>Next follow-up</small><b>{donor.nextFollowUp?.toLocaleDateString() || 'Not scheduled'}</b></span></button>)}</div>}</section>
       <div className="fundraising-crm-filters"><input value={search} onChange={(event) => { setSearch(event.target.value); setDonorDisplayLimit(100); }} placeholder="Search donors, contact details, or tags" /><label><input type="checkbox" checked={showArchived} onChange={(event) => { setShowArchived(event.target.checked); setDonorDisplayLimit(100); }} /> Show archived</label><span className="muted small">Showing {Math.min(visibleDonors.length, filtered.length).toLocaleString()} of {filtered.length.toLocaleString()} donors</span></div>
       <div className="fundraising-crm-list">
         {visibleDonors.map((donor) => <article className={`fundraising-donor-card${duplicateIds.has(donor.id) ? ' possible-duplicate' : ''}`} key={donor.id}>

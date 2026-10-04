@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDocs, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, documentId, DocumentData, getDocs, limit, onSnapshot, orderBy, query, Query, QueryDocumentSnapshot, QuerySnapshot, serverTimestamp, startAfter, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { firestoreTimestampToDate } from './types';
 
@@ -55,24 +55,42 @@ export function donorDuplicateKeys(donor: Pick<FundraisingDonor, 'email' | 'phon
   return [cleanEmail(donor.email) ? `email:${cleanEmail(donor.email)}` : '', cleanPhone(donor.phone) ? `phone:${cleanPhone(donor.phone)}` : ''].filter(Boolean);
 }
 
-export function subscribeFundraisingDonors(cb: (donors: FundraisingDonor[]) => void, onError?: (error: Error) => void) {
-  return onSnapshot(collection(db, 'fundraisingDonors'), (snapshot) => {
-    const donors = snapshot.docs.map((item) => {
-      const data = item.data();
-      return {
-        id: item.id,
-        firstName: String(data.firstName || ''), lastName: String(data.lastName || ''), initiatedName: String(data.initiatedName || ''),
-        email: String(data.email || ''), phone: String(data.phone || ''), organization: String(data.organization || ''), address: String(data.address || ''),
-        status: ['active', 'prospect', 'inactive'].includes(data.status) ? data.status : 'active',
-        tags: Array.isArray(data.tags) ? data.tags.map(String) : [], notes: String(data.notes || ''),
-        nextFollowUp: data.nextFollowUp ? firestoreTimestampToDate(data.nextFollowUp) : null,
-        assignedTo: String(data.assignedTo || ''), archived: data.archived === true,
-        createdAt: data.createdAt ? firestoreTimestampToDate(data.createdAt) : null,
-        updatedAt: data.updatedAt ? firestoreTimestampToDate(data.updatedAt) : null,
-      } as FundraisingDonor;
-    });
-    cb(donors.sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`)));
-  }, (error) => onError?.(error));
+function donorFromSnapshot(item: QueryDocumentSnapshot): FundraisingDonor {
+  const data = item.data();
+  return {
+    id: item.id,
+    firstName: String(data.firstName || ''), lastName: String(data.lastName || ''), initiatedName: String(data.initiatedName || ''),
+    email: String(data.email || ''), phone: String(data.phone || ''), organization: String(data.organization || ''), address: String(data.address || ''),
+    status: ['active', 'prospect', 'inactive'].includes(data.status) ? data.status : 'active',
+    tags: Array.isArray(data.tags) ? data.tags.map(String) : [], notes: String(data.notes || ''),
+    nextFollowUp: data.nextFollowUp ? firestoreTimestampToDate(data.nextFollowUp) : null,
+    assignedTo: String(data.assignedTo || ''), archived: data.archived === true,
+    createdAt: data.createdAt ? firestoreTimestampToDate(data.createdAt) : null,
+    updatedAt: data.updatedAt ? firestoreTimestampToDate(data.updatedAt) : null,
+  } as FundraisingDonor;
+}
+
+// Load this large collection progressively so the first donor rows render
+// quickly instead of waiting for the full directory to arrive in one snapshot.
+export function subscribeFundraisingDonors(cb: (donors: FundraisingDonor[], complete: boolean) => void, onError?: (error: Error) => void) {
+  let cancelled = false;
+  let cursor: QueryDocumentSnapshot | null = null;
+  const donors: FundraisingDonor[] = [];
+  (async () => {
+    while (!cancelled) {
+      const pageQuery: Query<DocumentData> = cursor
+        ? query(collection(db, 'fundraisingDonors'), orderBy(documentId()), startAfter(cursor), limit(500))
+        : query(collection(db, 'fundraisingDonors'), orderBy(documentId()), limit(500));
+      const snapshot: QuerySnapshot<DocumentData> = await getDocs(pageQuery);
+      donors.push(...snapshot.docs.map(donorFromSnapshot));
+      const complete = snapshot.size < 500;
+      cb([...donors].sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`)), complete);
+      if (complete) break;
+      cursor = snapshot.docs[snapshot.docs.length - 1];
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  })().catch((error) => { if (!cancelled) onError?.(error instanceof Error ? error : new Error(String(error))); });
+  return () => { cancelled = true; };
 }
 
 export async function saveFundraisingDonor(donor: Omit<FundraisingDonor, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }, uid?: string) {
