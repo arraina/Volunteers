@@ -9,6 +9,16 @@ const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD
 const dateValue = (date: Date | null) => date ? date.toISOString().slice(0, 10) : '';
 const csvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 const donorName = (donor?: FundraisingDonor) => donor ? [donor.firstName, donor.lastName].filter(Boolean).join(' ') || donor.organization : 'Unknown donor';
+const duplicateText = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+function possibleDuplicateKeys(donor: FundraisingDonor): string[] {
+  const keys = donorDuplicateKeys(donor);
+  const legalName = duplicateText(`${donor.firstName} ${donor.lastName}`);
+  const initiatedName = duplicateText(donor.initiatedName);
+  if (legalName.length >= 5) keys.push(`name:${legalName}`);
+  if (initiatedName.length >= 5) keys.push(`initiated:${initiatedName}`);
+  return Array.from(new Set(keys));
+}
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = []; let row: string[] = []; let cell = ''; let quoted = false;
@@ -44,6 +54,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   const [editingPledge, setEditingPledge] = useState<FundraisingPledge | null>(null);
   const [search, setSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  const [donorDisplayLimit, setDonorDisplayLimit] = useState(100);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -53,10 +64,11 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
 
   const duplicateIds = useMemo(() => {
     const seen = new Map<string, string[]>();
-    donors.filter((donor) => !donor.archived).forEach((donor) => donorDuplicateKeys(donor).forEach((key) => seen.set(key, [...(seen.get(key) || []), donor.id])));
+    donors.filter((donor) => !donor.archived).forEach((donor) => possibleDuplicateKeys(donor).forEach((key) => seen.set(key, [...(seen.get(key) || []), donor.id])));
     return new Set(Array.from(seen.values()).filter((ids) => ids.length > 1).flat());
   }, [donors]);
   const filtered = donors.filter((donor) => (showArchived || !donor.archived) && `${donor.firstName} ${donor.lastName} ${donor.initiatedName} ${donor.email} ${donor.phone} ${donor.organization} ${donor.address} ${donor.tags.join(' ')}`.toLowerCase().includes(search.toLowerCase()));
+  const visibleDonors = filtered.slice(0, donorDisplayLimit);
   const followups = donors.filter((donor) => !donor.archived && donor.nextFollowUp).sort((a, b) => Number(a.nextFollowUp) - Number(b.nextFollowUp));
   const totals = campaigns.reduce((result, campaign) => ({ current: result.current + campaign.current, target: result.target + campaign.target, pledges: result.pledges + campaign.pledges, donations: result.donations + campaign.donations, loans: result.loans + campaign.loans }), { current: 0, target: 0, pledges: 0, donations: 0, loans: 0 });
   const pledgeTotals = pledges.reduce((total, pledge) => ({ pledged: total.pledged + pledge.pledgedAmount, paid: total.paid + pledge.paidAmount }), { pledged: 0, paid: 0 });
@@ -64,12 +76,23 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   const save = async () => {
     if (!editing?.firstName.trim() && !editing?.organization.trim()) return setError('Enter a first name or organization name.');
     if (editing.email && !/^\S+@\S+\.\S+$/.test(editing.email)) return setError('Enter a valid email address or leave it blank.');
-    const keys = donorDuplicateKeys(editing);
-    const duplicate = donors.find((donor) => donor.id !== editing.id && !donor.archived && donorDuplicateKeys(donor).some((key) => keys.includes(key)));
+    const keys = possibleDuplicateKeys(editing);
+    const duplicate = donors.find((donor) => donor.id !== editing.id && !donor.archived && possibleDuplicateKeys(donor).some((key) => keys.includes(key)));
     if (duplicate && !window.confirm(`Possible duplicate: ${duplicate.firstName} ${duplicate.lastName}. Save this donor anyway?`)) return;
     setSaving(true); setError(''); setMessage('');
     try { await saveFundraisingDonor(editing, uid); setEditing(null); setMessage('Donor profile saved.'); }
     catch (error) { setError(error instanceof Error ? error.message : 'Could not save donor.'); }
+    finally { setSaving(false); }
+  };
+
+  const setDonorArchived = async (donor: FundraisingDonor, archived: boolean) => {
+    const action = archived ? 'remove' : 'restore';
+    if (archived && !window.confirm(`Remove ${donorName(donor)} from the active donor list? The record and fundraising history will be preserved.`)) return;
+    setSaving(true); setError(''); setMessage('');
+    try {
+      await saveFundraisingDonor({ ...donor, archived }, uid);
+      setMessage(`${donorName(donor)} was ${action === 'remove' ? 'removed from the active donor list' : 'restored'}.`);
+    } catch (error) { setError(error instanceof Error ? error.message : `Could not ${action} donor.`); }
     finally { setSaving(false); }
   };
 
@@ -169,13 +192,15 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     {message && <div className="success-message">{message}</div>}
     {view === 'donors' && <section className="panel">
       <div className="panel-head"><div><h2>Donor CRM</h2><p className="muted small">Contact details, ownership, notes, tags, and next follow-up.</p></div><div className="row"><label className="secondary-btn fundraising-import-btn">{saving ? 'Importing…' : 'Import donors'}<input type="file" accept=".csv,text/csv" disabled={saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) importDonors(file); event.target.value = ''; }} /></label><button className="secondary-btn" onClick={exportDonors}>Export donor data</button><button className="primary-btn" onClick={() => setEditing(blankDonor())}>Add donor</button></div></div>
-      <div className="fundraising-crm-filters"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search donors, contact details, or tags" /><label><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} /> Show archived</label></div>
+      <div className="fundraising-crm-filters"><input value={search} onChange={(event) => { setSearch(event.target.value); setDonorDisplayLimit(100); }} placeholder="Search donors, contact details, or tags" /><label><input type="checkbox" checked={showArchived} onChange={(event) => { setShowArchived(event.target.checked); setDonorDisplayLimit(100); }} /> Show archived</label><span className="muted small">Showing {Math.min(visibleDonors.length, filtered.length).toLocaleString()} of {filtered.length.toLocaleString()} donors</span></div>
       <div className="fundraising-crm-list">
-        {filtered.map((donor) => <button className="fundraising-donor-card" onClick={() => setEditing({ ...donor })} key={donor.id}>
+        {visibleDonors.map((donor) => <article className={`fundraising-donor-card${duplicateIds.has(donor.id) ? ' possible-duplicate' : ''}`} key={donor.id}>
           <span><strong>{[donor.firstName, donor.lastName].filter(Boolean).join(' ') || donor.organization}</strong>{donor.initiatedName && <small>{donor.initiatedName}</small>}{donor.organization && <small>{donor.organization}</small>}</span>
-          <span>{donor.email || donor.phone || 'No contact information'}</span><span className="status-pill">{donor.status}</span>{duplicateIds.has(donor.id) && <b>Possible duplicate</b>}
-        </button>)}
+          <span>{donor.email || donor.phone || 'No contact information'}</span><span className="status-pill">{donor.archived ? 'Archived' : donor.status}</span>{duplicateIds.has(donor.id) && <b className="duplicate-warning">Possible duplicate</b>}
+          <div className="fundraising-donor-actions"><button className="secondary-btn" onClick={() => setEditing({ ...donor })}>Edit</button><button className={donor.archived ? 'secondary-btn' : 'danger-btn'} disabled={saving} onClick={() => setDonorArchived(donor, !donor.archived)}>{donor.archived ? 'Restore' : 'Remove'}</button></div>
+        </article>)}
         {!filtered.length && <div className="empty-state"><strong>No donors found</strong><span>Add a donor or change the search.</span></div>}
+        {visibleDonors.length < filtered.length && <button className="secondary-btn" onClick={() => setDonorDisplayLimit((limit) => limit + 100)}>Load 100 more donors</button>}
       </div>
     </section>}
     {view === 'pledges' && <section className="panel"><div className="panel-head"><div><h2>Pledge tracking</h2><p className="muted small">Track the original commitment, payments received, remaining balance, and due date.</p></div><button className="primary-btn" onClick={() => setEditingPledge(blankPledge())}>Add pledge</button></div>
