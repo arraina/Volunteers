@@ -23,6 +23,18 @@ function parseCsv(text: string): string[][] {
   row.push(cell.trim()); if (row.some(Boolean)) rows.push(row); return rows;
 }
 
+const normalizeCsvHeader = (header: string) => header.replace(/^\uFEFF/, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+function csvDate(value: string): Date | null {
+  if (!value.trim()) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function csvBoolean(value: string): boolean {
+  return ['true', 'yes', 'y', '1', 'archived'].includes(value.trim().toLowerCase());
+}
+
 const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: (message: string) => void }> = ({ events, uid, setError }) => {
   const [donors, setDonors] = useState<FundraisingDonor[]>([]);
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
@@ -66,26 +78,50 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     try {
       const rows = parseCsv(await file.text());
       if (rows.length < 2) throw new Error('The CSV must contain a header row and at least one donor.');
-      const headers = rows[0].map((header) => header.toLowerCase().replace(/[^a-z0-9]/g, ''));
+      const headers = rows[0].map(normalizeCsvHeader);
       const column = (...names: string[]) => headers.findIndex((header) => names.includes(header));
-      const firstIndex = column('firstname', 'first'); const organizationIndex = column('organization', 'organisation', 'company');
+      const columns = {
+        firstName: column('firstname', 'first', 'givenname'),
+        lastName: column('lastname', 'last', 'surname', 'familyname'),
+        initiatedName: column('initiatedname', 'spiritualname', 'devotionalname'),
+        organization: column('organization', 'organisation', 'company', 'companyname'),
+        email: column('email', 'emailaddress', 'emailid'),
+        phone: column('phone', 'phonenumber', 'mobile', 'mobilenumber', 'cell', 'cellphone'),
+        address: column('address', 'mailingaddress', 'fulladdress'),
+        street: column('street', 'streetaddress', 'address1', 'addressline1'),
+        city: column('city', 'town'),
+        state: column('state', 'province', 'region'),
+        postalCode: column('zip', 'zipcode', 'postalcode', 'postcode'),
+        status: column('status', 'donorstatus'),
+        tags: column('tags', 'tag', 'categories', 'category'),
+        assignedTo: column('assignedfundraiser', 'assignedto', 'owner', 'fundraiser'),
+        nextFollowUp: column('nextfollowup', 'followupdate', 'nextfollowupdate'),
+        notes: column('notes', 'comments', 'comment'),
+        archived: column('archived', 'isarchived'),
+      };
+      const firstIndex = columns.firstName; const organizationIndex = columns.organization;
       if (firstIndex < 0 && organizationIndex < 0) throw new Error('CSV requires a First Name or Organization column.');
       const existingKeys = new Set(donors.flatMap(donorDuplicateKeys)); let imported = 0; let skipped = 0;
       for (const row of rows.slice(1, 501)) {
         const value = (index: number) => index >= 0 ? String(row[index] || '').trim() : '';
+        const directAddress = value(columns.address);
+        const combinedAddress = [value(columns.street), value(columns.city), value(columns.state), value(columns.postalCode)].filter(Boolean).join(', ');
+        const statusValue = value(columns.status).toLowerCase();
         const donor: FundraisingDonor = {
-          ...blankDonor(), firstName: value(firstIndex), lastName: value(column('lastname', 'last')),
-          initiatedName: value(column('initiatedname', 'spiritualname')), organization: value(organizationIndex),
-          email: value(column('email', 'emailaddress')), phone: value(column('phone', 'phonenumber', 'mobile')),
-          address: value(column('address', 'mailingaddress')), tags: value(column('tags')).split(/[;|]/).filter(Boolean),
-          notes: value(column('notes', 'comments')),
+          ...blankDonor(), firstName: value(firstIndex), lastName: value(columns.lastName),
+          initiatedName: value(columns.initiatedName), organization: value(organizationIndex),
+          email: value(columns.email), phone: value(columns.phone), address: directAddress || combinedAddress,
+          status: ['active', 'prospect', 'inactive'].includes(statusValue) ? statusValue as FundraisingDonor['status'] : 'active',
+          tags: value(columns.tags).split(/[;,|]/).map((tag) => tag.trim()).filter(Boolean),
+          assignedTo: value(columns.assignedTo), nextFollowUp: csvDate(value(columns.nextFollowUp)),
+          notes: value(columns.notes), archived: csvBoolean(value(columns.archived)),
         };
         if (!donor.firstName && !donor.organization) { skipped += 1; continue; }
         const keys = donorDuplicateKeys(donor);
         if (keys.some((key) => existingKeys.has(key))) { skipped += 1; continue; }
         await saveFundraisingDonor(donor, uid); keys.forEach((key) => existingKeys.add(key)); imported += 1;
       }
-      setMessage(`${imported} donor${imported === 1 ? '' : 's'} imported. ${skipped} skipped as duplicates or incomplete rows.`);
+      setMessage(`${imported} donor${imported === 1 ? '' : 's'} imported. Recognized donor fields were mapped; missing fields were left blank. ${skipped} skipped as duplicates or incomplete rows.`);
     } catch (error) { setError(error instanceof Error ? error.message : 'Could not import donor CSV.'); }
     finally { setSaving(false); }
   };
@@ -132,7 +168,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     </nav>
     {message && <div className="success-message">{message}</div>}
     {view === 'donors' && <section className="panel">
-      <div className="panel-head"><div><h2>Donor CRM</h2><p className="muted small">Contact details, ownership, notes, tags, and next follow-up.</p></div><div className="row"><label className="secondary-btn fundraising-import-btn">{saving ? 'Importing…' : 'Import CSV'}<input type="file" accept=".csv,text/csv" disabled={saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) importDonors(file); event.target.value = ''; }} /></label><button className="secondary-btn" onClick={exportDonors}>Export donor data</button><button className="primary-btn" onClick={() => setEditing(blankDonor())}>Add donor</button></div></div>
+      <div className="panel-head"><div><h2>Donor CRM</h2><p className="muted small">Contact details, ownership, notes, tags, and next follow-up.</p></div><div className="row"><label className="secondary-btn fundraising-import-btn">{saving ? 'Importing…' : 'Import donors'}<input type="file" accept=".csv,text/csv" disabled={saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) importDonors(file); event.target.value = ''; }} /></label><button className="secondary-btn" onClick={exportDonors}>Export donor data</button><button className="primary-btn" onClick={() => setEditing(blankDonor())}>Add donor</button></div></div>
       <div className="fundraising-crm-filters"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search donors, contact details, or tags" /><label><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} /> Show archived</label></div>
       <div className="fundraising-crm-list">
         {filtered.map((donor) => <button className="fundraising-donor-card" onClick={() => setEditing({ ...donor })} key={donor.id}>
