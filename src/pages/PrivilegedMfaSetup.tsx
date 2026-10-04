@@ -55,7 +55,7 @@ const PrivilegedMfaSetup: React.FC = () => {
 
   return <main className="auth-page"><section className="auth-card" style={{ maxWidth: 620, margin: '3rem auto' }}>
     <h1>Protect your privileged account</h1>
-    <p>Owners, Hub Admins, and Department Admins must use an authenticator app. This protects volunteer, donor, order, and financial information.</p>
+    <p>Owners and Hub Admins must use an authenticator app. Department Admins may also enable it for additional protection.</p>
     {error && <div className="error-message">{error}</div>}
     {!secret ? <button className="submit-btn" disabled={busy} onClick={begin}>{busy ? 'Preparing…' : 'Set up authenticator app'}</button> :
       <form onSubmit={finish}>

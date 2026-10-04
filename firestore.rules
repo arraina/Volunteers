@@ -30,7 +30,7 @@ service cloud.firestore {
     }
 
     function isDepartmentAdmin(departmentId) {
-      return hasMfa()
+      return verifiedUser()
         && exists(/databases/$(database)/documents/departmentMemberships/$(departmentId + '_' + request.auth.uid))
         && get(/databases/$(database)/documents/departmentMemberships/$(departmentId + '_' + request.auth.uid)).data.active == true
         && get(/databases/$(database)/documents/departmentMemberships/$(departmentId + '_' + request.auth.uid)).data.role == 'admin';

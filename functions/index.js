@@ -142,9 +142,6 @@ async function requireDepartmentAccess(request, departmentId, manage = false) {
     throw new HttpsError('permission-denied', 'You do not have access to this department.');
   }
   const isDepartmentAdmin = data.role === 'admin';
-  if (isDepartmentAdmin && !request.auth.token.firebase?.sign_in_second_factor) {
-    throw new HttpsError('permission-denied', 'Multi-factor authentication is required for Department Admin access.');
-  }
   if (manage && !isDepartmentAdmin) throw new HttpsError('permission-denied', 'Department Admin access is required.');
   return { isOwner: false, isDepartmentAdmin };
 }
@@ -223,7 +220,7 @@ exports.setDepartmentMembership = onCall({ region: 'us-central1', maxInstances: 
   const isDepartmentAdmin = callerMembership.exists && callerMembership.data().active === true && callerMembership.data().role === 'admin';
   if (role === 'admin' && !access.isOwner) throw new HttpsError('permission-denied', 'Only the Owner can change Department Admin access.');
   if (role === 'member' && !access.isOwner && !isDepartmentAdmin) throw new HttpsError('permission-denied', 'Department Admin access is required.');
-  requireMfa(request);
+  if (access.isOwner) requireMfa(request);
   const ref = db.doc(`departmentMemberships/${departmentId}_${userId}`);
   if (active) {
     await ref.set({ departmentId, userId, role, active: true, updatedBy: request.auth.uid,
