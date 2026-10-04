@@ -10,10 +10,14 @@ service cloud.firestore {
       return signedIn() && request.auth.token.email_verified == true;
     }
 
+    function hasMfa() {
+      return verifiedUser() && request.auth.token.firebase.sign_in_second_factor != null;
+    }
+
     // Admin status is granted ONLY by an admins/{uid} doc with isAdmin == true.
     // No hardcoded admin emails.
     function isAdmin() {
-      return verifiedUser()
+      return hasMfa()
         && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
         && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isAdmin == true;
     }
@@ -26,7 +30,7 @@ service cloud.firestore {
     }
 
     function isDepartmentAdmin(departmentId) {
-      return verifiedUser()
+      return hasMfa()
         && exists(/databases/$(database)/documents/departmentMemberships/$(departmentId + '_' + request.auth.uid))
         && get(/databases/$(database)/documents/departmentMemberships/$(departmentId + '_' + request.auth.uid)).data.active == true
         && get(/databases/$(database)/documents/departmentMemberships/$(departmentId + '_' + request.auth.uid)).data.role == 'admin';
@@ -196,12 +200,9 @@ service cloud.firestore {
     match /volunteers/{volunteerId} {
       allow get: if isAdmin() || isOwnDocument(volunteerId);
       allow list: if isAdmin();
-      // Admins manage anyone; a user can create their own profile at signup.
-      allow create: if isAdmin()
-        || (signedIn()
-            && request.auth.uid == volunteerId
-            && request.resource.data.email == request.auth.token.email
-            && (hasNoPhoneNumber() || hasValidPhoneNumber()));
+      // Invitation claims are completed by trusted Cloud Functions. Browser
+      // self-registration is intentionally closed.
+      allow create: if isAdmin();
       allow update: if adminMayUpdateWithTrash()
         || (verifiedUser()
             && request.auth.uid == volunteerId
@@ -209,6 +210,11 @@ service cloud.firestore {
             && (hasNoPhoneNumber() || hasValidPhoneNumber()));
       allow delete: if isOwner();
     }
+
+    // Server-only abuse counters, access-review reminders, and security events.
+    match /securityRateLimits/{documentId} { allow read, write: if false; }
+    match /securityAccessReviews/{documentId} { allow read: if isOwner(); allow write: if false; }
+    match /securityEvents/{documentId} { allow read: if isOwner(); allow write: if false; }
 
     // ----- tasks -----
     match /tasks/{taskId} {

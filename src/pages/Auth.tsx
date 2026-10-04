@@ -7,6 +7,8 @@ import {
   sendPasswordResetEmail,
   signOut,
   signInWithEmailAndPassword,
+  getMultiFactorResolver,
+  TotpMultiFactorGenerator,
   updateProfile,
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
@@ -44,6 +46,8 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isLogin = type === 'login';
+  const invitationRequired = searchParams.get('invitationRequired') === '1';
+  const mfaEnrolled = searchParams.get('mfaEnrolled') === '1';
   const requestedReturnTo = searchParams.get('returnTo') || '';
   const returnTo = requestedReturnTo.startsWith('/') && !requestedReturnTo.startsWith('//') ? requestedReturnTo : '';
 
@@ -145,6 +149,25 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
       }
       await routeByRole(credential.user.uid);
     } catch (err) {
+      if (err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'auth/multi-factor-auth-required') {
+        try {
+          const resolver = getMultiFactorResolver(auth, err as Parameters<typeof getMultiFactorResolver>[1]);
+          const hint = resolver.hints.find((item) => item.factorId === TotpMultiFactorGenerator.FACTOR_ID);
+          if (!hint) throw new Error('This account requires an unsupported second factor. Contact the Owner.');
+          const code = window.prompt('Enter the 6-digit code from your authenticator app.');
+          if (!code) throw new Error('The MFA code is required.');
+          const result = await resolver.resolveSignIn(TotpMultiFactorGenerator.assertionForSignIn(hint.uid, code.trim()));
+          if (!result.user.emailVerified) {
+            navigate('/verify-email');
+            return;
+          }
+          await routeByRole(result.user.uid);
+          return;
+        } catch (mfaError) {
+          setError(getErrorMessage(mfaError, 'MFA verification failed.'));
+          return;
+        }
+      }
       setError(getErrorMessage(err, 'Failed to log in.'));
     } finally {
       setLoading(false);
@@ -216,6 +239,8 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
             {isLogin ? 'Sign in to your account' : 'Create your account to get started'}
           </p>
           {error && <div className="error-message">{error}</div>}
+          {invitationRequired && <div className="info-message">New accounts are invitation-only. Ask an Owner or Admin to add you and send a secure activation link.</div>}
+          {mfaEnrolled && <div className="info-message">Authenticator MFA is enabled. Sign in again and enter the current code from your authenticator app.</div>}
 
         <form onSubmit={isLogin ? handleLogin : handleSignup}>
           {!isLogin && (
@@ -318,11 +343,9 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
           </button>
         </form>
 
-          <p className="toggle-link">
-            <Link to={`${isLogin ? '/signup' : '/login'}${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`}>
-              {isLogin ? 'New volunteer? Create an account' : 'Already have an account? Log in'}
-            </Link>
-          </p>
+          <p className="toggle-link">{isLogin
+            ? 'Need an account? Ask an Owner or Admin for a secure invitation.'
+            : <Link to="/login">Already have an account? Log in</Link>}</p>
         </div>
       </div>
     </div>

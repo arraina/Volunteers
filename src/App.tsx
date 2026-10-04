@@ -16,6 +16,8 @@ import GovindasOrderPage from './pages/GovindasOrderPage';
 import GovindasOrderStatusPage from './pages/GovindasOrderStatusPage';
 import PublicEventFeedback from './pages/PublicEventFeedback';
 import DepartmentWorkspacePage from './pages/DepartmentWorkspacePage';
+import PrivilegedMfaSetup from './pages/PrivilegedMfaSetup';
+import { multiFactor } from 'firebase/auth';
 import { AuthProvider, useAuth } from './helpers/useAuth';
 import { isFirebaseConfigured } from './config/firebase';
 import './App.css';
@@ -65,6 +67,7 @@ const Protected: React.FC<{ admin?: boolean; children: React.ReactElement }> = (
   if (!user) return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   if (!user.emailVerified) return <Navigate to={`/verify-email?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   if (admin && !isAdmin) return <Navigate to="/dashboard" replace />;
+  if (admin && isAdmin && multiFactor(user).enrolledFactors.length === 0) return <Navigate to="/security/mfa" replace />;
   return children;
 };
 
@@ -103,13 +106,10 @@ function App() {
           />
           <Route
             path="/signup"
-            element={
-              <PublicOnly>
-                <AuthPage type="signup" />
-              </PublicOnly>
-            }
+            element={<Navigate to="/login?invitationRequired=1" replace />}
           />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/security/mfa" element={<PrivilegedMfaSetup />} />
           <Route
             path="/admin"
             element={

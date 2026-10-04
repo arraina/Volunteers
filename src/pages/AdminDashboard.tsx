@@ -7,6 +7,8 @@ import {
   sendPasswordResetEmail,
   signOut,
 } from 'firebase/auth';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../config/firebase';
 import { deleteApp, initializeApp } from 'firebase/app';
 import { auth, firebaseConfig } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
@@ -297,6 +299,14 @@ const AdminDashboard: React.FC = () => {
         </div>
         <div className="header-actions">
           <span className="user-info">{user?.email}</span>
+          <button onClick={async () => {
+            if (!window.confirm('Sign out this privileged account on every device?')) return;
+            try {
+              await httpsCallable(functions, 'revokeOwnSessions')();
+              await signOut(auth);
+              navigate('/login', { replace: true });
+            } catch (cause) { setError(cause instanceof Error ? cause.message : 'Sessions could not be revoked.'); }
+          }} className="logout-btn">Sign out all devices</button>
           <button onClick={handleLogout} className="logout-btn">
             Logout
           </button>

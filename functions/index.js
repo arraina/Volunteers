@@ -1,13 +1,15 @@
-const { createHash, randomBytes, randomUUID } = require('crypto');
-const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
+const { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } = require('crypto');
+const { onCall: firebaseOnCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 const { onDocumentWrittenWithAuthContext } = require('firebase-functions/v2/firestore');
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const admin = require('firebase-admin');
 
 admin.initializeApp();
 const db = admin.firestore();
 const whatsappWebhookVerifyToken = defineSecret('WHATSAPP_WEBHOOK_VERIFY_TOKEN');
 const whatsappAccessToken = defineSecret('WHATSAPP_ACCESS_TOKEN');
+const whatsappAppSecret = defineSecret('WHATSAPP_APP_SECRET');
 const quickBooksClientId = defineSecret('QUICKBOOKS_CLIENT_ID');
 const quickBooksClientSecret = defineSecret('QUICKBOOKS_CLIENT_SECRET');
 
@@ -23,6 +25,39 @@ const QUICKBOOKS_REDIRECT_URI = 'https://us-central1-temple-volunteers-8ff23.clo
 const QUICKBOOKS_APP_RETURN_URL = 'https://arraina.github.io/Volunteers/department/fundraising';
 const QUICKBOOKS_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 const QUICKBOOKS_AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2';
+
+// Require App Check centrally so future callable functions inherit the same protection.
+const onCall = (options, handler) => firebaseOnCall({ ...options, enforceAppCheck: true }, handler);
+
+const RATE_LIMITS = {
+  auth: { limit: 8, windowSeconds: 15 * 60 },
+  feedback: { limit: 5, windowSeconds: 60 * 60 },
+  invite: { limit: 8, windowSeconds: 60 * 60 },
+  order: { limit: 6, windowSeconds: 10 * 60 },
+};
+
+function requestFingerprint(request) {
+  const forwarded = String(request.rawRequest?.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
+  const ip = forwarded || request.rawRequest?.ip || 'unknown';
+  return createHash('sha256').update(ip).digest('hex').slice(0, 32);
+}
+
+async function enforceRateLimit(request, category) {
+  const policy = RATE_LIMITS[category];
+  if (!policy) throw new HttpsError('internal', 'Rate-limit policy is missing.');
+  const bucket = Math.floor(Date.now() / (policy.windowSeconds * 1000));
+  const ref = db.doc(`securityRateLimits/${category}_${requestFingerprint(request)}_${bucket}`);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    const count = Number(snapshot.data()?.count || 0);
+    if (count >= policy.limit) throw new HttpsError('resource-exhausted', 'Too many attempts. Please try again later.');
+    transaction.set(ref, {
+      category, count: count + 1,
+      expiresAt: admin.firestore.Timestamp.fromMillis((bucket + 2) * policy.windowSeconds * 1000),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+}
 
 const DEFAULT_DEPARTMENTS = [
   ['facilities', 'Facilities', 'Building, grounds, technology, safety, and property support.'],
@@ -68,6 +103,9 @@ async function requireAdmin(request, ownerOnly = false) {
   const snapshot = await db.doc(`admins/${request.auth.uid}`).get();
   const data = snapshot.data() || {};
   if (!snapshot.exists || data.isAdmin !== true) throw new HttpsError('permission-denied', 'Administrator access is required.');
+  if (!request.auth.token.firebase?.sign_in_second_factor) {
+    throw new HttpsError('permission-denied', 'Multi-factor authentication is required for privileged access. Sign out and sign in with MFA.');
+  }
   if (ownerOnly && data.role !== 'owner' && data.bootstrap !== true) {
     throw new HttpsError('permission-denied', 'Owner access is required.');
   }
@@ -76,6 +114,12 @@ async function requireAdmin(request, ownerOnly = false) {
 async function requireVerifiedUser(request) {
   if (!request.auth || request.auth.token.email_verified !== true) {
     throw new HttpsError('unauthenticated', 'A verified account is required.');
+  }
+}
+
+function requireMfa(request) {
+  if (!request.auth?.token?.firebase?.sign_in_second_factor) {
+    throw new HttpsError('permission-denied', 'Multi-factor authentication is required for privileged access.');
   }
 }
 
@@ -88,13 +132,19 @@ async function callerAccess(uid) {
 async function requireDepartmentAccess(request, departmentId, manage = false) {
   await requireVerifiedUser(request);
   const access = await callerAccess(request.auth.uid);
-  if (access.isOwner) return { isOwner: true, isDepartmentAdmin: true };
+  if (access.isOwner) {
+    requireMfa(request);
+    return { isOwner: true, isDepartmentAdmin: true };
+  }
   const membership = await db.doc(`departmentMemberships/${departmentId}_${request.auth.uid}`).get();
   const data = membership.data() || {};
   if (!membership.exists || data.active !== true || data.departmentId !== departmentId) {
     throw new HttpsError('permission-denied', 'You do not have access to this department.');
   }
   const isDepartmentAdmin = data.role === 'admin';
+  if (isDepartmentAdmin && !request.auth.token.firebase?.sign_in_second_factor) {
+    throw new HttpsError('permission-denied', 'Multi-factor authentication is required for Department Admin access.');
+  }
   if (manage && !isDepartmentAdmin) throw new HttpsError('permission-denied', 'Department Admin access is required.');
   return { isOwner: false, isDepartmentAdmin };
 }
@@ -173,6 +223,7 @@ exports.setDepartmentMembership = onCall({ region: 'us-central1', maxInstances: 
   const isDepartmentAdmin = callerMembership.exists && callerMembership.data().active === true && callerMembership.data().role === 'admin';
   if (role === 'admin' && !access.isOwner) throw new HttpsError('permission-denied', 'Only the Owner can change Department Admin access.');
   if (role === 'member' && !access.isOwner && !isDepartmentAdmin) throw new HttpsError('permission-denied', 'Department Admin access is required.');
+  requireMfa(request);
   const ref = db.doc(`departmentMemberships/${departmentId}_${userId}`);
   if (active) {
     await ref.set({ departmentId, userId, role, active: true, updatedBy: request.auth.uid,
@@ -338,12 +389,14 @@ async function publicFeedbackEvent(token) {
 }
 
 exports.getPublicEventFeedbackForm = onCall({ region: 'us-central1', maxInstances: 12 }, async (request) => {
+  await enforceRateLimit(request, 'feedback');
   const result = await publicFeedbackEvent(request.data?.token);
   return { event: { id: result.eventId, name: result.event.name,
     dateMillis: result.event.date?.toMillis?.() || null }, expiresAtMillis: result.expiresAtMillis };
 });
 
 exports.submitPublicEventFeedback = onCall({ region: 'us-central1', maxInstances: 12 }, async (request) => {
+  await enforceRateLimit(request, 'feedback');
   const result = await publicFeedbackEvent(request.data?.token);
   const input = cleanFeedbackInput(request.data);
   await db.collection('eventFeedback').add({ eventId: result.eventId, ...input, anonymous: !input.respondentName,
@@ -424,6 +477,7 @@ exports.getPublicGovindasMenu = onCall({ region: 'us-central1', maxInstances: 12
 });
 
 exports.placeGovindasOrder = onCall({ region: 'us-central1', maxInstances: 12 }, async (request) => {
+  await enforceRateLimit(request, 'order');
   const result = await publicGovindasMenu(request.data?.token);
   const customerName = String(request.data?.customerName || '').trim().slice(0, 160);
   const phoneNumber = normalizePhone(request.data?.phoneNumber);
@@ -766,6 +820,7 @@ exports.trashTask = onCall({ region: 'us-central1', maxInstances: 4 }, async (re
   const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
   const isAdmin = adminDoc.data()?.isAdmin === true;
   if (!isAdmin && selectedData.createdBy !== request.auth.uid) throw new HttpsError('permission-denied', 'You can move only tasks you created to Trash.');
+  if (isAdmin) requireMfa(request);
 
   let targets = [selected];
   if (scope === 'future' && selectedData.seriesId) {
@@ -799,6 +854,9 @@ exports.trashTask = onCall({ region: 'us-central1', maxInstances: 4 }, async (re
 exports.beginVolunteerSignup = onCall(
   { region: 'us-central1', maxInstances: 2, secrets: [whatsappAccessToken] },
   async (request) => {
+    await enforceRateLimit(request, 'auth');
+    throw new HttpsError('permission-denied', 'Public registration is closed. Ask an Owner or Admin for a secure invitation.');
+    /* Legacy migration path retained temporarily for rollback safety.
     if (!request.auth) throw new HttpsError('unauthenticated', 'Start signup before checking the phone number.');
     const phoneNumber = normalizePhone(request.data?.phoneNumber);
     const email = String(request.data?.email || '').trim().toLowerCase();
@@ -859,7 +917,7 @@ exports.beginVolunteerSignup = onCall(
     }
 
     await admin.auth().deleteUser(request.auth.uid).catch(() => undefined);
-    return { existingProfile: true, inviteSent: !recentlySent, recentlySent };
+    return { existingProfile: true, inviteSent: !recentlySent, recentlySent }; */
   }
 );
 
@@ -901,6 +959,7 @@ exports.manageVolunteerTaskAssignment = onCall({ region: 'us-central1', maxInsta
     if (taskData.createdBy !== request.auth.uid && callerAdmin.data()?.isAdmin !== true) {
       throw new HttpsError('permission-denied', 'Only the task creator or an administrator can manage assignments.');
     }
+    if (callerAdmin.data()?.isAdmin === true) requireMfa(request);
     if (!volunteer.exists || volunteer.data().deleted === true || volunteer.data().participationStatus === 'inactive'
       || volunteer.data().whatsappOptIn !== true || !volunteer.data().phoneNumber) {
       throw new HttpsError('failed-precondition', 'This volunteer is not active for task assignments.');
@@ -993,6 +1052,7 @@ exports.sendPortalInvites = onCall(
 );
 
 exports.getPortalInvite = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  await enforceRateLimit(request, 'invite');
   const token = String(request.data?.token || '');
   if (token.length < 20) throw new HttpsError('invalid-argument', 'This invitation link is invalid.');
   const invite = await db.doc(`portalInvites/${tokenHash(token)}`).get();
@@ -1004,6 +1064,7 @@ exports.getPortalInvite = onCall({ region: 'us-central1', maxInstances: 4 }, asy
 });
 
 exports.claimPortalInvite = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
+  await enforceRateLimit(request, 'invite');
   const token = String(request.data?.token || '');
   const email = String(request.data?.email || '').trim().toLowerCase();
   const password = String(request.data?.password || '');
@@ -1031,7 +1092,7 @@ exports.claimPortalInvite = onCall({ region: 'us-central1', maxInstances: 2 }, a
 
 /** Receive Meta's WhatsApp message-status callbacks and update the original record. */
 exports.whatsappStatusWebhook = onRequest(
-  { region: 'us-central1', maxInstances: 2, secrets: [whatsappWebhookVerifyToken] },
+  { region: 'us-central1', maxInstances: 2, secrets: [whatsappWebhookVerifyToken, whatsappAppSecret] },
   async (request, response) => {
     if (request.method === 'GET') {
       const verified = request.query['hub.mode'] === 'subscribe'
@@ -1042,6 +1103,14 @@ exports.whatsappStatusWebhook = onRequest(
     }
     if (request.method !== 'POST') {
       response.set('Allow', 'GET, POST').sendStatus(405);
+      return;
+    }
+    const suppliedSignature = String(request.get('x-hub-signature-256') || '');
+    const expectedSignature = `sha256=${createHmac('sha256', whatsappAppSecret.value()).update(request.rawBody).digest('hex')}`;
+    const suppliedBuffer = Buffer.from(suppliedSignature);
+    const expectedBuffer = Buffer.from(expectedSignature);
+    if (suppliedBuffer.length !== expectedBuffer.length || !timingSafeEqual(suppliedBuffer, expectedBuffer)) {
+      response.sendStatus(401);
       return;
     }
     try {
@@ -1092,14 +1161,31 @@ exports.whatsappStatusWebhook = onRequest(
   }
 );
 
+exports.revokeOwnSessions = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
+  await requireAdmin(request);
+  await admin.auth().revokeRefreshTokens(request.auth.uid);
+  await db.collection('securityEvents').add({
+    type: 'privileged_sessions_revoked', userId: request.auth.uid,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { revoked: true };
+});
+
+exports.createMonthlyAccessReview = onSchedule({ region: 'us-central1', schedule: '0 9 1 * *', timeZone: 'America/New_York' }, async () => {
+  const [admins, memberships] = await Promise.all([
+    db.collection('admins').where('isAdmin', '==', true).get(),
+    db.collection('departmentMemberships').where('active', '==', true).get(),
+  ]);
+  const month = new Date().toISOString().slice(0, 7);
+  await db.doc(`securityAccessReviews/${month}`).set({
+    month, status: 'pending', adminCount: admins.size,
+    departmentAdminCount: memberships.docs.filter((item) => item.data().role === 'admin').length,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+});
+
 exports.deleteVolunteerAccount = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
-  if (!request.auth || request.auth.token.email_verified !== true) {
-    throw new HttpsError('unauthenticated', 'A verified administrator account is required.');
-  }
-  const caller = await db.doc(`admins/${request.auth.uid}`).get();
-  if (!caller.exists || caller.data().isAdmin !== true) {
-    throw new HttpsError('permission-denied', 'Administrator access is required.');
-  }
+  await requireAdmin(request);
   const uid = typeof request.data?.uid === 'string' ? request.data.uid.trim() : '';
   if (!uid || uid === request.auth.uid) throw new HttpsError('invalid-argument', 'Choose another volunteer account.');
   const targetAdmin = await db.doc(`admins/${uid}`).get();

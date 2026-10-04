@@ -15,7 +15,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'volunteer-quick-start', title: 'How to get started as a new Volunteer', category: 'Quick Start', roles: ['volunteer'],
     summary: 'A first-day checklist from account activation through completing your first service task.',
     sections: [
-      { heading: '1. Activate your account', text: 'Self-register with your name, email, phone, and a password, or open the secure WhatsApp portal invitation sent after an admin creates your phone-only profile. A portal link expires after 7 days; ask the Owner to resend it if needed. Confirm your email before signing in.' },
+      { heading: '1. Activate your account', text: 'New accounts are invitation-only. An Owner or Admin first adds your volunteer profile, then sends a secure activation link. Add your email and password through that link, which expires after 7 days. Confirm your email before signing in.' },
       { heading: '2. Complete My Profile', text: 'Open My Profile, check your name and phone, select the days you are usually available, and save. Availability is guidance for coordinators; it does not block you from other days.' },
       { heading: '3. Keep your phone current', text: 'Phone number is the primary volunteer identity and is stored in international format. A phone already used by another active profile cannot be saved. Keep WhatsApp enabled so your profile remains active and task reminders can reach you.' },
       { heading: '4. Join a task', text: 'Open Open Tasks, search by event, task, or location, then use Availability to show tasks available for signup, full tasks, or all upcoming tasks. Choose Sign Up when a place is open.' },
@@ -130,7 +130,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'start', title: 'Getting started and signing in', category: 'Getting Started', roles: ['everyone'],
     summary: 'Create an account, verify your email, sign in, and recover a forgotten password.',
     sections: [
-      { heading: 'Volunteer signup', text: 'Enter first and last name, email, phone number, and a password. Confirm the verification email before signing in. The phone must use international format and cannot already belong to another active volunteer profile.' },
+      { heading: 'Volunteer signup', text: 'Public self-registration is closed. Ask an Owner or Admin to add you and send a secure activation link. This prevents unknown people from creating portal profiles.' },
       { heading: 'Invitation from an admin', text: 'An admin can add you with phone only and assign you immediately. When the approved WhatsApp portal invitation arrives, open its secure link, add your email, and choose a password; your existing assignments remain attached. The link expires after 7 days and the Owner can resend it. If an admin originally supplied your email, use the email invitation or Forgot password.' },
       { heading: 'Sign-in problems', text: 'Use Forgot password if the account exists but the password is unknown. If an administrator deleted only the volunteer profile, the Firebase login may still exist and the same email cannot register again until the authentication account is also removed.' },
     ], keywords: ['signup', 'register', 'login', 'password', 'invitation', 'email verification', 'forgot password'],
