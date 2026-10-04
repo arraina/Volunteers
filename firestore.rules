@@ -409,6 +409,22 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    // Immutable call evidence for donor stewardship. Corrections are appended as
+    // new records; only the Hub Owner may remove an erroneous record.
+    match /fundraisingDonorInteractions/{interactionId} {
+      allow read: if isOwner() || isDepartmentAdmin('fundraising');
+      allow create: if (isOwner() || isDepartmentAdmin('fundraising'))
+        && request.resource.data.donorId is string
+        && request.resource.data.donorId.size() > 0
+        && request.resource.data.calledAt is timestamp
+        && request.resource.data.notes is string
+        && request.resource.data.notes.size() > 0
+        && request.resource.data.notes.size() <= 5000
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if false;
+      allow delete: if isOwner();
+    }
+
     match /departments/{departmentId} {
       allow read: if verifiedUser();
       allow write: if false;

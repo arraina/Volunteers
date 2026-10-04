@@ -1,10 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TempleEvent } from '../helpers/types';
-import { CampaignSummary, donorDuplicateKeys, FundraisingDonor, FundraisingPledge, loadCampaignSummaries, saveFundraisingDonor, saveFundraisingPledge, subscribeFundraisingDonors, subscribeFundraisingPledges } from '../helpers/fundraisingCrm';
+import { addDonorInteraction, CampaignSummary, donorDuplicateKeys, DonorContactInteraction, FundraisingDonor, FundraisingPledge, loadCampaignSummaries, saveFundraisingDonor, saveFundraisingPledge, subscribeDonorInteractions, subscribeFundraisingDonors, subscribeFundraisingPledges } from '../helpers/fundraisingCrm';
 import { isAiConfigured, parseDonorQuestion } from '../helpers/ai';
 import QuickBooksReports from './QuickBooksReports';
 
-const blankDonor = (): FundraisingDonor => ({ id: '', firstName: '', lastName: '', initiatedName: '', email: '', phone: '', organization: '', address: '', status: 'active', tags: [], notes: '', nextFollowUp: null, assignedTo: '', archived: false, createdAt: null, updatedAt: null });
+const blankDonor = (): FundraisingDonor => ({
+  id: '', firstName: '', lastName: '', initiatedName: '', email: '', phone: '', officePhone: '', organization: '', address: '', spouseName: '', birthDate: null, spouseBirthDate: null,
+  children: Array.from({ length: 5 }, () => ({ name: '', birthDate: null })), lastDonationDate: null, lastDonationAmount: 0, biggestDonationDate: null, biggestDonationAmount: 0,
+  autoDeductDonationAmount: 0, autoDeductBillingAmount: 0, monthlyDonor: false, autoDeductPledgeAmount: 0, autoDeductPledgeStart: null, autoDeductPledgeRemaining: 0,
+  cardLastFour: '', cardBillingAddress: '', cardBillingZip: '', status: 'active', tags: [], notes: '', nextFollowUp: null, assignedTo: '', archived: false, createdAt: null, updatedAt: null,
+});
 const blankPledge = (): FundraisingPledge => ({ id: '', donorId: '', eventId: '', pledgedAmount: 0, paidAmount: 0, dueDate: null, notes: '', createdAt: null, updatedAt: null });
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const dateValue = (date: Date | null) => date ? date.toISOString().slice(0, 10) : '';
@@ -50,6 +55,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   const [donors, setDonors] = useState<FundraisingDonor[]>([]);
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
   const [pledges, setPledges] = useState<FundraisingPledge[]>([]);
+  const [interactions, setInteractions] = useState<DonorContactInteraction[]>([]);
   const [view, setView] = useState<'donors' | 'pledges' | 'campaigns' | 'followups' | 'reports'>('donors');
   const [editing, setEditing] = useState<FundraisingDonor | null>(null);
   const [editingPledge, setEditingPledge] = useState<FundraisingPledge | null>(null);
@@ -64,12 +70,15 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   const [donorAnswer, setDonorAnswer] = useState('');
   const [donorQueryResults, setDonorQueryResults] = useState<FundraisingDonor[]>([]);
   const [donorQueryLoading, setDonorQueryLoading] = useState(false);
+  const [callDate, setCallDate] = useState(dateValue(new Date()));
+  const [callNotes, setCallNotes] = useState('');
 
   useEffect(() => {
     setDonors([]); setDonorLoadComplete(false);
     return subscribeFundraisingDonors((records, complete) => { setDonors(records); setDonorLoadComplete(complete); }, (error) => setError(error.message));
   }, [setError, donorRefresh]);
   useEffect(() => subscribeFundraisingPledges(setPledges, (error) => setError(error.message)), [setError]);
+  useEffect(() => subscribeDonorInteractions(setInteractions, (error) => setError(error.message)), [setError]);
   useEffect(() => { loadCampaignSummaries(Object.fromEntries(events.map((event) => [event.id, event.name]))).then(setCampaigns).catch((error) => setError(error.message)); }, [events, setError]);
 
   const duplicateIds = useMemo(() => {
@@ -86,6 +95,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   const save = async () => {
     if (!editing?.firstName.trim() && !editing?.organization.trim()) return setError('Enter a first name or organization name.');
     if (editing.email && !/^\S+@\S+\.\S+$/.test(editing.email)) return setError('Enter a valid email address or leave it blank.');
+    if (editing.cardLastFour && !/^\d{4}$/.test(editing.cardLastFour)) return setError('Card last four must contain exactly four digits, or be left blank.');
     const keys = possibleDuplicateKeys(editing);
     const duplicate = donors.find((donor) => donor.id !== editing.id && !donor.archived && possibleDuplicateKeys(donor).some((key) => keys.includes(key)));
     if (duplicate && !window.confirm(`Possible duplicate: ${duplicate.firstName} ${duplicate.lastName}. Save this donor anyway?`)) return;
@@ -107,6 +117,17 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     finally { setSaving(false); }
   };
 
+  const recordDonorCall = async () => {
+    if (!editing?.id) return setError('Save the donor before recording a call.');
+    if (!callDate || !callNotes.trim()) return setError('Enter the call date and notes.');
+    setSaving(true); setError(''); setMessage('');
+    try {
+      await addDonorInteraction(editing.id, new Date(`${callDate}T12:00:00`), callNotes, uid);
+      setCallNotes(''); setCallDate(dateValue(new Date())); setMessage('Donor call recorded.');
+    } catch (error) { setError(error instanceof Error ? error.message : 'Could not record the donor call.'); }
+    finally { setSaving(false); }
+  };
+
   const importDonors = async (file: File) => {
     setSaving(true); setError(''); setMessage('');
     try {
@@ -121,6 +142,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
         organization: column('organization', 'organisation', 'company', 'companyname'),
         email: column('email', 'emailaddress', 'emailid'),
         phone: column('phone', 'phonenumber', 'mobile', 'mobilenumber', 'cell', 'cellphone'),
+        officePhone: column('officephone', 'workphone', 'businessphone'),
         address: column('address', 'mailingaddress', 'fulladdress'),
         street: column('street', 'streetaddress', 'address1', 'addressline1'),
         city: column('city', 'town'),
@@ -132,6 +154,13 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
         nextFollowUp: column('nextfollowup', 'followupdate', 'nextfollowupdate'),
         notes: column('notes', 'comments', 'comment'),
         archived: column('archived', 'isarchived'),
+        spouseName: column('spousename', 'spouse'), birthDate: column('dateofbirth', 'birthdate', 'dob'), spouseBirthDate: column('spousedateofbirth', 'spousebirthdate', 'spousedob'),
+        lastDonationDate: column('lastdonationdate'), lastDonationAmount: column('lastdonationamount'), biggestDonationDate: column('biggestdonationdate'), biggestDonationAmount: column('biggestdonationamount'),
+        monthlyDonor: column('monthlydonor', 'recurringdonor'), autoDeductDonationAmount: column('autodeductdonationamount'), autoDeductBillingAmount: column('billingamount'),
+        autoDeductPledgeAmount: column('pledgeamount'), autoDeductPledgeStart: column('pledgestart', 'pledgestartdate'), autoDeductPledgeRemaining: column('pledgeremaining'),
+        cardLastFour: column('cardlastfour', 'cardlast4'), cardBillingAddress: column('cardbillingaddress'), cardBillingZip: column('cardbillingzip'),
+        childNames: Array.from({ length: 5 }, (_, index) => column(`child${index + 1}`, `child${index + 1}name`)),
+        childBirthDates: Array.from({ length: 5 }, (_, index) => column(`child${index + 1}dateofbirth`, `child${index + 1}birthdate`, `child${index + 1}dob`)),
       };
       const firstIndex = columns.firstName; const organizationIndex = columns.organization;
       if (firstIndex < 0 && organizationIndex < 0) throw new Error('CSV requires a First Name or Organization column.');
@@ -144,7 +173,15 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
         const donor: FundraisingDonor = {
           ...blankDonor(), firstName: value(firstIndex), lastName: value(columns.lastName),
           initiatedName: value(columns.initiatedName), organization: value(organizationIndex),
-          email: value(columns.email), phone: value(columns.phone), address: directAddress || combinedAddress,
+          email: value(columns.email), phone: value(columns.phone), officePhone: value(columns.officePhone), address: directAddress || combinedAddress,
+          spouseName: value(columns.spouseName), birthDate: csvDate(value(columns.birthDate)), spouseBirthDate: csvDate(value(columns.spouseBirthDate)),
+          lastDonationDate: csvDate(value(columns.lastDonationDate)), lastDonationAmount: Number(value(columns.lastDonationAmount)) || 0,
+          biggestDonationDate: csvDate(value(columns.biggestDonationDate)), biggestDonationAmount: Number(value(columns.biggestDonationAmount)) || 0,
+          monthlyDonor: csvBoolean(value(columns.monthlyDonor)), autoDeductDonationAmount: Number(value(columns.autoDeductDonationAmount)) || 0,
+          autoDeductBillingAmount: Number(value(columns.autoDeductBillingAmount)) || 0, autoDeductPledgeAmount: Number(value(columns.autoDeductPledgeAmount)) || 0,
+          autoDeductPledgeStart: csvDate(value(columns.autoDeductPledgeStart)), autoDeductPledgeRemaining: Number(value(columns.autoDeductPledgeRemaining)) || 0,
+          cardLastFour: value(columns.cardLastFour).replace(/\D/g, '').slice(-4), cardBillingAddress: value(columns.cardBillingAddress), cardBillingZip: value(columns.cardBillingZip),
+          children: Array.from({ length: 5 }, (_, index) => ({ name: value(columns.childNames[index]), birthDate: csvDate(value(columns.childBirthDates[index])) })),
           status: ['active', 'prospect', 'inactive'].includes(statusValue) ? statusValue as FundraisingDonor['status'] : 'active',
           tags: value(columns.tags).split(/[;,|]/).map((tag) => tag.trim()).filter(Boolean),
           assignedTo: value(columns.assignedTo), nextFollowUp: csvDate(value(columns.nextFollowUp)),
@@ -166,12 +203,14 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       const name = `${donor.firstName} ${donor.lastName}`.trim().toLowerCase();
       return campaigns.flatMap((campaign) => campaign.entries).filter((entry) => `${entry.firstName} ${entry.lastName}`.trim().toLowerCase() === name && entry.type === type).reduce((sum, entry) => sum + entry.amount, 0);
     };
-    const rows: unknown[][] = [['First name', 'Last name', 'Initiated name', 'Organization', 'Email', 'Phone', 'Address', 'Status', 'Tags', 'Assigned fundraiser', 'Next follow-up', 'Dashboard donations', 'Dashboard loans', 'Dashboard pledges', 'Tracked pledge amount', 'Pledge paid', 'Pledge remaining', 'Next pledge due', 'Notes']];
+    const rows: unknown[][] = [['First name', 'Last name', 'Initiated name', 'Organization', 'Email', 'Phone', 'Office phone', 'Home address', 'Spouse name', 'Date of birth', 'Spouse date of birth', 'Child 1', 'Child 1 date of birth', 'Child 2', 'Child 2 date of birth', 'Child 3', 'Child 3 date of birth', 'Child 4', 'Child 4 date of birth', 'Child 5', 'Child 5 date of birth', 'Last donation date', 'Last donation amount', 'Biggest donation date', 'Biggest donation amount', 'Monthly donor', 'Auto-deduct donation amount', 'Billing amount', 'Auto-deduct pledge amount', 'Pledge start', 'Pledge remaining', 'Card last four', 'Card billing address', 'Card billing ZIP', 'Status', 'Tags', 'Assigned fundraiser', 'Next follow-up', 'Dashboard donations', 'Dashboard loans', 'Dashboard pledges', 'Tracked pledge amount', 'Pledge paid', 'Pledge remaining', 'Next pledge due', 'Call history', 'Notes']];
     donors.filter((donor) => !donor.archived).forEach((donor) => {
       const donorPledges = pledges.filter((pledge) => pledge.donorId === donor.id);
       const pledged = donorPledges.reduce((sum, pledge) => sum + pledge.pledgedAmount, 0); const paid = donorPledges.reduce((sum, pledge) => sum + pledge.paidAmount, 0);
       const dueDates = donorPledges.filter((pledge) => pledge.pledgedAmount > pledge.paidAmount && pledge.dueDate).map((pledge) => pledge.dueDate as Date).sort((a, b) => Number(a) - Number(b));
-      rows.push([donor.firstName, donor.lastName, donor.initiatedName, donor.organization, donor.email, donor.phone, donor.address, donor.status, donor.tags.join('; '), donor.assignedTo, dateValue(donor.nextFollowUp), contributionFor(donor, 'donation'), contributionFor(donor, 'loan'), contributionFor(donor, 'pledge'), pledged, paid, Math.max(0, pledged - paid), dateValue(dueDates[0] || null), donor.notes]);
+      const children = Array.from({ length: 5 }, (_, index) => donor.children[index] || { name: '', birthDate: null });
+      const callHistory = interactions.filter((item) => item.donorId === donor.id).map((item) => `${dateValue(item.calledAt)}: ${item.notes}`).join(' | ');
+      rows.push([donor.firstName, donor.lastName, donor.initiatedName, donor.organization, donor.email, donor.phone, donor.officePhone, donor.address, donor.spouseName, dateValue(donor.birthDate), dateValue(donor.spouseBirthDate), ...children.flatMap((child) => [child.name, dateValue(child.birthDate)]), dateValue(donor.lastDonationDate), donor.lastDonationAmount, dateValue(donor.biggestDonationDate), donor.biggestDonationAmount, donor.monthlyDonor ? 'Yes' : 'No', donor.autoDeductDonationAmount, donor.autoDeductBillingAmount, donor.autoDeductPledgeAmount, dateValue(donor.autoDeductPledgeStart), donor.autoDeductPledgeRemaining, donor.cardLastFour, donor.cardBillingAddress, donor.cardBillingZip, donor.status, donor.tags.join('; '), donor.assignedTo, dateValue(donor.nextFollowUp), contributionFor(donor, 'donation'), contributionFor(donor, 'loan'), contributionFor(donor, 'pledge'), pledged, paid, Math.max(0, pledged - paid), dateValue(dueDates[0] || null), callHistory, donor.notes]);
     });
     const url = URL.createObjectURL(new Blob([`\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}`], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a'); link.href = url; link.download = `fundraising-donors-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
@@ -239,11 +278,12 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <section className="fundraising-donor-assistant" aria-label="Donor assistant"><div><h3>Ask about donors</h3><p className="muted small">Gemini interprets your question; donor records stay in this authenticated page.</p></div><div className="fundraising-donor-question"><input value={donorQuestion} onChange={(event) => setDonorQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') askDonorAssistant(); }} placeholder="Example: Which donors assigned to Priya have an overdue follow-up?" /><button className="primary-btn" disabled={!isAiConfigured || !donorLoadComplete || donorQueryLoading} onClick={askDonorAssistant}>{donorQueryLoading ? 'Searching…' : 'Ask'}</button></div><p className="muted small">{donorLoadComplete ? `${donors.length.toLocaleString()} donor records ready to search.` : `Loading donor directory… ${donors.length.toLocaleString()} records available.`}</p>{donorAnswer && <div className="fundraising-donor-answer"><strong>{donorAnswer}</strong>{donorQueryResults.map((donor) => <button key={donor.id} onClick={() => setEditing({ ...donor })}><span><b>{donorName(donor)}</b><small>{donor.initiatedName || donor.email || donor.phone || 'No contact information'}</small></span><span><small>Assigned fundraiser</small><b>{donor.assignedTo || 'Unassigned'}</b></span><span><small>Next follow-up</small><b>{donor.nextFollowUp?.toLocaleDateString() || 'Not scheduled'}</b></span></button>)}</div>}</section>
       <div className="fundraising-crm-filters"><input value={search} onChange={(event) => { setSearch(event.target.value); setDonorDisplayLimit(100); }} placeholder="Search donors, contact details, or tags" /><label><input type="checkbox" checked={showArchived} onChange={(event) => { setShowArchived(event.target.checked); setDonorDisplayLimit(100); }} /> Show archived</label><span className="muted small">Showing {Math.min(visibleDonors.length, filtered.length).toLocaleString()} of {filtered.length.toLocaleString()} donors</span></div>
       <div className="fundraising-crm-list">
+        <div className="fundraising-donor-list-head"><span>First name</span><span>Last name</span><span>Phone</span><span>Last donation</span><span>Last amount</span><span>Biggest donation</span><span>Biggest amount</span><span>Actions</span></div>
         {visibleDonors.map((donor) => <article className={`fundraising-donor-card${duplicateIds.has(donor.id) ? ' possible-duplicate' : ''}`} key={donor.id}>
-          <span><strong>{[donor.firstName, donor.lastName].filter(Boolean).join(' ') || donor.organization}</strong>{donor.initiatedName && <small>{donor.initiatedName}</small>}{donor.organization && <small>{donor.organization}</small>}</span>
-          <span>{donor.email || donor.phone || 'No contact information'}</span>
-          <span className="fundraising-donor-ownership"><small>Assigned fundraiser</small><strong>{donor.assignedTo || 'Unassigned'}</strong><small>Next follow-up</small><strong>{donor.nextFollowUp ? donor.nextFollowUp.toLocaleDateString() : 'Not scheduled'}</strong></span>
-          <div className="fundraising-donor-state"><span className="status-pill">{donor.archived ? 'Archived' : donor.status}</span>{duplicateIds.has(donor.id) && <b className="duplicate-warning">Possible duplicate</b>}</div>
+          <button className="fundraising-donor-open" onClick={() => setEditing({ ...donor })}>{donor.firstName || donor.organization || '—'}{duplicateIds.has(donor.id) && <small className="duplicate-warning">Possible duplicate</small>}</button>
+          <span>{donor.lastName || '—'}</span><span>{donor.phone || '—'}</span>
+          <span>{donor.lastDonationDate?.toLocaleDateString() || 'Not recorded'}</span><strong>{donor.lastDonationAmount ? money.format(donor.lastDonationAmount) : '—'}</strong>
+          <span>{donor.biggestDonationDate?.toLocaleDateString() || 'Not recorded'}</span><strong>{donor.biggestDonationAmount ? money.format(donor.biggestDonationAmount) : '—'}</strong>
           <div className="fundraising-donor-actions"><button className="secondary-btn" onClick={() => setEditing({ ...donor })}>Edit</button><button className={donor.archived ? 'secondary-btn' : 'danger-btn'} disabled={saving} onClick={() => setDonorArchived(donor, !donor.archived)}>{donor.archived ? 'Restore' : 'Remove'}</button></div>
         </article>)}
         {!filtered.length && <div className="empty-state"><strong>No donors found</strong><span>Add a donor or change the search.</span></div>}
@@ -261,11 +301,25 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <label><span>First name</span><input value={editing.firstName} onChange={(event) => setEditing({ ...editing, firstName: event.target.value })} /></label><label><span>Last name</span><input value={editing.lastName} onChange={(event) => setEditing({ ...editing, lastName: event.target.value })} /></label>
       <label><span>Initiated name (optional)</span><input value={editing.initiatedName} onChange={(event) => setEditing({ ...editing, initiatedName: event.target.value })} /></label>
       <label><span>Organization</span><input value={editing.organization} onChange={(event) => setEditing({ ...editing, organization: event.target.value })} /></label><label><span>Status</span><select value={editing.status} onChange={(event) => setEditing({ ...editing, status: event.target.value as FundraisingDonor['status'] })}><option value="active">Active</option><option value="prospect">Prospect</option><option value="inactive">Inactive</option></select></label>
-      <label><span>Email</span><input type="email" value={editing.email} onChange={(event) => setEditing({ ...editing, email: event.target.value })} /></label><label><span>Phone</span><input type="tel" value={editing.phone} onChange={(event) => setEditing({ ...editing, phone: event.target.value })} /></label>
-      <label className="full"><span>Address (optional)</span><textarea rows={3} value={editing.address} onChange={(event) => setEditing({ ...editing, address: event.target.value })} placeholder="Street address, city, state, ZIP code" /></label>
+      <label><span>Email</span><input type="email" value={editing.email} onChange={(event) => setEditing({ ...editing, email: event.target.value })} /></label><label><span>Mobile phone</span><input type="tel" value={editing.phone} onChange={(event) => setEditing({ ...editing, phone: event.target.value })} /></label>
+      <label><span>Office phone</span><input type="tel" value={editing.officePhone} onChange={(event) => setEditing({ ...editing, officePhone: event.target.value })} /></label><label><span>Spouse name</span><input value={editing.spouseName} onChange={(event) => setEditing({ ...editing, spouseName: event.target.value })} /></label>
+      <label><span>Donor date of birth</span><input type="date" value={dateValue(editing.birthDate)} onChange={(event) => setEditing({ ...editing, birthDate: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null })} /></label><label><span>Spouse date of birth</span><input type="date" value={dateValue(editing.spouseBirthDate)} onChange={(event) => setEditing({ ...editing, spouseBirthDate: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null })} /></label>
+      <label className="full"><span>Home address</span><textarea rows={3} value={editing.address} onChange={(event) => setEditing({ ...editing, address: event.target.value })} placeholder="Street address, city, state, ZIP code" /></label>
+      <h3 className="full fundraising-form-section">Children</h3>
+      {Array.from({ length: 5 }, (_, index) => { const child = editing.children[index] || { name: '', birthDate: null }; return <React.Fragment key={index}><label><span>Child {index + 1} name</span><input value={child.name} onChange={(event) => { const children = [...editing.children]; children[index] = { ...child, name: event.target.value }; setEditing({ ...editing, children }); }} /></label><label><span>Child {index + 1} date of birth</span><input type="date" value={dateValue(child.birthDate)} onChange={(event) => { const children = [...editing.children]; children[index] = { ...child, birthDate: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null }; setEditing({ ...editing, children }); }} /></label></React.Fragment>; })}
+      <h3 className="full fundraising-form-section">Donation summary</h3>
+      <label><span>Last donation date</span><input type="date" value={dateValue(editing.lastDonationDate)} onChange={(event) => setEditing({ ...editing, lastDonationDate: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null })} /></label><label><span>Last donation amount</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={editing.lastDonationAmount || ''} onChange={(event) => setEditing({ ...editing, lastDonationAmount: Number(event.target.value) || 0 })} /></div></label>
+      <label><span>Biggest donation date</span><input type="date" value={dateValue(editing.biggestDonationDate)} onChange={(event) => setEditing({ ...editing, biggestDonationDate: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null })} /></label><label><span>Biggest donation amount</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={editing.biggestDonationAmount || ''} onChange={(event) => setEditing({ ...editing, biggestDonationAmount: Number(event.target.value) || 0 })} /></div></label>
+      <h3 className="full fundraising-form-section">Automatic deductions</h3>
+      <label className="checkbox-label"><input type="checkbox" checked={editing.monthlyDonor} onChange={(event) => setEditing({ ...editing, monthlyDonor: event.target.checked })} /> Monthly donor</label><label><span>Donation amount</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={editing.autoDeductDonationAmount || ''} onChange={(event) => setEditing({ ...editing, autoDeductDonationAmount: Number(event.target.value) || 0 })} /></div></label>
+      <label><span>Billing amount</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={editing.autoDeductBillingAmount || ''} onChange={(event) => setEditing({ ...editing, autoDeductBillingAmount: Number(event.target.value) || 0 })} /></div></label><label><span>Pledge amount</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={editing.autoDeductPledgeAmount || ''} onChange={(event) => setEditing({ ...editing, autoDeductPledgeAmount: Number(event.target.value) || 0 })} /></div></label>
+      <label><span>Pledge start date</span><input type="date" value={dateValue(editing.autoDeductPledgeStart)} onChange={(event) => setEditing({ ...editing, autoDeductPledgeStart: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null })} /></label><label><span>Pledge remaining</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={editing.autoDeductPledgeRemaining || ''} onChange={(event) => setEditing({ ...editing, autoDeductPledgeRemaining: Number(event.target.value) || 0 })} /></div></label>
+      <label><span>Card last four digits only</span><input inputMode="numeric" maxLength={4} value={editing.cardLastFour} onChange={(event) => setEditing({ ...editing, cardLastFour: event.target.value.replace(/\D/g, '').slice(0, 4) })} placeholder="1234" /></label><label><span>Card billing ZIP</span><input value={editing.cardBillingZip} onChange={(event) => setEditing({ ...editing, cardBillingZip: event.target.value })} /></label>
+      <label className="full"><span>Card billing address</span><textarea rows={2} value={editing.cardBillingAddress} onChange={(event) => setEditing({ ...editing, cardBillingAddress: event.target.value })} /></label><p className="full muted small">For security, store only the last four card digits here. Full card numbers must remain with the payment processor.</p>
       <label><span>Tags (comma separated)</span><input value={editing.tags.join(', ')} onChange={(event) => setEditing({ ...editing, tags: event.target.value.split(',') })} /></label><label><span>Assigned fundraiser</span><input value={editing.assignedTo} onChange={(event) => setEditing({ ...editing, assignedTo: event.target.value })} /></label>
       <label><span>Next follow-up</span><input type="date" value={dateValue(editing.nextFollowUp)} onChange={(event) => setEditing({ ...editing, nextFollowUp: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null })} /></label><label className="checkbox-label"><input type="checkbox" checked={editing.archived} onChange={(event) => setEditing({ ...editing, archived: event.target.checked })} /> Archive this donor</label>
       <label className="full"><span>Private stewardship notes</span><textarea rows={5} value={editing.notes} onChange={(event) => setEditing({ ...editing, notes: event.target.value })} /></label>
+      {editing.id && <section className="full fundraising-call-history"><h3>Fundraising contact history</h3><p className="muted small">Record evidence of donor calls with the call date and notes.</p><div className="fundraising-call-entry"><label><span>Date called</span><input type="date" value={callDate} onChange={(event) => setCallDate(event.target.value)} /></label><label><span>Call notes</span><textarea rows={3} value={callNotes} onChange={(event) => setCallNotes(event.target.value)} /></label><button type="button" className="secondary-btn" disabled={saving || !callDate || !callNotes.trim()} onClick={recordDonorCall}>Record call</button></div><div className="fundraising-call-list">{interactions.filter((item) => item.donorId === editing.id).map((item) => <article key={item.id}><strong>{item.calledAt.toLocaleDateString()}</strong><p>{item.notes}</p><small>Recorded {item.createdAt?.toLocaleString() || 'recently'}</small></article>)}{!interactions.some((item) => item.donorId === editing.id) && <p className="muted small">No calls recorded yet.</p>}</div></section>}
     </div><div className="modal-actions"><button className="secondary-btn" onClick={() => setEditing(null)}>Cancel</button><button className="primary-btn" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save donor'}</button></div></section></div>}
     {editingPledge && <div className="modal-backdrop"><section className="panel fundraising-donor-editor" role="dialog" aria-modal="true" aria-label="Pledge"><div className="panel-head"><h2>{editingPledge.id ? 'Update pledge' : 'Add pledge'}</h2><button className="link-btn" onClick={() => setEditingPledge(null)}>Close</button></div><div className="fundraising-donor-form">
       <label><span>Donor *</span><select value={editingPledge.donorId} onChange={(event) => setEditingPledge({ ...editingPledge, donorId: event.target.value })}><option value="">Choose donor…</option>{donors.filter((donor) => !donor.archived).map((donor) => <option value={donor.id} key={donor.id}>{donorName(donor)}{donor.initiatedName ? ` (${donor.initiatedName})` : ''}</option>)}</select></label>

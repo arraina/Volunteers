@@ -54,7 +54,13 @@
 .fundraising-crm-filters input:first-child { flex: 1; }
 .fundraising-crm-filters label { display: flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
 .fundraising-crm-list, .fundraising-followups, .fundraising-campaign-list { display: grid; gap: 0.65rem; }
-.fundraising-donor-card, .fundraising-followups button { display: grid; grid-template-columns: minmax(11rem, 1.2fr) minmax(11rem, 1fr) minmax(10rem, 0.8fr) auto auto; align-items: center; gap: 0.8rem; width: 100%; padding: 0.85rem; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fbfefb; text-align: left; }
+.fundraising-crm-list { overflow-x: auto; }
+.fundraising-donor-list-head, .fundraising-donor-card { display: grid; grid-template-columns: minmax(9rem, 1fr) minmax(8rem, .9fr) minmax(9rem, .9fr) minmax(8rem, .8fr) minmax(7rem, .7fr) minmax(8rem, .8fr) minmax(7rem, .7fr) auto; align-items: center; gap: 0.75rem; min-width: 76rem; }
+.fundraising-donor-list-head { padding: 0 0.85rem; color: var(--muted); font-size: 0.75rem; font-weight: 800; }
+.fundraising-donor-card, .fundraising-followups button { padding: 0.85rem; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fbfefb; text-align: left; }
+.fundraising-donor-card { width: 100%; }
+.fundraising-followups button { display: grid; grid-template-columns: minmax(11rem, 1fr) auto; align-items: center; gap: 0.8rem; width: 100%; }
+.fundraising-donor-open { display: grid; justify-items: start; gap: 0.2rem; padding: 0; border: 0; color: var(--green-700); background: transparent; text-align: left; font-weight: 800; cursor: pointer; }
 .fundraising-donor-card:hover, .fundraising-followups button:hover { border-color: var(--green-500); box-shadow: 0 4px 12px rgba(20, 80, 45, 0.08); }
 .fundraising-donor-card > span:first-child, .fundraising-followups span { display: grid; gap: 0.15rem; }
 .fundraising-donor-card small, .fundraising-followups small, .fundraising-campaign-list span { color: var(--muted); }
@@ -75,6 +81,13 @@
 .fundraising-donor-form label { display: grid; gap: 0.35rem; font-weight: 700; }
 .fundraising-donor-form .full { grid-column: 1 / -1; }
 .fundraising-donor-form .checkbox-label { display: flex; align-items: center; }
+.fundraising-form-section { margin: 0.5rem 0 0; padding-top: 0.8rem; border-top: 1px solid var(--line); }
+.fundraising-call-history { display: grid; gap: 0.75rem; padding: 1rem; border: 1px solid var(--line); border-radius: 12px; background: #f8fbf8; }
+.fundraising-call-history h3, .fundraising-call-history p { margin: 0; }
+.fundraising-call-entry { display: grid; grid-template-columns: minmax(10rem, .4fr) minmax(18rem, 1fr) auto; align-items: end; gap: 0.75rem; }
+.fundraising-call-list { display: grid; gap: 0.5rem; }
+.fundraising-call-list article { padding: 0.75rem; border-left: 4px solid var(--green-500); border-radius: 8px; background: white; }
+.fundraising-call-list article p { margin: 0.3rem 0; white-space: pre-wrap; }
 .fundraising-import-btn { cursor: pointer; }
 .fundraising-import-btn input { display: none; }
 .fundraising-donor-assistant { display: grid; gap: 0.75rem; margin-bottom: 1rem; padding: 1rem; border: 1px solid #b9d7c1; border-radius: 14px; background: linear-gradient(135deg, #f2fbf4, #f8fbff); }
@@ -320,6 +333,7 @@
   .fundraising-donor-question, .fundraising-donor-answer > button { grid-template-columns: 1fr; }
   .fundraising-donor-form { grid-template-columns: 1fr; }
   .fundraising-donor-form .full { grid-column: auto; }
+  .fundraising-call-entry { grid-template-columns: 1fr; }
   .fundraising-pledge-list > button { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fundraising-pledge-list > button > span:first-child { grid-column: 1 / -1; }
   .quickbooks-connect { align-items: stretch; flex-direction: column; }

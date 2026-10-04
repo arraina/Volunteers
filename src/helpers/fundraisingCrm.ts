@@ -3,6 +3,8 @@ import { db } from '../config/firebase';
 import { firestoreTimestampToDate } from './types';
 
 export type DonorStatus = 'active' | 'prospect' | 'inactive';
+export interface DonorChild { name: string; birthDate: Date | null; }
+export interface DonorContactInteraction { id: string; donorId: string; calledAt: Date; notes: string; createdBy: string; createdAt: Date | null; }
 
 export interface FundraisingDonor {
   id: string;
@@ -11,8 +13,26 @@ export interface FundraisingDonor {
   initiatedName: string;
   email: string;
   phone: string;
+  officePhone: string;
   organization: string;
   address: string;
+  spouseName: string;
+  birthDate: Date | null;
+  spouseBirthDate: Date | null;
+  children: DonorChild[];
+  lastDonationDate: Date | null;
+  lastDonationAmount: number;
+  biggestDonationDate: Date | null;
+  biggestDonationAmount: number;
+  autoDeductDonationAmount: number;
+  autoDeductBillingAmount: number;
+  monthlyDonor: boolean;
+  autoDeductPledgeAmount: number;
+  autoDeductPledgeStart: Date | null;
+  autoDeductPledgeRemaining: number;
+  cardLastFour: string;
+  cardBillingAddress: string;
+  cardBillingZip: string;
   status: DonorStatus;
   tags: string[];
   notes: string;
@@ -60,7 +80,25 @@ function donorFromSnapshot(item: QueryDocumentSnapshot): FundraisingDonor {
   return {
     id: item.id,
     firstName: String(data.firstName || ''), lastName: String(data.lastName || ''), initiatedName: String(data.initiatedName || ''),
-    email: String(data.email || ''), phone: String(data.phone || ''), organization: String(data.organization || ''), address: String(data.address || ''),
+    email: String(data.email || ''), phone: String(data.phone || ''), officePhone: String(data.officePhone || ''), organization: String(data.organization || ''), address: String(data.address || ''),
+    spouseName: String(data.spouseName || ''),
+    birthDate: data.birthDate ? firestoreTimestampToDate(data.birthDate) : null,
+    spouseBirthDate: data.spouseBirthDate ? firestoreTimestampToDate(data.spouseBirthDate) : null,
+    children: Array.from({ length: 5 }, (_, index) => {
+      const child = Array.isArray(data.children) ? data.children[index] : null;
+      return { name: String(child?.name || ''), birthDate: child?.birthDate ? firestoreTimestampToDate(child.birthDate) : null };
+    }),
+    lastDonationDate: data.lastDonationDate ? firestoreTimestampToDate(data.lastDonationDate) : null,
+    lastDonationAmount: Number(data.lastDonationAmount) || 0,
+    biggestDonationDate: data.biggestDonationDate ? firestoreTimestampToDate(data.biggestDonationDate) : null,
+    biggestDonationAmount: Number(data.biggestDonationAmount) || 0,
+    autoDeductDonationAmount: Number(data.autoDeductDonationAmount) || 0,
+    autoDeductBillingAmount: Number(data.autoDeductBillingAmount) || 0,
+    monthlyDonor: data.monthlyDonor === true,
+    autoDeductPledgeAmount: Number(data.autoDeductPledgeAmount) || 0,
+    autoDeductPledgeStart: data.autoDeductPledgeStart ? firestoreTimestampToDate(data.autoDeductPledgeStart) : null,
+    autoDeductPledgeRemaining: Number(data.autoDeductPledgeRemaining) || 0,
+    cardLastFour: String(data.cardLastFour || ''), cardBillingAddress: String(data.cardBillingAddress || ''), cardBillingZip: String(data.cardBillingZip || ''),
     status: ['active', 'prospect', 'inactive'].includes(data.status) ? data.status : 'active',
     tags: Array.isArray(data.tags) ? data.tags.map(String) : [], notes: String(data.notes || ''),
     nextFollowUp: data.nextFollowUp ? firestoreTimestampToDate(data.nextFollowUp) : null,
@@ -95,14 +133,35 @@ export function subscribeFundraisingDonors(cb: (donors: FundraisingDonor[], comp
 
 export async function saveFundraisingDonor(donor: Omit<FundraisingDonor, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }, uid?: string) {
   const payload = {
-    firstName: donor.firstName.trim(), lastName: donor.lastName.trim(), initiatedName: donor.initiatedName.trim(), email: cleanEmail(donor.email), phone: donor.phone.trim(),
+    firstName: donor.firstName.trim(), lastName: donor.lastName.trim(), initiatedName: donor.initiatedName.trim(), email: cleanEmail(donor.email), phone: donor.phone.trim(), officePhone: donor.officePhone.trim(),
     normalizedEmail: cleanEmail(donor.email), normalizedPhone: cleanPhone(donor.phone), organization: donor.organization.trim(), address: donor.address.trim(),
+    spouseName: donor.spouseName.trim(), birthDate: donor.birthDate, spouseBirthDate: donor.spouseBirthDate,
+    children: donor.children.slice(0, 5).map((child) => ({ name: child.name.trim(), birthDate: child.birthDate })),
+    lastDonationDate: donor.lastDonationDate, lastDonationAmount: Math.max(0, donor.lastDonationAmount),
+    biggestDonationDate: donor.biggestDonationDate, biggestDonationAmount: Math.max(0, donor.biggestDonationAmount),
+    autoDeductDonationAmount: Math.max(0, donor.autoDeductDonationAmount), autoDeductBillingAmount: Math.max(0, donor.autoDeductBillingAmount),
+    monthlyDonor: donor.monthlyDonor, autoDeductPledgeAmount: Math.max(0, donor.autoDeductPledgeAmount),
+    autoDeductPledgeStart: donor.autoDeductPledgeStart, autoDeductPledgeRemaining: Math.max(0, donor.autoDeductPledgeRemaining),
+    cardLastFour: donor.cardLastFour.replace(/\D/g, '').slice(-4), cardBillingAddress: donor.cardBillingAddress.trim(), cardBillingZip: donor.cardBillingZip.trim(),
     status: donor.status, tags: donor.tags.map((tag) => tag.trim()).filter(Boolean).slice(0, 20), notes: donor.notes.trim(),
     nextFollowUp: donor.nextFollowUp, assignedTo: donor.assignedTo.trim(), archived: donor.archived,
     updatedAt: serverTimestamp(), updatedBy: uid || null,
   };
   if (donor.id) return updateDoc(doc(db, 'fundraisingDonors', donor.id), payload);
   return addDoc(collection(db, 'fundraisingDonors'), { ...payload, createdAt: serverTimestamp(), createdBy: uid || null });
+}
+
+export function subscribeDonorInteractions(cb: (records: DonorContactInteraction[]) => void, onError?: (error: Error) => void) {
+  return onSnapshot(collection(db, 'fundraisingDonorInteractions'), (snapshot) => cb(snapshot.docs.map((item) => {
+    const data = item.data();
+    return { id: item.id, donorId: String(data.donorId || ''), calledAt: firestoreTimestampToDate(data.calledAt), notes: String(data.notes || ''), createdBy: String(data.createdBy || ''), createdAt: data.createdAt ? firestoreTimestampToDate(data.createdAt) : null };
+  }).sort((a, b) => Number(b.calledAt) - Number(a.calledAt))), (error) => onError?.(error));
+}
+
+export async function addDonorInteraction(donorId: string, calledAt: Date, notes: string, uid?: string) {
+  return addDoc(collection(db, 'fundraisingDonorInteractions'), {
+    donorId, calledAt, notes: notes.trim(), createdBy: uid || '', createdAt: serverTimestamp(),
+  });
 }
 
 export async function loadCampaignSummaries(eventNames: Record<string, string>): Promise<CampaignSummary[]> {
