@@ -56,7 +56,8 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
   const [pledges, setPledges] = useState<FundraisingPledge[]>([]);
   const [interactions, setInteractions] = useState<DonorContactInteraction[]>([]);
-  const [view, setView] = useState<'donors' | 'pledges' | 'campaigns' | 'followups' | 'reports'>('donors');
+  const [view, setView] = useState<'donors' | 'raw' | 'pledges' | 'campaigns' | 'followups' | 'reports'>('donors');
+  const [donorDataset, setDonorDataset] = useState<'fundraisingCuratedDonors' | 'fundraisingDonors'>('fundraisingCuratedDonors');
   const [editing, setEditing] = useState<FundraisingDonor | null>(null);
   const [editingPledge, setEditingPledge] = useState<FundraisingPledge | null>(null);
   const [search, setSearch] = useState('');
@@ -75,8 +76,8 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
 
   useEffect(() => {
     setDonors([]); setDonorLoadComplete(false);
-    return subscribeFundraisingDonors((records, complete) => { setDonors(records); setDonorLoadComplete(complete); }, (error) => setError(error.message));
-  }, [setError, donorRefresh]);
+    return subscribeFundraisingDonors((records, complete) => { setDonors(records); setDonorLoadComplete(complete); }, (error) => setError(error.message), donorDataset);
+  }, [setError, donorRefresh, donorDataset]);
   useEffect(() => subscribeFundraisingPledges(setPledges, (error) => setError(error.message)), [setError]);
   useEffect(() => subscribeDonorInteractions(setInteractions, (error) => setError(error.message)), [setError]);
   useEffect(() => { loadCampaignSummaries(Object.fromEntries(events.map((event) => [event.id, event.name]))).then(setCampaigns).catch((error) => setError(error.message)); }, [events, setError]);
@@ -112,7 +113,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     const duplicate = donors.find((donor) => donor.id !== editing.id && !donor.archived && possibleDuplicateKeys(donor).some((key) => keys.includes(key)));
     if (duplicate && !window.confirm(`Possible duplicate: ${duplicate.firstName} ${duplicate.lastName}. Save this donor anyway?`)) return;
     setSaving(true); setError(''); setMessage('');
-    try { await saveFundraisingDonor(editing, uid); setEditing(null); setMessage('Donor profile saved.'); setDonorRefresh((value) => value + 1); }
+    try { await saveFundraisingDonor(editing, uid, donorDataset); setEditing(null); setMessage('Donor profile saved.'); setDonorRefresh((value) => value + 1); }
     catch (error) { setError(error instanceof Error ? error.message : 'Could not save donor.'); }
     finally { setSaving(false); }
   };
@@ -122,7 +123,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     if (archived && !window.confirm(`Remove ${donorName(donor)} from the active donor list? The record and fundraising history will be preserved.`)) return;
     setSaving(true); setError(''); setMessage('');
     try {
-      await saveFundraisingDonor({ ...donor, archived }, uid);
+      await saveFundraisingDonor({ ...donor, archived }, uid, donorDataset);
       setMessage(`${donorName(donor)} was ${action === 'remove' ? 'removed from the active donor list' : 'restored'}.`);
       setDonorRefresh((value) => value + 1);
     } catch (error) { setError(error instanceof Error ? error.message : `Could not ${action} donor.`); }
@@ -202,7 +203,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
         if (!donor.firstName && !donor.organization) { skipped += 1; continue; }
         const keys = donorDuplicateKeys(donor);
         if (keys.some((key) => existingKeys.has(key))) { skipped += 1; continue; }
-        await saveFundraisingDonor(donor, uid); keys.forEach((key) => existingKeys.add(key)); imported += 1;
+        await saveFundraisingDonor(donor, uid, donorDataset); keys.forEach((key) => existingKeys.add(key)); imported += 1;
       }
       setMessage(`${imported} donor${imported === 1 ? '' : 's'} imported. Recognized donor fields were mapped; missing fields were left blank. ${skipped} skipped as duplicates or incomplete rows.`);
       setDonorRefresh((value) => value + 1);
@@ -278,15 +279,16 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <div className={duplicateIds.size ? 'attention' : ''}><span>Possible duplicates</span><strong>{duplicateIds.size}</strong></div>
     </section>
     <nav className="fundraising-crm-tabs" aria-label="Fundraising CRM sections">
-      <button className={view === 'donors' ? 'active' : ''} onClick={() => setView('donors')}>Donors</button>
-      <button className={view === 'pledges' ? 'active' : ''} onClick={() => setView('pledges')}>Pledges</button>
+      <button className={view === 'donors' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingCuratedDonors'); setView('donors'); }}>Donors</button>
+      <button className={view === 'raw' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingDonors'); setView('raw'); }}>Raw Donor Information</button>
+      <button className={view === 'pledges' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingCuratedDonors'); setView('pledges'); }}>Pledges</button>
       <button className={view === 'campaigns' ? 'active' : ''} onClick={() => setView('campaigns')}>Campaigns</button>
       <button className={view === 'followups' ? 'active' : ''} onClick={() => setView('followups')}>Stewardship</button>
       <button className={view === 'reports' ? 'active' : ''} onClick={() => setView('reports')}>Reports</button>
     </nav>
     {message && <div className="success-message">{message}</div>}
-    {view === 'donors' && <section className="panel">
-      <div className="panel-head"><div><h2>Donor CRM</h2><p className="muted small">Contact details, ownership, notes, tags, and next follow-up.</p></div><div className="row"><label className="secondary-btn fundraising-import-btn">{saving ? 'Importing…' : 'Import donors'}<input type="file" accept=".csv,text/csv" disabled={saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) importDonors(file); event.target.value = ''; }} /></label><button className="secondary-btn" onClick={exportDonors}>Export donor data</button><button type="button" className="primary-btn" onClick={openNewDonor}>New donor</button></div></div>
+    {(view === 'donors' || view === 'raw') && <section className="panel">
+      <div className="panel-head"><div><h2>{view === 'raw' ? 'Raw Donor Information' : 'Donors'}</h2><p className="muted small">{view === 'raw' ? 'Imported source information retained separately for reference and cleanup.' : 'Verified donor profiles entered and maintained by the fundraising team.'}</p></div><div className="row">{view === 'raw' && <label className="secondary-btn fundraising-import-btn">{saving ? 'Importing…' : 'Import raw donor data'}<input type="file" accept=".csv,text/csv" disabled={saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) importDonors(file); event.target.value = ''; }} /></label>}<button className="secondary-btn" onClick={exportDonors}>Export {view === 'raw' ? 'raw data' : 'donors'}</button>{view === 'donors' && <button type="button" className="primary-btn" onClick={openNewDonor}>New donor</button>}</div></div>
       <section className="fundraising-donor-assistant" aria-label="Donor assistant"><div><h3>Ask about donors</h3><p className="muted small">Gemini interprets your question; donor records stay in this authenticated page.</p></div><div className="fundraising-donor-question"><input value={donorQuestion} onChange={(event) => setDonorQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') askDonorAssistant(); }} placeholder="Example: Which donors assigned to Priya have an overdue follow-up?" /><button className="primary-btn" disabled={!isAiConfigured || !donorLoadComplete || donorQueryLoading} onClick={askDonorAssistant}>{donorQueryLoading ? 'Searching…' : 'Ask'}</button></div><p className="muted small">{donorLoadComplete ? `${donors.length.toLocaleString()} donor records ready to search.` : `Loading donor directory… ${donors.length.toLocaleString()} records available.`}</p>{donorAnswer && <div className="fundraising-donor-answer"><strong>{donorAnswer}</strong>{donorQueryResults.map((donor) => <button key={donor.id} onClick={() => setEditing({ ...donor })}><span><b>{donorName(donor)}</b><small>{donor.initiatedName || donor.email || donor.phone || 'No contact information'}</small></span><span><small>Assigned fundraiser</small><b>{donor.assignedTo || 'Unassigned'}</b></span><span><small>Next follow-up</small><b>{donor.nextFollowUp?.toLocaleDateString() || 'Not scheduled'}</b></span></button>)}</div>}</section>
       <div className="fundraising-crm-filters"><input value={search} onChange={(event) => { setSearch(event.target.value); setDonorDisplayLimit(100); }} placeholder="Search donors, contact details, or tags" /><label><input type="checkbox" checked={showArchived} onChange={(event) => { setShowArchived(event.target.checked); setDonorDisplayLimit(100); }} /> Show archived</label><span className="muted small">Showing {Math.min(visibleDonors.length, filtered.length).toLocaleString()} of {filtered.length.toLocaleString()} donors</span></div>
       <div className="fundraising-crm-list">

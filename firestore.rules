@@ -395,6 +395,18 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    // Verified donor profiles deliberately maintained by the fundraising team.
+    // This collection starts empty and remains separate from imported raw data.
+    match /fundraisingCuratedDonors/{donorId} {
+      allow read: if isOwner() || isDepartmentAdmin('fundraising');
+      allow create, update: if (isOwner() || isDepartmentAdmin('fundraising'))
+        && request.resource.data.firstName is string
+        && request.resource.data.organization is string
+        && (request.resource.data.firstName.size() > 0 || request.resource.data.organization.size() > 0)
+        && request.resource.data.status in ['active', 'prospect', 'inactive'];
+      allow delete: if isOwner();
+    }
+
     match /fundraisingPledges/{pledgeId} {
       allow read: if isOwner() || isDepartmentAdmin('fundraising');
       allow create, update: if (isOwner() || isDepartmentAdmin('fundraising'))

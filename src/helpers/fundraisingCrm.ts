@@ -110,15 +110,15 @@ function donorFromSnapshot(item: QueryDocumentSnapshot): FundraisingDonor {
 
 // Load this large collection progressively so the first donor rows render
 // quickly instead of waiting for the full directory to arrive in one snapshot.
-export function subscribeFundraisingDonors(cb: (donors: FundraisingDonor[], complete: boolean) => void, onError?: (error: Error) => void) {
+export function subscribeFundraisingDonors(cb: (donors: FundraisingDonor[], complete: boolean) => void, onError?: (error: Error) => void, collectionName = 'fundraisingCuratedDonors') {
   let cancelled = false;
   let cursor: QueryDocumentSnapshot | null = null;
   const donors: FundraisingDonor[] = [];
   (async () => {
     while (!cancelled) {
       const pageQuery: Query<DocumentData> = cursor
-        ? query(collection(db, 'fundraisingDonors'), orderBy(documentId()), startAfter(cursor), limit(500))
-        : query(collection(db, 'fundraisingDonors'), orderBy(documentId()), limit(500));
+        ? query(collection(db, collectionName), orderBy(documentId()), startAfter(cursor), limit(500))
+        : query(collection(db, collectionName), orderBy(documentId()), limit(500));
       const snapshot: QuerySnapshot<DocumentData> = await getDocs(pageQuery);
       donors.push(...snapshot.docs.map(donorFromSnapshot));
       const complete = snapshot.size < 500;
@@ -131,7 +131,7 @@ export function subscribeFundraisingDonors(cb: (donors: FundraisingDonor[], comp
   return () => { cancelled = true; };
 }
 
-export async function saveFundraisingDonor(donor: Omit<FundraisingDonor, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }, uid?: string) {
+export async function saveFundraisingDonor(donor: Omit<FundraisingDonor, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }, uid?: string, collectionName = 'fundraisingCuratedDonors') {
   const payload = {
     firstName: donor.firstName.trim(), lastName: donor.lastName.trim(), initiatedName: donor.initiatedName.trim(), email: cleanEmail(donor.email), phone: donor.phone.trim(), officePhone: donor.officePhone.trim(),
     normalizedEmail: cleanEmail(donor.email), normalizedPhone: cleanPhone(donor.phone), organization: donor.organization.trim(), address: donor.address.trim(),
@@ -147,8 +147,8 @@ export async function saveFundraisingDonor(donor: Omit<FundraisingDonor, 'id' | 
     nextFollowUp: donor.nextFollowUp, assignedTo: donor.assignedTo.trim(), archived: donor.archived,
     updatedAt: serverTimestamp(), updatedBy: uid || null,
   };
-  if (donor.id) return updateDoc(doc(db, 'fundraisingDonors', donor.id), payload);
-  return addDoc(collection(db, 'fundraisingDonors'), { ...payload, createdAt: serverTimestamp(), createdBy: uid || null });
+  if (donor.id) return updateDoc(doc(db, collectionName, donor.id), payload);
+  return addDoc(collection(db, collectionName), { ...payload, createdAt: serverTimestamp(), createdBy: uid || null });
 }
 
 export function subscribeDonorInteractions(cb: (records: DonorContactInteraction[]) => void, onError?: (error: Error) => void) {
