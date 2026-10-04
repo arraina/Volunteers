@@ -15,7 +15,7 @@ const toDate = (ts) => (ts?.toDate ? ts.toDate() : ts ? new Date(ts) : null);
 // The remindersSent marker still guarantees each reminder is processed once.
 const LOOKBACK_MS = 2 * 60 * 60 * 1000; // 2 hours
 const DAILY_WHATSAPP_LIMIT = 100;
-const DAILY_WHATSAPP_ALERT_THRESHOLD = 50;
+const DAILY_WHATSAPP_ALERT_THRESHOLD = 75;
 const DAILY_WHATSAPP_ALERT_RECIPIENT = '15184959439';
 const DAILY_WHATSAPP_ALERT_TEMPLATE = 'daily_whatsapp_limit_alert';
 const MIN_REMINDER_SPACING_HOURS = 24;
@@ -28,6 +28,12 @@ function easternDayKey(date) {
   return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
+function easternDateLabel(date) {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York', year: 'numeric', month: 'long', day: 'numeric',
+  }).format(date);
+}
+
 async function sendDailyLimitAlertIfNeeded(db, count, now, whatsappPaused) {
   if (whatsappPaused || count < DAILY_WHATSAPP_ALERT_THRESHOLD || count >= DAILY_WHATSAPP_LIMIT) {
     return { count, sent: 0, failed: 0 };
@@ -38,7 +44,7 @@ async function sendDailyLimitAlertIfNeeded(db, count, now, whatsappPaused) {
   const result = await sendWhatsApp({
     to: DAILY_WHATSAPP_ALERT_RECIPIENT,
     templateName: DAILY_WHATSAPP_ALERT_TEMPLATE,
-    templateParams: [String(count), String(DAILY_WHATSAPP_LIMIT)],
+    templateParams: [String(count), String(DAILY_WHATSAPP_LIMIT), easternDateLabel(now)],
   });
   await db.collection('sentMessages').add({
     channel: 'whatsapp',
