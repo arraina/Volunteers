@@ -10,13 +10,32 @@ export interface FundraisingDonor {
   id: string;
   firstName: string;
   lastName: string;
+  title: string;
+  middleInitial: string;
   initiatedName: string;
   email: string;
   phone: string;
   officePhone: string;
   organization: string;
   address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  homePhone: string;
+  previousHomePhone: string;
+  phoneVerified: boolean;
+  phoneAppendDate: Date | null;
+  doNotCall: boolean;
+  doNotMail: boolean;
+  noMailReason: string;
+  receiptDelivery: string;
+  receiptingPreference: string;
+  pictureUrl: string;
+  futurePledge: boolean;
+  fiveKAmount: number;
   spouseName: string;
+  weddingAnniversary: Date | null;
   birthDate: Date | null;
   spouseBirthDate: Date | null;
   children: DonorChild[];
@@ -33,6 +52,11 @@ export interface FundraisingDonor {
   cardLastFour: string;
   cardBillingAddress: string;
   cardBillingZip: string;
+  facebookUrl: string;
+  linkedinUrl: string;
+  twitterHandle: string;
+  websiteUrl: string;
+  gotra: string;
   status: DonorStatus;
   tags: string[];
   notes: string;
@@ -79,9 +103,14 @@ function donorFromSnapshot(item: QueryDocumentSnapshot): FundraisingDonor {
   const data = item.data();
   return {
     id: item.id,
-    firstName: String(data.firstName || ''), lastName: String(data.lastName || ''), initiatedName: String(data.initiatedName || ''),
+    firstName: String(data.firstName || ''), lastName: String(data.lastName || ''), title: String(data.title || ''), middleInitial: String(data.middleInitial || ''), initiatedName: String(data.initiatedName || ''),
     email: String(data.email || ''), phone: String(data.phone || ''), officePhone: String(data.officePhone || ''), organization: String(data.organization || ''), address: String(data.address || ''),
-    spouseName: String(data.spouseName || ''),
+    city: String(data.city || ''), state: String(data.state || ''), postalCode: String(data.postalCode || ''), country: String(data.country || ''),
+    homePhone: String(data.homePhone || ''), previousHomePhone: String(data.previousHomePhone || ''), phoneVerified: data.phoneVerified === true,
+    phoneAppendDate: data.phoneAppendDate ? firestoreTimestampToDate(data.phoneAppendDate) : null, doNotCall: data.doNotCall === true, doNotMail: data.doNotMail === true,
+    noMailReason: String(data.noMailReason || ''), receiptDelivery: String(data.receiptDelivery || ''), receiptingPreference: String(data.receiptingPreference || ''),
+    pictureUrl: String(data.pictureUrl || ''), futurePledge: data.futurePledge === true, fiveKAmount: Number(data.fiveKAmount) || 0,
+    spouseName: String(data.spouseName || ''), weddingAnniversary: data.weddingAnniversary ? firestoreTimestampToDate(data.weddingAnniversary) : null,
     birthDate: data.birthDate ? firestoreTimestampToDate(data.birthDate) : null,
     spouseBirthDate: data.spouseBirthDate ? firestoreTimestampToDate(data.spouseBirthDate) : null,
     children: Array.from({ length: 5 }, (_, index) => {
@@ -99,6 +128,7 @@ function donorFromSnapshot(item: QueryDocumentSnapshot): FundraisingDonor {
     autoDeductPledgeStart: data.autoDeductPledgeStart ? firestoreTimestampToDate(data.autoDeductPledgeStart) : null,
     autoDeductPledgeRemaining: Number(data.autoDeductPledgeRemaining) || 0,
     cardLastFour: String(data.cardLastFour || ''), cardBillingAddress: String(data.cardBillingAddress || ''), cardBillingZip: String(data.cardBillingZip || ''),
+    facebookUrl: String(data.facebookUrl || ''), linkedinUrl: String(data.linkedinUrl || ''), twitterHandle: String(data.twitterHandle || ''), websiteUrl: String(data.websiteUrl || ''), gotra: String(data.gotra || ''),
     status: ['active', 'prospect', 'inactive'].includes(data.status) ? data.status : 'active',
     tags: Array.isArray(data.tags) ? data.tags.map(String) : [], notes: String(data.notes || ''),
     nextFollowUp: data.nextFollowUp ? firestoreTimestampToDate(data.nextFollowUp) : null,
@@ -133,9 +163,12 @@ export function subscribeFundraisingDonors(cb: (donors: FundraisingDonor[], comp
 
 export async function saveFundraisingDonor(donor: Omit<FundraisingDonor, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }, uid?: string, collectionName = 'fundraisingCuratedDonors') {
   const payload = {
-    firstName: donor.firstName.trim(), lastName: donor.lastName.trim(), initiatedName: donor.initiatedName.trim(), email: cleanEmail(donor.email), phone: donor.phone.trim(), officePhone: donor.officePhone.trim(),
+    firstName: donor.firstName.trim(), lastName: donor.lastName.trim(), title: donor.title.trim(), middleInitial: donor.middleInitial.trim(), initiatedName: donor.initiatedName.trim(), email: cleanEmail(donor.email), phone: donor.phone.trim(), officePhone: donor.officePhone.trim(),
     normalizedEmail: cleanEmail(donor.email), normalizedPhone: cleanPhone(donor.phone), organization: donor.organization.trim(), address: donor.address.trim(),
-    spouseName: donor.spouseName.trim(), birthDate: donor.birthDate, spouseBirthDate: donor.spouseBirthDate,
+    city: donor.city.trim(), state: donor.state.trim(), postalCode: donor.postalCode.trim(), country: donor.country.trim(), homePhone: donor.homePhone.trim(), previousHomePhone: donor.previousHomePhone.trim(),
+    phoneVerified: donor.phoneVerified, phoneAppendDate: donor.phoneAppendDate, doNotCall: donor.doNotCall, doNotMail: donor.doNotMail, noMailReason: donor.noMailReason.trim(),
+    receiptDelivery: donor.receiptDelivery.trim(), receiptingPreference: donor.receiptingPreference.trim(), pictureUrl: donor.pictureUrl.trim(), futurePledge: donor.futurePledge, fiveKAmount: Math.max(0, donor.fiveKAmount),
+    spouseName: donor.spouseName.trim(), weddingAnniversary: donor.weddingAnniversary, birthDate: donor.birthDate, spouseBirthDate: donor.spouseBirthDate,
     children: donor.children.slice(0, 5).map((child) => ({ name: child.name.trim(), birthDate: child.birthDate })),
     lastDonationDate: donor.lastDonationDate, lastDonationAmount: Math.max(0, donor.lastDonationAmount),
     biggestDonationDate: donor.biggestDonationDate, biggestDonationAmount: Math.max(0, donor.biggestDonationAmount),
@@ -143,6 +176,7 @@ export async function saveFundraisingDonor(donor: Omit<FundraisingDonor, 'id' | 
     monthlyDonor: donor.monthlyDonor, autoDeductPledgeAmount: Math.max(0, donor.autoDeductPledgeAmount),
     autoDeductPledgeStart: donor.autoDeductPledgeStart, autoDeductPledgeRemaining: Math.max(0, donor.autoDeductPledgeRemaining),
     cardLastFour: donor.cardLastFour.replace(/\D/g, '').slice(-4), cardBillingAddress: donor.cardBillingAddress.trim(), cardBillingZip: donor.cardBillingZip.trim(),
+    facebookUrl: donor.facebookUrl.trim(), linkedinUrl: donor.linkedinUrl.trim(), twitterHandle: donor.twitterHandle.trim(), websiteUrl: donor.websiteUrl.trim(), gotra: donor.gotra.trim(),
     status: donor.status, tags: donor.tags.map((tag) => tag.trim()).filter(Boolean).slice(0, 20), notes: donor.notes.trim(),
     nextFollowUp: donor.nextFollowUp, assignedTo: donor.assignedTo.trim(), archived: donor.archived,
     updatedAt: serverTimestamp(), updatedBy: uid || null,
