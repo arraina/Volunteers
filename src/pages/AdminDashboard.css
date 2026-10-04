@@ -78,6 +78,11 @@
 .fundraising-campaign-list article > div { display: grid; }
 .fundraising-campaign-list article > b { color: var(--green-700); font-size: 1.2rem; }
 .fundraising-donor-editor { width: min(54rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow-y: auto; }
+.fundraising-donor-editor .panel-head { margin-bottom: 0; scroll-margin-top: 5rem; }
+.fundraising-donor-tabs { position: sticky; top: -1rem; z-index: 3; display: flex; gap: 0.25rem; margin: 0 -1rem 1rem; padding: 0.65rem 1rem; overflow-x: auto; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: rgba(245, 250, 246, 0.97); backdrop-filter: blur(8px); }
+.fundraising-donor-tabs button { flex: 0 0 auto; padding: 0.55rem 0.8rem; border: 0; border-radius: 8px; color: var(--green-700); background: transparent; font-weight: 800; cursor: pointer; }
+.fundraising-donor-tabs button:hover, .fundraising-donor-tabs button:focus-visible { color: white; background: var(--green-600); }
+.fundraising-donor-form [id^="donor-profile-"] { scroll-margin-top: 5rem; }
 .fundraising-donor-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem; }
 .fundraising-donor-form label { display: grid; gap: 0.35rem; font-weight: 700; }
 .fundraising-donor-form .full { grid-column: 1 / -1; }
