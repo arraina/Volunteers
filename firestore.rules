@@ -32,12 +32,6 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/departmentMemberships/$(departmentId + '_' + request.auth.uid)).data.role == 'admin';
     }
 
-    function noAdminsYet() {
-      // Allows the very first signed-in user to claim admin (bootstrap only).
-      return !exists(/databases/$(database)/documents/adminsMeta/count)
-        || get(/databases/$(database)/documents/adminsMeta/count).data.total == 0;
-    }
-
     function isOwnDocument(documentId) {
       return verifiedUser() && request.auth.uid == documentId;
     }
@@ -180,11 +174,9 @@ service cloud.firestore {
       allow read: if isAdmin() || isOwnDocument(adminId);
       // Only the Owner can grant regular Admin access. The Owner record itself
       // cannot be changed or removed from the client, protecting the last Owner.
-      allow create: if (isOwner()
-          && request.resource.data.isAdmin == true
-          && request.resource.data.role == 'admin')
-        || (verifiedUser() && request.auth.uid == adminId && noAdminsYet()
-          && request.resource.data.role == 'owner');
+      allow create: if isOwner()
+        && request.resource.data.isAdmin == true
+        && request.resource.data.role == 'admin';
       allow update, delete: if isOwner()
         && adminId != request.auth.uid
         // Legacy Admin records may not contain role/bootstrap. Use safe
@@ -193,10 +185,11 @@ service cloud.firestore {
         && resource.data.get('bootstrap', false) != true;
     }
 
-    // adminsMeta/count tracks how many admins exist (for bootstrap check).
+    // Legacy bootstrap metadata is retained for migration history only. Client
+    // access is permanently disabled so a missing/reset counter can never
+    // reopen the first-Owner bootstrap path.
     match /adminsMeta/{docId} {
-      allow read: if verifiedUser();
-      allow write: if isOwner() || (verifiedUser() && noAdminsYet());
+      allow read, write: if false;
     }
 
     // ----- volunteers -----

@@ -1460,22 +1460,3 @@ export async function grantAdminAccess(volunteer: VolunteerProfile, grantedBy: s
 export async function revokeAdminAccess(uid: string, removedBy?: string): Promise<void> {
   await trashRecord('admins', uid, removedBy);
 }
-
-/** True if no admin exists yet (allows first user to claim admin). */
-export async function noAdminsYet(): Promise<boolean> {
-  const meta = await getDoc(doc(db, 'adminsMeta', 'count'));
-  if (!meta.exists()) return true;
-  return (meta.data().total || 0) === 0;
-}
-
-/** Claim admin for the given uid. Only succeeds while no admin exists (rules-enforced). */
-export async function claimFirstAdmin(uid: string, email: string): Promise<void> {
-  await setDoc(doc(db, 'admins', uid), {
-    isAdmin: true,
-    role: 'owner',
-    email,
-    bootstrap: true,
-    createdAt: serverTimestamp(),
-  });
-  await setDoc(doc(db, 'adminsMeta', 'count'), { total: increment(1) }, { merge: true });
-}
