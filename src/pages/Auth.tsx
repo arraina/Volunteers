@@ -48,6 +48,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
   const isLogin = type === 'login';
   const invitationRequired = searchParams.get('invitationRequired') === '1';
   const mfaEnrolled = searchParams.get('mfaEnrolled') === '1';
+  const reauthForMfa = searchParams.get('reauthForMfa') === '1';
   const requestedReturnTo = searchParams.get('returnTo') || '';
   const returnTo = requestedReturnTo.startsWith('/') && !requestedReturnTo.startsWith('//') ? requestedReturnTo : '';
 
@@ -241,6 +242,7 @@ const AuthPage: React.FC<AuthProps> = ({ type }) => {
           {error && <div className="error-message">{error}</div>}
           {invitationRequired && <div className="info-message">New accounts are invitation-only. Ask an Owner or Admin to add you and send a secure activation link.</div>}
           {mfaEnrolled && <div className="info-message">Authenticator MFA is enabled. Sign in again and enter the current code from your authenticator app.</div>}
+          {reauthForMfa && <div className="info-message">For security, sign in again before setting up your authenticator app.</div>}
 
         <form onSubmit={isLogin ? handleLogin : handleSignup}>
           {!isLogin && (

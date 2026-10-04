@@ -26,6 +26,12 @@ const PrivilegedMfaSetup: React.FC = () => {
       const generated = await TotpMultiFactorGenerator.generateSecret(session);
       setSecret(generated); setSecretKey(generated.secretKey);
     } catch (cause) {
+      if (cause && typeof cause === 'object' && 'code' in cause
+        && (cause as { code?: string }).code === 'auth/requires-recent-login') {
+        await signOut(auth);
+        navigate('/login?returnTo=%2Fsecurity%2Fmfa&reauthForMfa=1', { replace: true });
+        return;
+      }
       setError(cause instanceof Error ? cause.message : 'MFA enrollment could not start.');
     } finally { setBusy(false); }
   };
