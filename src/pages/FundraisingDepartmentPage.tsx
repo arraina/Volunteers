@@ -15,13 +15,19 @@ const FundraisingDepartmentPage: React.FC = () => {
   const { user, isAdmin, isOwner } = useAuth();
   const [events, setEvents] = useState<TempleEvent[]>([]);
   const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [accessError, setAccessError] = useState('');
   const [error, setError] = useState('');
   const [section, setSection] = useState<'crm' | 'dashboard'>('crm');
 
   useEffect(() => {
+    setAccessError('');
     getDepartmentWorkspace('fundraising')
       .then((workspace) => setAllowed(workspace.canManage || isOwner))
-      .catch(() => setAllowed(false));
+      .catch((cause) => {
+        const message = cause instanceof Error ? cause.message : 'Fundraising access could not be verified.';
+        setAccessError(message);
+        setAllowed(false);
+      });
   }, [isOwner]);
 
   useEffect(() => {
@@ -30,7 +36,10 @@ const FundraisingDepartmentPage: React.FC = () => {
   }, [allowed]);
 
   if (allowed === null) return <div className="loading">Checking Fundraising access…</div>;
-  if (!allowed) return <main className="auth-page"><section className="panel auth-card"><h1>Fundraising access required</h1><p>Only the Owner or an assigned Fundraising Department Admin can manage this dashboard.</p><button className="primary-btn" onClick={() => navigate(isAdmin ? '/admin?tab=departments' : '/dashboard?tab=departments')}>Back to departments</button></section></main>;
+  if (!allowed) {
+    const needsMfa = accessError.toLowerCase().includes('multi-factor');
+    return <main className="auth-page"><section className="panel auth-card"><h1>{needsMfa ? 'Authenticator verification required' : 'Fundraising access required'}</h1><p>{needsMfa ? 'Your Fundraising Admin assignment is active. Set up an authenticator app, or sign out and sign back in with your authenticator code if it is already enrolled.' : 'Only the Owner or an assigned Fundraising Department Admin can manage this dashboard.'}</p>{accessError && <div className="error-message">{accessError}</div>}<div className="row">{needsMfa && <button className="primary-btn" onClick={() => navigate('/security/mfa')}>Set up authenticator</button>}<button className="secondary-btn" onClick={async () => { await signOut(auth); navigate('/login'); }}>Sign out and sign in again</button><button className="secondary-btn" onClick={() => navigate(isAdmin ? '/admin?tab=departments' : '/dashboard?tab=departments')}>Back to departments</button></div></section></main>;
+  }
 
   return <div className="admin-dashboard">
     <header className="dashboard-header"><div><h1>ISKCON Parsippany Community Hub</h1><p>Serve. Connect. Grow. · Fundraising</p></div><div className="header-actions"><button className="logout-btn" onClick={() => navigate(isAdmin ? '/admin?tab=departments' : '/dashboard?tab=departments')}>Community Hub</button><button className="logout-btn" onClick={async () => { await signOut(auth); navigate('/login'); }}>Logout</button></div></header>
