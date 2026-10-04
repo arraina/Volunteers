@@ -32,6 +32,12 @@
 .department-item p { margin: 0.2rem 0 0; font-size: 0.84rem; white-space: pre-wrap; }
 .department-item-actions { display: flex; gap: 0.25rem; }
 .department-item-actions button { border: 0; background: transparent; color: var(--green-700); cursor: pointer; }
+.department-item-actions button.danger { color: #b42318; }
+.department-item.editing { display: block; }
+.department-item-edit { display: grid !important; gap: 0.65rem !important; width: 100%; }
+.department-item-edit label { display: grid; gap: 0.3rem; }
+.department-item-edit label > span { font-size: 0.78rem; font-weight: 700; }
+.department-item-edit input, .department-item-edit textarea { width: 100%; }
 .department-create-form { display: grid; gap: 0.6rem; background: #f7faf7; border-radius: 10px; padding: 0.75rem; }
 .department-create-form label { display: grid; gap: 0.3rem; }
 .department-create-form label > span { font-size: 0.78rem; font-weight: 700; }

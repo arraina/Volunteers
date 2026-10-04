@@ -250,7 +250,8 @@ exports.getDepartmentWorkspace = onCall({ region: 'us-central1', maxInstances: 8
     db.collection(collectionName).where('departmentId', '==', departmentId).get()));
   const normalizeItems = (snapshot) => snapshot.docs.filter((item) => item.data().archived !== true).map((item) => {
     const data = item.data();
-    return { id: item.id, ...data, dateMillis: data.date?.toMillis?.() || null, createdAtMillis: data.createdAt?.toMillis?.() || null };
+    return { id: item.id, ...data, canEdit: access.isOwner || data.createdBy === request.auth.uid,
+      dateMillis: data.date?.toMillis?.() || null, createdAtMillis: data.createdAt?.toMillis?.() || null };
   });
   return {
     canManage: access.isDepartmentAdmin,
@@ -284,14 +285,32 @@ exports.updateDepartmentItem = onCall({ region: 'us-central1', maxInstances: 4 }
   const type = String(request.data?.type || '').trim();
   const itemId = String(request.data?.itemId || '').trim();
   const action = String(request.data?.action || '').trim();
-  if (!departmentId || !itemId || departmentId.includes('/') || itemId.includes('/') || !DEPARTMENT_ITEM_COLLECTIONS[type] || !['complete', 'reopen', 'archive'].includes(action)) {
+  if (!departmentId || !itemId || departmentId.includes('/') || itemId.includes('/') || !DEPARTMENT_ITEM_COLLECTIONS[type] || !['complete', 'reopen', 'edit', 'remove'].includes(action)) {
     throw new HttpsError('invalid-argument', 'Choose a valid department item and action.');
   }
-  await requireDepartmentAccess(request, departmentId, true);
+  const access = await requireDepartmentAccess(request, departmentId, action === 'complete' || action === 'reopen');
   const ref = db.doc(`${DEPARTMENT_ITEM_COLLECTIONS[type]}/${itemId}`);
   const snapshot = await ref.get();
   if (!snapshot.exists || snapshot.data().departmentId !== departmentId) throw new HttpsError('not-found', 'Department item was not found.');
-  const change = action === 'archive' ? { archived: true } : { status: action === 'complete' ? 'completed' : 'open' };
+  const item = snapshot.data();
+  if ((action === 'edit' || action === 'remove') && !access.isOwner && item.createdBy !== request.auth.uid) {
+    throw new HttpsError('permission-denied', 'Only the person who created this entry or the Hub Owner can edit or remove it.');
+  }
+  let change;
+  if (action === 'remove') {
+    change = { archived: true, archivedBy: request.auth.uid, archivedAt: admin.firestore.FieldValue.serverTimestamp() };
+  } else if (action === 'edit') {
+    const title = String(request.data?.changes?.title || '').trim();
+    const details = String(request.data?.changes?.details || '').trim();
+    const dateMillis = request.data?.changes?.dateMillis == null ? null : Number(request.data.changes.dateMillis);
+    if (!title || title.length > 180 || details.length > 5000
+      || ((type === 'task' || type === 'event') && !Number.isFinite(dateMillis))) {
+      throw new HttpsError('invalid-argument', 'Enter a valid title, details, and date.');
+    }
+    change = { title, details, date: dateMillis == null ? null : admin.firestore.Timestamp.fromMillis(dateMillis) };
+  } else {
+    change = { status: action === 'complete' ? 'completed' : 'open' };
+  }
   await ref.update({ ...change, updatedBy: request.auth.uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
   return { updated: true };
 });

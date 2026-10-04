@@ -13,7 +13,8 @@ import { useAuth } from '../helpers/useAuth';
 import './AdminDashboard.css';
 import './DepartmentDirectory.css';
 
-type WorkspaceAction = 'complete' | 'reopen' | 'archive';
+type WorkspaceAction = 'complete' | 'reopen' | 'edit' | 'remove';
+type WorkspaceChanges = { title: string; details: string; dateMillis: number | null };
 
 const DepartmentWorkspacePage: React.FC = () => {
   const { departmentId = '' } = useParams();
@@ -51,9 +52,13 @@ const DepartmentWorkspacePage: React.FC = () => {
     finally { setBusy(false); }
   };
 
-  const act = async (itemType: DepartmentItemType, itemId: string, action: WorkspaceAction) => {
+  const act = async (itemType: DepartmentItemType, itemId: string, action: WorkspaceAction, changes?: WorkspaceChanges) => {
     setBusy(true); setError(''); setMessage('');
-    try { await updateDepartmentItem(departmentId, itemType, itemId, action); setMessage(action === 'archive' ? 'Item archived.' : 'Task updated.'); await load(); }
+    try {
+      await updateDepartmentItem(departmentId, itemType, itemId, action, changes);
+      setMessage(action === 'remove' ? 'Entry removed.' : action === 'edit' ? 'Entry updated.' : 'Task updated.');
+      await load();
+    }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'The workspace item could not be updated.'); }
     finally { setBusy(false); }
   };
@@ -95,6 +100,51 @@ const DepartmentWorkspacePage: React.FC = () => {
   </div>;
 };
 
-const DepartmentItemRow: React.FC<{ item: DepartmentWorkspaceResult['tasks'][number]; type: DepartmentItemType; canManage: boolean; busy: boolean; act: (type: DepartmentItemType, id: string, action: WorkspaceAction) => void }> = ({ item, type, canManage, busy, act }) => <article className={`department-item ${item.status === 'completed' ? 'completed' : ''}`}><div><strong>{item.title}</strong>{item.dateMillis && <span>{new Date(item.dateMillis).toLocaleString()}</span>}{item.details && <p>{item.details}</p>}</div>{canManage && <div className="department-item-actions">{type === 'task' && <button disabled={busy} onClick={() => act(type, item.id, item.status === 'completed' ? 'reopen' : 'complete')}>{item.status === 'completed' ? 'Reopen' : 'Complete'}</button>}<button disabled={busy} onClick={() => act(type, item.id, 'archive')}>Archive</button></div>}</article>;
+const toLocalDateTime = (dateMillis: number | null) => {
+  if (!dateMillis) return '';
+  const date = new Date(dateMillis - new Date(dateMillis).getTimezoneOffset() * 60000);
+  return date.toISOString().slice(0, 16);
+};
+
+const DepartmentItemRow: React.FC<{
+  item: DepartmentWorkspaceResult['tasks'][number]; type: DepartmentItemType; canManage: boolean; busy: boolean;
+  act: (type: DepartmentItemType, id: string, action: WorkspaceAction, changes?: WorkspaceChanges) => Promise<void>;
+}> = ({ item, type, canManage, busy, act }) => {
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(item.title);
+  const [editDetails, setEditDetails] = useState(item.details || '');
+  const [editDateTime, setEditDateTime] = useState(toLocalDateTime(item.dateMillis));
+
+  const save = async () => {
+    if (!editTitle.trim() || (type !== 'announcement' && !editDateTime)) return;
+    await act(type, item.id, 'edit', {
+      title: editTitle,
+      details: editDetails,
+      dateMillis: type === 'announcement' ? null : new Date(editDateTime).getTime(),
+    });
+    setEditing(false);
+  };
+
+  const remove = async () => {
+    if (!window.confirm(`Remove “${item.title}”? This entry will no longer appear in the workspace.`)) return;
+    await act(type, item.id, 'remove');
+  };
+
+  return <article className={`department-item ${item.status === 'completed' ? 'completed' : ''} ${editing ? 'editing' : ''}`}>
+    {editing ? <div className="department-item-edit">
+      <label><span>Title</span><input value={editTitle} maxLength={180} onChange={(event) => setEditTitle(event.target.value)} /></label>
+      {type !== 'announcement' && <label><span>Date and time</span><input type="datetime-local" value={editDateTime} onChange={(event) => setEditDateTime(event.target.value)} /></label>}
+      <label><span>Details</span><textarea rows={5} value={editDetails} maxLength={5000} onChange={(event) => setEditDetails(event.target.value)} /></label>
+      <div className="department-item-actions"><button disabled={busy || !editTitle.trim() || (type !== 'announcement' && !editDateTime)} onClick={save}>Save</button><button disabled={busy} onClick={() => setEditing(false)}>Cancel</button></div>
+    </div> : <>
+      <div><strong>{item.title}</strong>{item.dateMillis && <span>{new Date(item.dateMillis).toLocaleString()}</span>}{item.details && <p>{item.details}</p>}</div>
+      {(canManage || item.canEdit) && <div className="department-item-actions">
+        {type === 'task' && canManage && <button disabled={busy} onClick={() => act(type, item.id, item.status === 'completed' ? 'reopen' : 'complete')}>{item.status === 'completed' ? 'Reopen' : 'Complete'}</button>}
+        {item.canEdit && <button disabled={busy} onClick={() => setEditing(true)}>Edit</button>}
+        {item.canEdit && <button className="danger" disabled={busy} onClick={remove}>Remove</button>}
+      </div>}
+    </>}
+  </article>;
+};
 
 export default DepartmentWorkspacePage;
