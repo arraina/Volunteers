@@ -58,7 +58,8 @@
 .fundraising-donor-list-head, .fundraising-donor-card { display: grid; grid-template-columns: minmax(9rem, 1fr) minmax(8rem, .9fr) minmax(9rem, .9fr) minmax(8rem, .8fr) minmax(7rem, .7fr) minmax(8rem, .8fr) minmax(7rem, .7fr) auto; align-items: center; gap: 0.75rem; min-width: 76rem; }
 .fundraising-donor-list-head { padding: 0 0.85rem; color: var(--muted); font-size: 0.75rem; font-weight: 800; }
 .fundraising-donor-card, .fundraising-followups button { padding: 0.85rem; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fbfefb; text-align: left; }
-.fundraising-donor-card { width: 100%; }
+.fundraising-donor-card { width: 100%; cursor: pointer; }
+.fundraising-donor-card:focus-visible { outline: 3px solid rgba(47, 143, 59, 0.35); outline-offset: 2px; }
 .fundraising-followups button { display: grid; grid-template-columns: minmax(11rem, 1fr) auto; align-items: center; gap: 0.8rem; width: 100%; }
 .fundraising-donor-open { display: grid; justify-items: start; gap: 0.2rem; padding: 0; border: 0; color: var(--green-700); background: transparent; text-align: left; font-weight: 800; cursor: pointer; }
 .fundraising-donor-card:hover, .fundraising-followups button:hover { border-color: var(--green-500); box-shadow: 0 4px 12px rgba(20, 80, 45, 0.08); }
