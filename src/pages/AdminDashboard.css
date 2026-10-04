@@ -77,7 +77,8 @@
 .fundraising-campaign-list article { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 12px; }
 .fundraising-campaign-list article > div { display: grid; }
 .fundraising-campaign-list article > b { color: var(--green-700); font-size: 1.2rem; }
-.fundraising-donor-editor { width: min(54rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow-y: auto; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 120; display: flex; align-items: center; justify-content: center; padding: 1rem; overflow: auto; background: rgba(15, 23, 42, 0.58); backdrop-filter: blur(3px); }
+.fundraising-donor-editor { width: min(54rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); margin: auto; overflow-y: auto; box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28); }
 .fundraising-donor-editor .panel-head { margin-bottom: 0; scroll-margin-top: 5rem; }
 .fundraising-donor-tabs { position: sticky; top: -1rem; z-index: 3; display: flex; gap: 0.25rem; margin: 0 -1rem 1rem; padding: 0.65rem 1rem; overflow-x: auto; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: rgba(245, 250, 246, 0.97); backdrop-filter: blur(8px); }
 .fundraising-donor-tabs button { flex: 0 0 auto; padding: 0.55rem 0.8rem; border: 0; border-radius: 8px; color: var(--green-700); background: transparent; font-weight: 800; cursor: pointer; }
