@@ -54,13 +54,16 @@
 .fundraising-crm-filters input:first-child { flex: 1; }
 .fundraising-crm-filters label { display: flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
 .fundraising-crm-list, .fundraising-followups, .fundraising-campaign-list { display: grid; gap: 0.65rem; }
-.fundraising-donor-card, .fundraising-followups button { display: grid; grid-template-columns: minmax(12rem, 1.2fr) minmax(12rem, 1fr) auto auto auto; align-items: center; gap: 0.8rem; width: 100%; padding: 0.85rem; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fbfefb; text-align: left; }
+.fundraising-donor-card, .fundraising-followups button { display: grid; grid-template-columns: minmax(11rem, 1.2fr) minmax(11rem, 1fr) minmax(10rem, 0.8fr) auto auto; align-items: center; gap: 0.8rem; width: 100%; padding: 0.85rem; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fbfefb; text-align: left; }
 .fundraising-donor-card:hover, .fundraising-followups button:hover { border-color: var(--green-500); box-shadow: 0 4px 12px rgba(20, 80, 45, 0.08); }
 .fundraising-donor-card > span:first-child, .fundraising-followups span { display: grid; gap: 0.15rem; }
 .fundraising-donor-card small, .fundraising-followups small, .fundraising-campaign-list span { color: var(--muted); }
 .fundraising-donor-card b { color: #9a3412; font-size: 0.78rem; }
 .fundraising-donor-card.possible-duplicate { border: 2px solid #e58a19; background: #fff8e8; }
 .fundraising-donor-card .duplicate-warning { display: inline-flex; align-items: center; min-height: 2rem; padding: 0.3rem 0.65rem; border-radius: 999px; color: #8a3b0a; background: #ffe0a3; white-space: nowrap; }
+.fundraising-donor-ownership { display: grid; gap: 0.12rem; }
+.fundraising-donor-ownership small:not(:first-child) { margin-top: 0.35rem; }
+.fundraising-donor-state { display: grid; justify-items: start; gap: 0.4rem; }
 .fundraising-donor-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.45rem; }
 .fundraising-donor-actions button { min-width: 5rem; }
 .status-pill { padding: 0.25rem 0.55rem; border-radius: 999px; color: #166534; background: #dcfce7; font-size: 0.75rem; font-weight: 800; text-transform: capitalize; }

@@ -196,7 +196,9 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <div className="fundraising-crm-list">
         {visibleDonors.map((donor) => <article className={`fundraising-donor-card${duplicateIds.has(donor.id) ? ' possible-duplicate' : ''}`} key={donor.id}>
           <span><strong>{[donor.firstName, donor.lastName].filter(Boolean).join(' ') || donor.organization}</strong>{donor.initiatedName && <small>{donor.initiatedName}</small>}{donor.organization && <small>{donor.organization}</small>}</span>
-          <span>{donor.email || donor.phone || 'No contact information'}</span><span className="status-pill">{donor.archived ? 'Archived' : donor.status}</span>{duplicateIds.has(donor.id) && <b className="duplicate-warning">Possible duplicate</b>}
+          <span>{donor.email || donor.phone || 'No contact information'}</span>
+          <span className="fundraising-donor-ownership"><small>Assigned fundraiser</small><strong>{donor.assignedTo || 'Unassigned'}</strong><small>Next follow-up</small><strong>{donor.nextFollowUp ? donor.nextFollowUp.toLocaleDateString() : 'Not scheduled'}</strong></span>
+          <div className="fundraising-donor-state"><span className="status-pill">{donor.archived ? 'Archived' : donor.status}</span>{duplicateIds.has(donor.id) && <b className="duplicate-warning">Possible duplicate</b>}</div>
           <div className="fundraising-donor-actions"><button className="secondary-btn" onClick={() => setEditing({ ...donor })}>Edit</button><button className={donor.archived ? 'secondary-btn' : 'danger-btn'} disabled={saving} onClick={() => setDonorArchived(donor, !donor.archived)}>{donor.archived ? 'Restore' : 'Remove'}</button></div>
         </article>)}
         {!filtered.length && <div className="empty-state"><strong>No donors found</strong><span>Add a donor or change the search.</span></div>}
