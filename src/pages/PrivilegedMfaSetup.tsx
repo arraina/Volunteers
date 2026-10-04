@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { multiFactor, signOut, TotpMultiFactorGenerator } from 'firebase/auth';
+import { QRCodeSVG } from 'qrcode.react';
 import { auth } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
 import './Auth.css';
@@ -58,7 +59,19 @@ const PrivilegedMfaSetup: React.FC = () => {
     {error && <div className="error-message">{error}</div>}
     {!secret ? <button className="submit-btn" disabled={busy} onClick={begin}>{busy ? 'Preparing…' : 'Set up authenticator app'}</button> :
       <form onSubmit={finish}>
-        <p>In Google Authenticator, Microsoft Authenticator, or another TOTP app, add an account manually with this key:</p>
+        <p>Open Google Authenticator, Microsoft Authenticator, or another authenticator app and scan this QR code:</p>
+        <div style={{ display: 'flex', justifyContent: 'center', margin: '1.25rem 0' }}>
+          <div style={{ background: '#fff', border: '1px solid #d9e5da', borderRadius: 16, padding: 16 }}>
+            <QRCodeSVG
+              value={secret.generateQrCodeUrl(user.email || 'owner', 'ISKCON Parsippany Community Hub')}
+              size={220}
+              level="M"
+              marginSize={1}
+              title="Authenticator app setup QR code"
+            />
+          </div>
+        </div>
+        <p style={{ textAlign: 'center' }}>Cannot scan it? Enter this setup key manually:</p>
         <div className="info-message" style={{ overflowWrap: 'anywhere', fontFamily: 'monospace' }}>{secretKey}</div>
         <div className="form-group"><label htmlFor="mfa-code">6-digit verification code</label><input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={verificationCode} onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))} required /></div>
         <button className="submit-btn" disabled={busy || verificationCode.length !== 6}>{busy ? 'Verifying…' : 'Enable MFA'}</button>
