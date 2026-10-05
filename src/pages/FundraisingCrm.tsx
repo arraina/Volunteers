@@ -332,12 +332,6 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   };
 
   return <div className="fundraising-crm">
-    <section className="fundraising-crm-summary">
-      <div><span>Donors</span><strong>{donors.filter((donor) => !donor.archived).length}</strong></div>
-      <div><span>Raised & pledged</span><strong>{money.format(totals.current)}</strong></div>
-      <div><span>Open follow-ups</span><strong>{followups.length}</strong></div>
-      <div className={duplicateIds.size ? 'attention' : ''}><span>Possible duplicates</span><strong>{duplicateIds.size}</strong></div>
-    </section>
     <nav className="fundraising-crm-tabs" aria-label="Fundraising CRM sections">
       <button className={view === 'donors' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingCuratedDonors'); setView('donors'); }}>Donors</button>
       <button className={view === 'raw' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingDonors'); setView('raw'); }}>Raw Donor Information</button>
