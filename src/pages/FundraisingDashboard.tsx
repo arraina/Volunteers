@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { FundraisingRecordAudit } from '../components/FundraisingAuditHistory';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
 import { TempleEvent } from '../helpers/types';
 import {
@@ -306,6 +307,7 @@ const FundraisingDashboard: React.FC<{
         }
       }}>Generate 5-day read-only link</button>}
     </div>}
+    {eventId && eventId !== '__new__' && <FundraisingRecordAudit key={eventId} targetPath={`fundraisingCampaigns/${eventId}`} />}
   </div>;
 };
 

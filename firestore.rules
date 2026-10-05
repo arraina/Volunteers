@@ -351,6 +351,7 @@ service cloud.firestore {
     match /fundraisingCampaigns/{eventId} {
       allow read: if isAdmin() || isDepartmentAdmin('fundraising');
       allow create: if (isAdmin() || isDepartmentAdmin('fundraising'))
+        && request.resource.data.updatedBy == request.auth.uid
         && request.resource.data.get('locked', false) == false
         && request.resource.data.eventId == eventId
         && request.resource.data.targetAmount is number
@@ -360,6 +361,7 @@ service cloud.firestore {
         && request.resource.data.entries is list
         && request.resource.data.entries.size() <= 1000;
       allow update: if (isAdmin() || isDepartmentAdmin('fundraising'))
+        && request.resource.data.updatedBy == request.auth.uid
         && resource.data.get('locked', false) == false
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'locked', 'lockedAt', 'lockedBy'
@@ -383,11 +385,13 @@ service cloud.firestore {
     match /fundraisingDonors/{donorId} {
       allow read: if isOwner() || isDepartmentAdmin('fundraising');
       allow create: if (isOwner() || isDepartmentAdmin('fundraising'))
+        && request.resource.data.updatedBy == request.auth.uid
         && request.resource.data.firstName is string
         && request.resource.data.organization is string
         && (request.resource.data.firstName.size() > 0 || request.resource.data.organization.size() > 0)
         && request.resource.data.status in ['active', 'prospect', 'inactive'];
       allow update: if (isOwner() || isDepartmentAdmin('fundraising'))
+        && request.resource.data.updatedBy == request.auth.uid
         && request.resource.data.firstName is string
         && request.resource.data.organization is string
         && (request.resource.data.firstName.size() > 0 || request.resource.data.organization.size() > 0)
@@ -400,6 +404,7 @@ service cloud.firestore {
     match /fundraisingCuratedDonors/{donorId} {
       allow read: if isOwner() || isDepartmentAdmin('fundraising');
       allow create, update: if (isOwner() || isDepartmentAdmin('fundraising'))
+        && request.resource.data.updatedBy == request.auth.uid
         && request.resource.data.firstName is string
         && request.resource.data.organization is string
         && (request.resource.data.firstName.size() > 0 || request.resource.data.organization.size() > 0)
@@ -407,9 +412,20 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    // Server-generated fundraising ledger. Clients cannot alter audit evidence.
+    match /fundraisingAuditLogs/{auditId} {
+      allow read: if isOwner() || isDepartmentAdmin('fundraising');
+      allow write: if false;
+      match /snapshots/{version} {
+        allow read: if isOwner() || isDepartmentAdmin('fundraising');
+        allow write: if false;
+      }
+    }
+
     match /fundraisingPledges/{pledgeId} {
       allow read: if isOwner() || isDepartmentAdmin('fundraising');
       allow create, update: if (isOwner() || isDepartmentAdmin('fundraising'))
+        && request.resource.data.updatedBy == request.auth.uid
         && request.resource.data.donorId is string
         && request.resource.data.donorFirstName is string
         && (request.resource.data.donorId.size() > 0 || request.resource.data.donorFirstName.size() > 0)

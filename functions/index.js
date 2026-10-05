@@ -626,6 +626,7 @@ exports.setFundraisingCampaignLock = onCall({ region: 'us-central1', maxInstance
     locked,
     lockedAt: locked ? admin.firestore.FieldValue.serverTimestamp() : null,
     lockedBy: locked ? request.auth.uid : null,
+    updatedBy: request.auth.uid,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   return { locked };
@@ -1276,6 +1277,7 @@ exports.deleteVolunteerAccount = onCall({ region: 'us-central1', maxInstances: 2
 // Immutable, server-generated activity ledger. Auth context identifies the
 // principal that performed each Firestore write, including future UI paths.
 const AUDITED_COLLECTIONS = new Set([
+  ...require('./fundraisingAudit').COLLECTIONS,
   'admins', 'announcements', 'appValueReports', 'departmentAnnouncements', 'departmentEvents',
   'departmentMemberships', 'departmentTasks', 'departments', 'eventActionItems', 'govindasMenus', 'govindasOrders',
   'costEntries', 'eventFeedback', 'eventMeetings', 'events', 'eventTemplates', 'hourLogs',
@@ -1343,7 +1345,7 @@ function describeActivity(collectionId, before, after) {
 }
 
 exports.auditApplicationActivity = onDocumentWrittenWithAuthContext(
-  { document: '{collectionId}/{documentId}', region: 'us-central1', maxInstances: 2 },
+  { document: '{collectionId}/{documentId}', region: 'us-central1', maxInstances: 2, retry: true },
   async (event) => {
     const { collectionId, documentId } = event.params;
     if (!AUDITED_COLLECTIONS.has(collectionId)) return;
@@ -1351,6 +1353,56 @@ exports.auditApplicationActivity = onDocumentWrittenWithAuthContext(
     const after = event.data?.after?.exists ? event.data.after.data() : null;
     if (!before && !after) return;
     const data = after || before;
+    const fundraisingAudit = require('./fundraisingAudit');
+    if (fundraisingAudit.COLLECTIONS.has(collectionId)) {
+      const beforeSafe = fundraisingAudit.safeSnapshot(collectionId, before);
+      const afterSafe = fundraisingAudit.safeSnapshot(collectionId, after);
+      const fields = fundraisingAudit.changes(beforeSafe, afterSafe);
+      if (collectionId === 'fundraisingShareLinks' && before && after && before.tokenHash !== after.tokenHash) fields.push('link renewed');
+      if (before && after && !fields.length) return;
+      // Auth context is authoritative; metadata from trusted server writes is
+      // explicitly marked as attributed rather than a verified end-user write.
+      const authenticatedUser = event.authType === 'unknown' && event.authId ? event.authId : null;
+      const actorId = authenticatedUser || after?.updatedBy || after?.createdBy || 'system';
+      let actorName = actorId === 'system' ? 'System / import' : actorId;
+      let actorEmail = '';
+      if (actorId !== 'system') {
+        const [user, volunteer, administrator] = await Promise.allSettled([
+          admin.auth().getUser(actorId), db.doc(`volunteers/${actorId}`).get(), db.doc(`admins/${actorId}`).get(),
+        ]);
+        const profile = volunteer.status === 'fulfilled' && volunteer.value.exists ? volunteer.value.data() : administrator.status === 'fulfilled' && administrator.value.exists ? administrator.value.data() : {};
+        actorEmail = user.status === 'fulfilled' ? user.value.email || '' : '';
+        actorName = profile.name || [profile.firstName, profile.lastName].filter(Boolean).join(' ') || (user.status === 'fulfilled' && user.value.displayName) || actorEmail || actorName;
+      }
+      const ref = db.doc(`fundraisingAuditLogs/${createHash('sha256').update(event.id).digest('hex')}`);
+      let label = [data.donorFirstName || data.firstName, data.donorLastName || data.lastName].filter(Boolean).join(' ') || data.dashboardName || data.organization || documentId;
+      let relatedLineage = {};
+      if (collectionId === 'fundraisingPledgePayments' && data.pledgeId) {
+        const pledge = (await db.doc(`fundraisingPledges/${data.pledgeId}`).get()).data();
+        if (pledge) {
+          relatedLineage = fundraisingAudit.lineage(pledge);
+          label = [pledge.donorFirstName, pledge.donorLastName].filter(Boolean).join(' ') || `Payment for pledge ${data.pledgeId}`;
+        }
+      }
+      // Separate snapshots avoid duplicating large campaign documents in one log.
+      await db.runTransaction(async (transaction) => {
+        if ((await transaction.get(ref)).exists) return;
+        transaction.set(ref, {
+          targetPath: `${collectionId}/${documentId}`, targetCollection: collectionId, targetId: documentId, targetLabel: label,
+          action: !before ? 'created' : !after ? 'deleted' : before.status !== 'cancelled' && after.status === 'cancelled' ? 'cancelled' : 'updated',
+          actorId, actorName, actorEmail, authenticatedPrincipal: event.authId || '', attribution: authenticatedUser ? 'authenticated principal' : event.authType === 'api_key' ? 'security-rule-validated user metadata' : 'server/system attribution',
+          occurredAt: after ? event.data.after.updateTime : admin.firestore.Timestamp.fromDate(new Date(event.time)),
+          recordedAt: admin.firestore.FieldValue.serverTimestamp(), source: event.authType || 'unknown', eventId: event.id,
+          changedFields: fields, beforeAmounts: fundraisingAudit.financialValues(collectionId, before), afterAmounts: fundraisingAudit.financialValues(collectionId, after),
+          beforeLineage: fundraisingAudit.lineage(before), afterLineage: fundraisingAudit.lineage(after),
+          relatedLineage,
+          hasBefore: !!before, hasAfter: !!after,
+        });
+        if (beforeSafe) transaction.set(ref.collection('snapshots').doc('before'), beforeSafe);
+        if (afterSafe) transaction.set(ref.collection('snapshots').doc('after'), afterSafe);
+      });
+      return;
+    }
     const description = describeActivity(collectionId, before, after);
     const actorId = event.authId || data.updatedBy || data.deletedBy || data.createdBy || 'system';
     let email = '';
@@ -1367,12 +1419,12 @@ exports.auditApplicationActivity = onDocumentWrittenWithAuthContext(
     }
     const fields = changedFields(before, after).filter((key) => !['updatedAt', 'createdAt'].includes(key));
     const label = targetLabel(collectionId, documentId, data);
-    await db.collection('auditLogs').add({
+    await db.collection('auditLogs').doc(createHash('sha256').update(event.id).digest('hex')).create({
       event: 'activity', category: CATEGORY_BY_COLLECTION[collectionId] || 'Other',
       action: description.action, summary: `${description.verb} ${TYPE_BY_COLLECTION[collectionId] || collectionId} “${label}”`,
       actorId, email, role, occurredAt: admin.firestore.FieldValue.serverTimestamp(),
       targetType: TYPE_BY_COLLECTION[collectionId] || collectionId, targetId: documentId,
       targetLabel: label, changedFields: fields, source: event.authType || 'unknown',
-    });
+    }).catch((error) => { if (error.code !== 6 && error.code !== 'already-exists') throw error; });
   }
 );

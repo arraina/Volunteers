@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import FundraisingAuditHistory, { FundraisingRecordAudit } from '../components/FundraisingAuditHistory';
 import { TempleEvent } from '../helpers/types';
 import { addDonorInteraction, CampaignSummary, donorDuplicateKeys, DonorContactInteraction, FundraisingDonor, FundraisingPledge, FundraisingPledgePayment, loadCampaignSummaries, PledgePaymentMethod, PledgePaymentStatus, recordFundraisingPledgePayment, saveFundraisingDonor, saveFundraisingPledge, subscribeDonorInteractions, subscribeFundraisingDonors, subscribeFundraisingPledgePayments, subscribeFundraisingPledges, uploadFundraisingDonorPicture } from '../helpers/fundraisingCrm';
 import QuickBooksReports from './QuickBooksReports';
@@ -29,30 +30,6 @@ function possibleDuplicateKeys(donor: FundraisingDonor): string[] {
   return Array.from(new Set(keys));
 }
 
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = []; let row: string[] = []; let cell = ''; let quoted = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index]; const next = text[index + 1];
-    if (char === '"' && quoted && next === '"') { cell += '"'; index += 1; }
-    else if (char === '"') quoted = !quoted;
-    else if (char === ',' && !quoted) { row.push(cell.trim()); cell = ''; }
-    else if ((char === '\n' || char === '\r') && !quoted) { if (char === '\r' && next === '\n') index += 1; row.push(cell.trim()); if (row.some(Boolean)) rows.push(row); row = []; cell = ''; }
-    else cell += char;
-  }
-  row.push(cell.trim()); if (row.some(Boolean)) rows.push(row); return rows;
-}
-
-const normalizeCsvHeader = (header: string) => header.replace(/^\uFEFF/, '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
-function csvDate(value: string): Date | null {
-  if (!value.trim()) return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function csvBoolean(value: string): boolean {
-  return ['true', 'yes', 'y', '1', 'archived'].includes(value.trim().toLowerCase());
-}
 
 const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: (message: string) => void }> = ({ events, uid, setError }) => {
   const [donors, setDonors] = useState<FundraisingDonor[]>([]);
@@ -61,7 +38,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   const [pledges, setPledges] = useState<FundraisingPledge[]>([]);
   const [pledgePayments, setPledgePayments] = useState<FundraisingPledgePayment[]>([]);
   const [interactions, setInteractions] = useState<DonorContactInteraction[]>([]);
-  const [view, setView] = useState<'donors' | 'raw' | 'pledges' | 'campaigns' | 'followups' | 'reports'>('donors');
+  const [view, setView] = useState<'donors' | 'raw' | 'pledges' | 'campaigns' | 'followups' | 'reports' | 'audit'>('donors');
   const [donorDataset, setDonorDataset] = useState<'fundraisingCuratedDonors' | 'fundraisingDonors'>('fundraisingCuratedDonors');
   const [editing, setEditing] = useState<FundraisingDonor | null>(null);
   const [editingPledge, setEditingPledge] = useState<FundraisingPledge | null>(null);
@@ -204,75 +181,6 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     finally { setSaving(false); }
   };
 
-  const importDonors = async (file: File) => {
-    setSaving(true); setError(''); setMessage('');
-    try {
-      const rows = parseCsv(await file.text());
-      if (rows.length < 2) throw new Error('The CSV must contain a header row and at least one donor.');
-      const headers = rows[0].map(normalizeCsvHeader);
-      const column = (...names: string[]) => headers.findIndex((header) => names.includes(header));
-      const columns = {
-        firstName: column('firstname', 'first', 'givenname'),
-        lastName: column('lastname', 'last', 'surname', 'familyname'),
-        initiatedName: column('initiatedname', 'spiritualname', 'devotionalname'),
-        organization: column('organization', 'organisation', 'company', 'companyname'),
-        email: column('email', 'emailaddress', 'emailid'),
-        phone: column('phone', 'phonenumber', 'mobile', 'mobilenumber', 'cell', 'cellphone'),
-        officePhone: column('officephone', 'workphone', 'businessphone'),
-        address: column('address', 'mailingaddress', 'fulladdress'),
-        street: column('street', 'streetaddress', 'address1', 'addressline1'),
-        city: column('city', 'town'),
-        state: column('state', 'province', 'region'),
-        postalCode: column('zip', 'zipcode', 'postalcode', 'postcode'),
-        status: column('status', 'donorstatus'),
-        tags: column('tags', 'tag', 'categories', 'category'),
-        assignedTo: column('assignedfundraiser', 'assignedto', 'owner', 'fundraiser'),
-        nextFollowUp: column('nextfollowup', 'followupdate', 'nextfollowupdate'),
-        notes: column('notes', 'comments', 'comment'),
-        archived: column('archived', 'isarchived'),
-        spouseName: column('spousename', 'spouse'), birthDate: column('dateofbirth', 'birthdate', 'dob'), spouseBirthDate: column('spousedateofbirth', 'spousebirthdate', 'spousedob'),
-        lastDonationDate: column('lastdonationdate'), lastDonationAmount: column('lastdonationamount'), biggestDonationDate: column('biggestdonationdate'), biggestDonationAmount: column('biggestdonationamount'),
-        monthlyDonor: column('monthlydonor', 'recurringdonor'), autoDeductDonationAmount: column('autodeductdonationamount'), autoDeductBillingAmount: column('billingamount'),
-        autoDeductPledgeAmount: column('pledgeamount'), autoDeductPledgeStart: column('pledgestart', 'pledgestartdate'), autoDeductPledgeRemaining: column('pledgeremaining'),
-        cardLastFour: column('cardlastfour', 'cardlast4'), cardBillingAddress: column('cardbillingaddress'), cardBillingZip: column('cardbillingzip'),
-        childNames: Array.from({ length: 5 }, (_, index) => column(`child${index + 1}`, `child${index + 1}name`)),
-        childBirthDates: Array.from({ length: 5 }, (_, index) => column(`child${index + 1}dateofbirth`, `child${index + 1}birthdate`, `child${index + 1}dob`)),
-      };
-      const firstIndex = columns.firstName; const organizationIndex = columns.organization;
-      if (firstIndex < 0 && organizationIndex < 0) throw new Error('CSV requires a First Name or Organization column.');
-      const existingKeys = new Set(donors.flatMap(donorDuplicateKeys)); let imported = 0; let skipped = 0;
-      for (const row of rows.slice(1, 501)) {
-        const value = (index: number) => index >= 0 ? String(row[index] || '').trim() : '';
-        const directAddress = value(columns.address);
-        const combinedAddress = [value(columns.street), value(columns.city), value(columns.state), value(columns.postalCode)].filter(Boolean).join(', ');
-        const statusValue = value(columns.status).toLowerCase();
-        const donor: FundraisingDonor = {
-          ...blankDonor(), firstName: value(firstIndex), lastName: value(columns.lastName),
-          initiatedName: value(columns.initiatedName), organization: value(organizationIndex),
-          email: value(columns.email), phone: value(columns.phone), officePhone: value(columns.officePhone), address: directAddress || combinedAddress,
-          spouseName: value(columns.spouseName), birthDate: csvDate(value(columns.birthDate)), spouseBirthDate: csvDate(value(columns.spouseBirthDate)),
-          lastDonationDate: csvDate(value(columns.lastDonationDate)), lastDonationAmount: Number(value(columns.lastDonationAmount)) || 0,
-          biggestDonationDate: csvDate(value(columns.biggestDonationDate)), biggestDonationAmount: Number(value(columns.biggestDonationAmount)) || 0,
-          monthlyDonor: csvBoolean(value(columns.monthlyDonor)), autoDeductDonationAmount: Number(value(columns.autoDeductDonationAmount)) || 0,
-          autoDeductBillingAmount: Number(value(columns.autoDeductBillingAmount)) || 0, autoDeductPledgeAmount: Number(value(columns.autoDeductPledgeAmount)) || 0,
-          autoDeductPledgeStart: csvDate(value(columns.autoDeductPledgeStart)), autoDeductPledgeRemaining: Number(value(columns.autoDeductPledgeRemaining)) || 0,
-          cardLastFour: value(columns.cardLastFour).replace(/\D/g, '').slice(-4), cardBillingAddress: value(columns.cardBillingAddress), cardBillingZip: value(columns.cardBillingZip),
-          children: Array.from({ length: 5 }, (_, index) => ({ name: value(columns.childNames[index]), birthDate: csvDate(value(columns.childBirthDates[index])) })),
-          status: ['active', 'prospect', 'inactive'].includes(statusValue) ? statusValue as FundraisingDonor['status'] : 'active',
-          tags: value(columns.tags).split(/[;,|]/).map((tag) => tag.trim()).filter(Boolean),
-          assignedTo: value(columns.assignedTo), nextFollowUp: csvDate(value(columns.nextFollowUp)),
-          notes: value(columns.notes), archived: csvBoolean(value(columns.archived)),
-        };
-        if (!donor.firstName && !donor.organization) { skipped += 1; continue; }
-        const keys = donorDuplicateKeys(donor);
-        if (keys.some((key) => existingKeys.has(key))) { skipped += 1; continue; }
-        await saveFundraisingDonor(donor, uid, donorDataset); keys.forEach((key) => existingKeys.add(key)); imported += 1;
-      }
-      setMessage(`${imported} donor${imported === 1 ? '' : 's'} imported. Recognized donor fields were mapped; missing fields were left blank. ${skipped} skipped as duplicates or incomplete rows.`);
-      setDonorRefresh((value) => value + 1);
-    } catch (error) { setError(error instanceof Error ? error.message : 'Could not import donor CSV.'); }
-    finally { setSaving(false); }
-  };
 
   const exportDonors = () => {
     const contributionFor = (donor: FundraisingDonor, type: 'pledge' | 'loan' | 'donation') => {
@@ -380,10 +288,12 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <button className={view === 'campaigns' ? 'active' : ''} onClick={() => setView('campaigns')}>Campaigns</button>
       <button className={view === 'followups' ? 'active' : ''} onClick={() => setView('followups')}>Stewardship</button>
       <button className={view === 'reports' ? 'active' : ''} onClick={() => setView('reports')}>Reports</button>
+      <button className={view === 'audit' ? 'active' : ''} onClick={() => setView('audit')}>Audit &amp; lineage</button>
     </nav>
     {message && <div className="success-message">{message}</div>}
+    {view === 'audit' && <FundraisingAuditHistory />}
     {(view === 'donors' || view === 'raw') && <section className="panel">
-      <div className="panel-head"><div><h2>{view === 'raw' ? 'Raw Donor Information' : 'Donors'}</h2><p className="muted small">{view === 'raw' ? 'Imported source information retained separately for reference and cleanup.' : 'Verified donor profiles entered and maintained by the fundraising team.'}</p></div><div className="row">{view === 'raw' && <label className="secondary-btn fundraising-import-btn">{saving ? 'Importing…' : 'Import raw donor data'}<input type="file" accept=".csv,text/csv" disabled={saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) importDonors(file); event.target.value = ''; }} /></label>}<button className="secondary-btn" onClick={exportDonors}>Export {view === 'raw' ? 'raw data' : 'donors'}</button>{view === 'donors' && <button type="button" className="primary-btn" onClick={openNewDonor}>New donor</button>}</div></div>
+      <div className="panel-head"><div><h2>{view === 'raw' ? 'Raw Donor Information' : 'Donors'}</h2><p className="muted small">{view === 'raw' ? 'Imported source information retained separately for reference and cleanup.' : 'Verified donor profiles entered and maintained by the fundraising team.'}</p></div><div className="row"><button className="secondary-btn" onClick={exportDonors}>Export {view === 'raw' ? 'raw data' : 'donors'}</button>{view === 'donors' && <button type="button" className="primary-btn" onClick={openNewDonor}>New donor</button>}</div></div>
       <div className="fundraising-crm-filters"><input value={search} onChange={(event) => { setSearch(event.target.value); setDonorDisplayLimit(100); }} placeholder="Search donors, contact details, or tags" /><label><input type="checkbox" checked={showArchived} onChange={(event) => { setShowArchived(event.target.checked); setDonorDisplayLimit(100); }} /> Show archived</label><span className="muted small">Showing {Math.min(visibleDonors.length, filtered.length).toLocaleString()} of {filtered.length.toLocaleString()} donors</span></div>
       <div className="fundraising-crm-list">
         <div className="fundraising-donor-list-head"><span>First name</span><span>Last name</span><span>Phone</span><span>Last donation</span><span>Last amount</span><span>Biggest donation</span><span>Biggest amount</span><span>Actions</span></div>
@@ -441,6 +351,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <label><span>Receipt delivery</span><input value={editing.receiptDelivery} onChange={(event) => setEditing({ ...editing, receiptDelivery: event.target.value })} placeholder="Email, letter, or both" /></label><label><span>Receipting preference</span><input value={editing.receiptingPreference} onChange={(event) => setEditing({ ...editing, receiptingPreference: event.target.value })} /></label>
       <label><span>Next follow-up</span><input type="date" value={dateValue(editing.nextFollowUp)} onChange={(event) => setEditing({ ...editing, nextFollowUp: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null })} /></label>
       <label className="full"><span>Private stewardship notes</span><textarea rows={5} value={editing.notes} onChange={(event) => setEditing({ ...editing, notes: event.target.value })} /></label>
+      {editing.id && donorDataset === 'fundraisingCuratedDonors' && <FundraisingRecordAudit key={editing.id} targetPath={`${donorDataset}/${editing.id}`} />}
       {editing.id && <section className="full fundraising-call-history" id="donor-profile-contacts"><h3>Fundraising contact history</h3><p className="muted small">Record evidence of donor calls with the call date and notes.</p><div className="fundraising-call-entry"><label><span>Date called</span><input type="date" value={callDate} onChange={(event) => setCallDate(event.target.value)} /></label><label><span>Call notes</span><textarea rows={3} value={callNotes} onChange={(event) => setCallNotes(event.target.value)} /></label><button type="button" className="secondary-btn" disabled={saving || !callDate || !callNotes.trim()} onClick={recordDonorCall}>Record call</button></div><div className="fundraising-call-list">{interactions.filter((item) => item.donorId === editing.id).map((item) => <article key={item.id}><strong>{item.calledAt.toLocaleDateString()}</strong><p>{item.notes}</p><small>Recorded {item.createdAt?.toLocaleString() || 'recently'}</small></article>)}{!interactions.some((item) => item.donorId === editing.id) && <p className="muted small">No calls recorded yet.</p>}</div></section>}
     </div><div className="modal-actions"><button className="secondary-btn" onClick={() => setEditing(null)}>Cancel</button><button className="primary-btn" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save donor'}</button></div></section></div>}
     {editingPledge && <div className="modal-backdrop"><section className="panel fundraising-donor-editor" role="dialog" aria-modal="true" aria-label="Pledge"><div className="panel-head"><h2>{editingPledge.id ? 'Update pledge' : 'Add pledge'}</h2><button className="link-btn" onClick={() => setEditingPledge(null)}>Close</button></div><div className="fundraising-donor-form">
@@ -463,9 +374,11 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <label className="full"><span>Comments and pledge details</span><textarea rows={7} value={editingPledge.notes} onChange={(event) => setEditingPledge({ ...editingPledge, notes: event.target.value })} placeholder="Record pledge details, payment notes, and follow-up information" /></label>
       {editingPledge.status === 'cancelled' ? <section className="full pledge-cancelled-notice"><strong>Cancelled pledge</strong><span>{editingPledge.cancellationReason}</span><small>Cancelled {editingPledge.cancelledAt?.toLocaleString() || 'previously'}. Original amounts and payment history are retained for audit.</small></section> : editingPledge.id && !editingPledge.id.startsWith('dashboard:') ? <section className="full pledge-cancel-control"><h3>Cancel pledge</h3><p className="muted small">This voids the pledge from active totals without deleting its record or payment history.</p><label><span>Cancellation reason *</span><textarea rows={2} value={cancellationReason} onChange={(event) => setCancellationReason(event.target.value)} placeholder="Explain why the pledge is being cancelled" /></label><button type="button" className="danger-btn" disabled={saving || !cancellationReason.trim()} onClick={cancelPledge}>Cancel pledge and void amount</button></section> : null}
       <section className="full pledge-payment-history"><div><h3>Payment history</h3><p className="muted small">Record when pledge money was received, its payment mode, and supporting details.</p></div>
+        {editingPledge.id && !editingPledge.id.startsWith('dashboard:') && <FundraisingRecordAudit key={editingPledge.id} targetPath={`fundraisingPledges/${editingPledge.id}`} />}
         {editingPledge.status === 'cancelled' ? <><div className="pledge-source-note"><span>This pledge is cancelled. Existing receipts remain visible, but new payments cannot be added.</span></div><div className="pledge-payment-list">{pledgePayments.filter((payment) => payment.pledgeId === editingPledge.id).map((payment) => <article key={payment.id}><div><strong>{money.format(payment.amount)}</strong><span>Received {payment.receivedAt.toLocaleDateString()} · {payment.method.replace('-', ' ')}</span><span>Status: {payment.status}</span></div><div><b>{payment.reference || payment.receiptNumber || 'No reference'}</b><p>{payment.comments || 'No additional comments'}</p></div></article>)}{!pledgePayments.some((payment) => payment.pledgeId === editingPledge.id) && <p className="muted small">No received payments were recorded.</p>}</div></> : editingPledge.id.startsWith('dashboard:') || !editingPledge.id ? <div className="pledge-source-note"><span>Save and link this pledge first. Then reopen it to record received payments.</span></div> : <>
           <div id="pledge-payment-form" className="pledge-payment-entry">
             {editingPayment && <strong className="full">Editing received payment — save changes below</strong>}
+            {editingPayment && <FundraisingRecordAudit key={editingPayment.id} targetPath={`fundraisingPledgePayments/${editingPayment.id}`} />}
             <label><span>Date received *</span><input type="date" max={dateValue(new Date())} value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /></label>
             <label><span>Amount received *</span><div className="money-input"><span>$</span><input type="number" min="0.01" max={Math.max(0, editingPledge.pledgedAmount - editingPledge.paidAmount + (editingPayment?.amount || 0))} step="0.01" value={paymentAmount || ''} onChange={(event) => setPaymentAmount(Number(event.target.value) || 0)} /></div></label>
             <label><span>Payment mode *</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PledgePaymentMethod)}><option value="zelle">Zelle</option><option value="check">Check</option><option value="cash">Cash</option><option value="card">Credit/debit card</option><option value="bank-transfer">Bank transfer</option><option value="other">Other</option></select></label>

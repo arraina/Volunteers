@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "fundraisingAuditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "targetPath", "order": "ASCENDING" },
+        { "fieldPath": "occurredAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "reminders",
       "queryScope": "COLLECTION",
       "fields": [
