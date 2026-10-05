@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TempleEvent } from '../helpers/types';
-import { addDonorInteraction, CampaignSummary, donorDuplicateKeys, DonorContactInteraction, FundraisingDonor, FundraisingPledge, loadCampaignSummaries, saveFundraisingDonor, saveFundraisingPledge, subscribeDonorInteractions, subscribeFundraisingDonors, subscribeFundraisingPledges } from '../helpers/fundraisingCrm';
+import { addDonorInteraction, CampaignSummary, donorDuplicateKeys, DonorContactInteraction, FundraisingDonor, FundraisingPledge, loadCampaignSummaries, saveFundraisingDonor, saveFundraisingPledge, subscribeDonorInteractions, subscribeFundraisingDonors, subscribeFundraisingPledges, uploadFundraisingDonorPicture } from '../helpers/fundraisingCrm';
 import { isAiConfigured, parseDonorQuestion } from '../helpers/ai';
 import QuickBooksReports from './QuickBooksReports';
 
 const blankDonor = (): FundraisingDonor => ({
   id: '', firstName: '', lastName: '', title: '', middleInitial: '', initiatedName: '', email: '', phone: '', officePhone: '', organization: '', address: '', city: '', state: '', postalCode: '', country: '',
-  homePhone: '', previousHomePhone: '', phoneVerified: false, phoneAppendDate: null, doNotCall: false, doNotMail: false, noMailReason: '', receiptDelivery: '', receiptingPreference: '', pictureUrl: '', futurePledge: false, fiveKAmount: 0,
+  homePhone: '', previousHomePhone: '', phoneVerified: false, phoneAppendDate: null, doNotCall: false, doNotMail: false, noMailReason: '', receiptDelivery: '', receiptingPreference: '', pictureUrl: '', picturePath: '', futurePledge: false, fiveKAmount: 0,
   spouseName: '', weddingAnniversary: null, birthDate: null, spouseBirthDate: null,
   children: Array.from({ length: 5 }, () => ({ name: '', birthDate: null })), lastDonationDate: null, lastDonationAmount: 0, biggestDonationDate: null, biggestDonationAmount: 0,
   autoDeductDonationAmount: 0, autoDeductBillingAmount: 0, monthlyDonor: false, autoDeductPledgeAmount: 0, autoDeductPledgeStart: null, autoDeductPledgeRemaining: 0,
@@ -105,6 +105,27 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
 
   const goToDonorSection = (sectionId: string) => {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const uploadDonorPicture = async (file?: File) => {
+    if (!file || !editing) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size >= 5 * 1024 * 1024) {
+      setError('Choose a JPG, PNG, or WebP image smaller than 5 MB.');
+      return;
+    }
+    setSaving(true); setError(''); setMessage('');
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('The picture could not be read.'));
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadFundraisingDonorPicture(dataUrl);
+      setEditing((current) => current ? { ...current, pictureUrl: result.imageUrl, picturePath: result.imagePath } : current);
+      setMessage('Donor picture uploaded. Save the donor record to keep it attached.');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'The donor picture could not be uploaded.'); }
+    finally { setSaving(false); }
   };
 
   const save = async () => {
@@ -339,7 +360,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <label><span>Card last four digits only</span><input inputMode="numeric" maxLength={4} value={editing.cardLastFour} onChange={(event) => setEditing({ ...editing, cardLastFour: event.target.value.replace(/\D/g, '').slice(0, 4) })} placeholder="1234" /></label><label><span>Card billing ZIP</span><input value={editing.cardBillingZip} onChange={(event) => setEditing({ ...editing, cardBillingZip: event.target.value })} /></label>
       <label className="full"><span>Card billing address</span><textarea rows={2} value={editing.cardBillingAddress} onChange={(event) => setEditing({ ...editing, cardBillingAddress: event.target.value })} /></label><p className="full muted small">For security, store only the last four card digits here. Full card numbers must remain with the payment processor.</p>
       <label id="donor-profile-other"><span>Tags (comma separated)</span><input value={editing.tags.join(', ')} onChange={(event) => setEditing({ ...editing, tags: event.target.value.split(',') })} /></label><label><span>Assigned fundraiser</span><input value={editing.assignedTo} onChange={(event) => setEditing({ ...editing, assignedTo: event.target.value })} /></label>
-      <label><span>Picture URL</span><input type="url" value={editing.pictureUrl} onChange={(event) => setEditing({ ...editing, pictureUrl: event.target.value })} /></label><label><span>Website</span><input type="url" value={editing.websiteUrl} onChange={(event) => setEditing({ ...editing, websiteUrl: event.target.value })} /></label>
+      <section className="full fundraising-donor-picture"><div>{editing.pictureUrl ? <img src={editing.pictureUrl} alt={`${donorName(editing)} donor profile`} /> : <span>No donor picture</span>}</div><label className="secondary-btn"><span>{editing.pictureUrl ? 'Replace donor picture' : 'Upload donor picture'}</span><input type="file" accept="image/jpeg,image/png,image/webp" disabled={saving} onChange={(event) => { uploadDonorPicture(event.target.files?.[0]); event.target.value = ''; }} /></label>{editing.pictureUrl && <button type="button" className="link-btn danger" onClick={() => setEditing({ ...editing, pictureUrl: '', picturePath: '' })}>Remove picture</button>}</section><label><span>Picture URL</span><input type="url" value={editing.pictureUrl} onChange={(event) => setEditing({ ...editing, pictureUrl: event.target.value, picturePath: '' })} /></label><label><span>Website</span><input type="url" value={editing.websiteUrl} onChange={(event) => setEditing({ ...editing, websiteUrl: event.target.value })} /></label>
       <label><span>Facebook link</span><input type="url" value={editing.facebookUrl} onChange={(event) => setEditing({ ...editing, facebookUrl: event.target.value })} /></label><label><span>LinkedIn link</span><input type="url" value={editing.linkedinUrl} onChange={(event) => setEditing({ ...editing, linkedinUrl: event.target.value })} /></label>
       <label><span>Twitter / X</span><input value={editing.twitterHandle} onChange={(event) => setEditing({ ...editing, twitterHandle: event.target.value })} /></label><label><span>Phone append date</span><input type="date" value={dateValue(editing.phoneAppendDate)} onChange={(event) => setEditing({ ...editing, phoneAppendDate: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null })} /></label>
       <label className="checkbox-label"><input type="checkbox" checked={editing.phoneVerified} onChange={(event) => setEditing({ ...editing, phoneVerified: event.target.checked })} /> Home phone verified</label><label className="checkbox-label"><input type="checkbox" checked={editing.doNotCall} onChange={(event) => setEditing({ ...editing, doNotCall: event.target.checked })} /> Do not call</label>

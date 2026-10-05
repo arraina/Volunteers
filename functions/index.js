@@ -354,6 +354,23 @@ exports.deleteGovindasItemImage = onCall({ region: 'us-central1', maxInstances: 
   return { deleted: true };
 });
 
+exports.uploadFundraisingDonorPicture = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {
+  await requireDepartmentAccess(request, 'fundraising', true);
+  const dataUrl = String(request.data?.dataUrl || '');
+  const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) throw new HttpsError('invalid-argument', 'Choose a JPG, PNG, or WebP image.');
+  const bytes = Buffer.from(match[2], 'base64');
+  if (!bytes.length || bytes.length >= 5 * 1024 * 1024) throw new HttpsError('invalid-argument', 'The image must be smaller than 5 MB.');
+  const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[match[1]];
+  const imagePath = `fundraising/donor-pictures/${randomUUID()}.${extension}`;
+  const downloadToken = randomUUID();
+  await admin.storage().bucket().file(imagePath).save(bytes, { resumable: false, metadata: {
+    contentType: match[1], cacheControl: 'private,max-age=3600', metadata: { firebaseStorageDownloadTokens: downloadToken },
+  } });
+  const bucketName = admin.storage().bucket().name;
+  return { imagePath, imageUrl: `https://firebasestorage.googleapis.com/v0/b/${bucketName}/o/${encodeURIComponent(imagePath)}?alt=media&token=${downloadToken}` };
+});
+
 function cleanFeedbackInput(data) {
   const rating = Math.round(Number(data?.rating));
   const feedbackText = String(data?.feedbackText || '').trim().slice(0, 5000);

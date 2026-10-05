@@ -1,5 +1,7 @@
 import { addDoc, collection, doc, documentId, DocumentData, getDocs, limit, onSnapshot, orderBy, query, Query, QueryDocumentSnapshot, QuerySnapshot, serverTimestamp, startAfter, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { functions } from '../config/firebase';
+import { httpsCallable } from 'firebase/functions';
 import { firestoreTimestampToDate } from './types';
 
 export type DonorStatus = 'active' | 'prospect' | 'inactive';
@@ -32,6 +34,7 @@ export interface FundraisingDonor {
   receiptDelivery: string;
   receiptingPreference: string;
   pictureUrl: string;
+  picturePath: string;
   futurePledge: boolean;
   fiveKAmount: number;
   spouseName: string;
@@ -109,7 +112,7 @@ function donorFromSnapshot(item: QueryDocumentSnapshot): FundraisingDonor {
     homePhone: String(data.homePhone || ''), previousHomePhone: String(data.previousHomePhone || ''), phoneVerified: data.phoneVerified === true,
     phoneAppendDate: data.phoneAppendDate ? firestoreTimestampToDate(data.phoneAppendDate) : null, doNotCall: data.doNotCall === true, doNotMail: data.doNotMail === true,
     noMailReason: String(data.noMailReason || ''), receiptDelivery: String(data.receiptDelivery || ''), receiptingPreference: String(data.receiptingPreference || ''),
-    pictureUrl: String(data.pictureUrl || ''), futurePledge: data.futurePledge === true, fiveKAmount: Number(data.fiveKAmount) || 0,
+    pictureUrl: String(data.pictureUrl || ''), picturePath: String(data.picturePath || ''), futurePledge: data.futurePledge === true, fiveKAmount: Number(data.fiveKAmount) || 0,
     spouseName: String(data.spouseName || ''), weddingAnniversary: data.weddingAnniversary ? firestoreTimestampToDate(data.weddingAnniversary) : null,
     birthDate: data.birthDate ? firestoreTimestampToDate(data.birthDate) : null,
     spouseBirthDate: data.spouseBirthDate ? firestoreTimestampToDate(data.spouseBirthDate) : null,
@@ -167,7 +170,7 @@ export async function saveFundraisingDonor(donor: Omit<FundraisingDonor, 'id' | 
     normalizedEmail: cleanEmail(donor.email), normalizedPhone: cleanPhone(donor.phone), organization: donor.organization.trim(), address: donor.address.trim(),
     city: donor.city.trim(), state: donor.state.trim(), postalCode: donor.postalCode.trim(), country: donor.country.trim(), homePhone: donor.homePhone.trim(), previousHomePhone: donor.previousHomePhone.trim(),
     phoneVerified: donor.phoneVerified, phoneAppendDate: donor.phoneAppendDate, doNotCall: donor.doNotCall, doNotMail: donor.doNotMail, noMailReason: donor.noMailReason.trim(),
-    receiptDelivery: donor.receiptDelivery.trim(), receiptingPreference: donor.receiptingPreference.trim(), pictureUrl: donor.pictureUrl.trim(), futurePledge: donor.futurePledge, fiveKAmount: Math.max(0, donor.fiveKAmount),
+    receiptDelivery: donor.receiptDelivery.trim(), receiptingPreference: donor.receiptingPreference.trim(), pictureUrl: donor.pictureUrl.trim(), picturePath: donor.picturePath.trim(), futurePledge: donor.futurePledge, fiveKAmount: Math.max(0, donor.fiveKAmount),
     spouseName: donor.spouseName.trim(), weddingAnniversary: donor.weddingAnniversary, birthDate: donor.birthDate, spouseBirthDate: donor.spouseBirthDate,
     children: donor.children.slice(0, 5).map((child) => ({ name: child.name.trim(), birthDate: child.birthDate })),
     lastDonationDate: donor.lastDonationDate, lastDonationAmount: Math.max(0, donor.lastDonationAmount),
@@ -183,6 +186,10 @@ export async function saveFundraisingDonor(donor: Omit<FundraisingDonor, 'id' | 
   };
   if (donor.id) return updateDoc(doc(db, collectionName, donor.id), payload);
   return addDoc(collection(db, collectionName), { ...payload, createdAt: serverTimestamp(), createdBy: uid || null });
+}
+
+export async function uploadFundraisingDonorPicture(dataUrl: string): Promise<{ imageUrl: string; imagePath: string }> {
+  return (await httpsCallable<{ dataUrl: string }, { imageUrl: string; imagePath: string }>(functions, 'uploadFundraisingDonorPicture')({ dataUrl })).data;
 }
 
 export function subscribeDonorInteractions(cb: (records: DonorContactInteraction[]) => void, onError?: (error: Error) => void) {
