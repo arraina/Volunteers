@@ -110,6 +110,7 @@ const DepartmentItemRow: React.FC<{
   item: DepartmentWorkspaceResult['tasks'][number]; type: DepartmentItemType; canManage: boolean; busy: boolean;
   act: (type: DepartmentItemType, id: string, action: WorkspaceAction, changes?: WorkspaceChanges) => Promise<void>;
 }> = ({ item, type, canManage, busy, act }) => {
+  const { departmentId } = useParams();
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(item.title);
   const [editDetails, setEditDetails] = useState(item.details || '');
@@ -141,7 +142,7 @@ const DepartmentItemRow: React.FC<{
       {(canManage || item.canEdit) && <div className="department-item-actions">
         {type === 'task' && canManage && <button disabled={busy} onClick={() => act(type, item.id, item.status === 'completed' ? 'reopen' : 'complete')}>{item.status === 'completed' ? 'Reopen' : 'Complete'}</button>}
         {item.canEdit && <button disabled={busy} onClick={() => setEditing(true)}>Edit</button>}
-        {item.canEdit && <button className="danger" disabled={busy} onClick={remove}>Remove</button>}
+        {item.canEdit && departmentId !== 'fundraising' && <button className="danger" disabled={busy} onClick={remove}>Remove</button>}
       </div>}
     </>}
   </article>;

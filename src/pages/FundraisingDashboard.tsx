@@ -259,7 +259,6 @@ const FundraisingDashboard: React.FC<{
           </select>
           <div className="money-input"><span>$</span><input disabled={locked} aria-label={`Amount row ${index + 1}`} aria-invalid={invalidEntryIds.includes(entry.id) && entry.amount <= 0} type="number" min="0.01" step="0.01" value={entry.amount || ''} onChange={(event) => updateEntry(entry.id, { amount: Math.max(0, Number(event.target.value) || 0) })} placeholder="0.00 *" /></div>
           <input disabled={locked} aria-label={`Comments row ${index + 1}`} value={entry.comments} onChange={(event) => updateEntry(entry.id, { comments: event.target.value })} placeholder="Comments" />
-          <button disabled={locked} className="link-btn danger" aria-label={`Remove row ${index + 1}`} onClick={() => { setEntries((currentEntries) => currentEntries.length === 1 ? [blankEntry()] : currentEntries.filter((item) => item.id !== entry.id)); setInvalidEntryIds((currentIds) => currentIds.filter((entryId) => entryId !== entry.id)); setEntryValidationMessage(''); }}>Remove</button>
         </div>)}
         <div className="fundraising-entry-footer">
           <div className="fundraising-entry-total"><span>Listed pledges, loans, and donations</span><strong>{money.format(entryTotal)}</strong></div>
