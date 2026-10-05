@@ -315,19 +315,29 @@ export function subscribeFundraisingPledgePayments(cb: (payments: FundraisingPle
   }).sort((a, b) => Number(b.receivedAt) - Number(a.receivedAt))), (error) => onError?.(error));
 }
 
-export async function recordFundraisingPledgePayment(input: Omit<FundraisingPledgePayment, 'id' | 'createdAt' | 'createdBy'>, uid: string) {
+export async function recordFundraisingPledgePayment(input: Omit<FundraisingPledgePayment, 'id' | 'createdAt' | 'createdBy'>, uid: string, paymentId?: string) {
   const pledgeRef = doc(db, 'fundraisingPledges', input.pledgeId);
-  const paymentRef = doc(collection(db, 'fundraisingPledgePayments'));
-  await runTransaction(db, async (transaction) => {
+  const paymentRef = paymentId ? doc(db, 'fundraisingPledgePayments', paymentId) : doc(collection(db, 'fundraisingPledgePayments'));
+  return runTransaction(db, async (transaction) => {
     const pledgeSnapshot = await transaction.get(pledgeRef);
+    const previous = paymentId ? await transaction.get(paymentRef) : null;
+    if (paymentId && (!previous?.exists() || previous.data().pledgeId !== input.pledgeId)) throw new Error('This payment no longer exists or belongs to another pledge.');
+    if (!Number.isFinite(input.amount) || !Number.isFinite(input.receivedAt.getTime()) || input.receivedAt > new Date()) throw new Error('Enter a valid amount and received date that is not in the future.');
     if (!pledgeSnapshot.exists()) throw new Error('Save the pledge before recording a payment.');
     const pledge = pledgeSnapshot.data();
     const pledgedAmount = Number(pledge.pledgedAmount) || 0;
     const paidAmount = Number(pledge.paidAmount) || 0;
     if (pledge.status === 'cancelled') throw new Error('Payments cannot be added to a cancelled pledge.');
-    if (input.amount <= 0 || paidAmount + input.amount > pledgedAmount) throw new Error('Payment must be greater than zero and cannot exceed the remaining pledge balance.');
-    const newPaidAmount = paidAmount + input.amount;
-    transaction.set(paymentRef, { ...input, receivedBy: input.receivedBy.trim(), receiptNumber: input.receiptNumber.trim(), designation: input.designation.trim(), reference: input.reference.trim(), comments: input.comments.trim(), createdBy: uid, createdAt: serverTimestamp() });
-    transaction.update(pledgeRef, { paidAmount: newPaidAmount, status: newPaidAmount >= pledgedAmount ? 'fulfilled' : 'active', updatedAt: serverTimestamp(), updatedBy: uid });
+    const newPaidAmount = Math.round((paidAmount - Number(previous?.data()?.amount || 0) + input.amount) * 100) / 100;
+    if (input.amount <= 0 || newPaidAmount < 0 || newPaidAmount > pledgedAmount) throw new Error('Payment must be greater than zero and cannot exceed the pledge balance.');
+    const payload = { ...input, receivedBy: input.receivedBy.trim(), receiptNumber: input.receiptNumber.trim(), designation: input.designation.trim(), reference: input.reference.trim(), comments: input.comments.trim() };
+    if (previous) {
+      const revisionRef = doc(collection(paymentRef, 'revisions'));
+      transaction.set(revisionRef, { previous: previous.data(), updatedBy: uid, updatedAt: serverTimestamp() });
+      transaction.update(paymentRef, { ...payload, correctionRevisionId: revisionRef.id, updatedBy: uid, updatedAt: serverTimestamp() });
+    } else transaction.set(paymentRef, { ...payload, createdBy: uid, createdAt: serverTimestamp() });
+    const status = newPaidAmount >= pledgedAmount ? 'fulfilled' : pledge.status === 'on-hold' ? 'on-hold' : 'active';
+    transaction.update(pledgeRef, { paidAmount: newPaidAmount, status, updatedAt: serverTimestamp(), updatedBy: uid });
+    return { paidAmount: newPaidAmount, status: status as FundraisingPledge['status'] };
   });
 }

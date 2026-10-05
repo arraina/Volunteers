@@ -431,11 +431,12 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
-    // Append-only receipts provide an auditable history for pledge payments.
+    // Payment corrections retain immutable previous versions for audit.
     // The pledge total is updated in the same client transaction.
     match /fundraisingPledgePayments/{paymentId} {
       allow read: if isOwner() || isDepartmentAdmin('fundraising');
-      allow create: if (isOwner() || isDepartmentAdmin('fundraising'))
+      function validPayment() {
+        return (isOwner() || isDepartmentAdmin('fundraising'))
         && request.resource.data.pledgeId is string
         && request.resource.data.pledgeId.size() > 0
         && get(/databases/$(database)/documents/fundraisingPledges/$(request.resource.data.pledgeId)).data.status != 'cancelled'
@@ -450,10 +451,30 @@ service cloud.firestore {
         && request.resource.data.receiptNumber is string
         && request.resource.data.designation is string
         && request.resource.data.reference is string
-        && request.resource.data.comments is string
-        && request.resource.data.createdBy == request.auth.uid;
-      allow update: if false;
+        && request.resource.data.comments is string;
+      }
+      allow create: if validPayment() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if validPayment()
+        && request.resource.data.pledgeId == resource.data.pledgeId
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['amount', 'receivedAt', 'method', 'status', 'receivedBy', 'depositedAt', 'receiptNumber', 'designation', 'reference', 'comments', 'updatedBy', 'updatedAt', 'correctionRevisionId'])
+        && request.resource.data.correctionRevisionId is string
+        && getAfter(/databases/$(database)/documents/fundraisingPledgePayments/$(paymentId)/revisions/$(request.resource.data.correctionRevisionId)).data.previous == resource.data
+        && getAfter(/databases/$(database)/documents/fundraisingPledgePayments/$(paymentId)/revisions/$(request.resource.data.correctionRevisionId)).data.updatedAt == request.time
+        && getAfter(/databases/$(database)/documents/fundraisingPledges/$(resource.data.pledgeId)).data.paidAmount >= get(/databases/$(database)/documents/fundraisingPledges/$(resource.data.pledgeId)).data.paidAmount - resource.data.amount + request.resource.data.amount - 0.001
+        && getAfter(/databases/$(database)/documents/fundraisingPledges/$(resource.data.pledgeId)).data.paidAmount <= get(/databases/$(database)/documents/fundraisingPledges/$(resource.data.pledgeId)).data.paidAmount - resource.data.amount + request.resource.data.amount + 0.001;
       allow delete: if isOwner();
+      match /revisions/{revisionId} {
+        allow read: if isOwner() || isDepartmentAdmin('fundraising');
+        allow create: if (isOwner() || isDepartmentAdmin('fundraising'))
+          && request.resource.data.updatedBy == request.auth.uid
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.previous == get(/databases/$(database)/documents/fundraisingPledgePayments/$(paymentId)).data;
+        allow update, delete: if false;
+      }
     }
 
     // Immutable call evidence for donor stewardship. Corrections are appended as
