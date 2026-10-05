@@ -129,6 +129,9 @@
 .pledge-cancel-control h3, .pledge-cancel-control p { margin: 0; }
 .pledge-cancel-control .danger-btn { justify-self: start; }
 .pledge-cancelled-notice span { color: #991b1b; }
+.pledge-review-list summary { cursor: pointer; font-weight: 800; }
+.pledge-review-list > button { display: grid; gap: .4rem; width: 100%; text-align: left; margin-top: .7rem; white-space: normal; }
+.pledge-review-list > label input { width: 5rem; margin: .5rem; }
 .pledge-payment-history { display: grid; gap: 0.9rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 .pledge-payment-history h3 { margin: 0; }
 .pledge-payment-entry { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; padding: 1rem; border: 1px solid var(--line); border-radius: 12px; background: #fbfefb; }
