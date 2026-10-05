@@ -36,6 +36,28 @@ export interface DonorQueryPlan {
   limit: number;
 }
 
+function parseDonorQuestionLocally(question: string): DonorQueryPlan {
+  const original = question.trim();
+  const lower = original.toLowerCase();
+  const intent: DonorQueryPlan['intent'] = /\b(how many|count|number of)\b/.test(lower) ? 'count' : 'search';
+  const duplicatesOnly = /\b(duplicate|duplicates|duplicated)\b/.test(lower);
+  const hasEmail: DonorQueryPlan['hasEmail'] = /\b(no|without|missing)\s+email\b/.test(lower) ? 'no' : /\b(has|have|with)\s+(an?\s+)?email\b/.test(lower) ? 'yes' : 'any';
+  const status: DonorQueryPlan['status'] = /\binactive\b/.test(lower) ? 'inactive' : /\bprospect(s)?\b/.test(lower) ? 'prospect' : /\bactive\b/.test(lower) ? 'active' : 'any';
+  const followUp: DonorQueryPlan['followUp'] = /\boverdue\b.*\bfollow[ -]?up|\bfollow[ -]?up\b.*\boverdue\b/.test(lower) ? 'overdue'
+    : /\b(upcoming|future)\b.*\bfollow[ -]?up|\bfollow[ -]?up\b.*\b(upcoming|future)\b/.test(lower) ? 'upcoming'
+      : /\b(no|without|missing)\b.*\bfollow[ -]?up|\bfollow[ -]?up\b.*\b(no|without|missing)\b/.test(lower) ? 'missing'
+        : /\b(scheduled|with)\b.*\bfollow[ -]?up|\bfollow[ -]?up\b.*\bscheduled\b/.test(lower) ? 'scheduled' : 'any';
+  const assignedMatch = original.match(/assigned\s+(?:to\s+)?([a-z][a-z .'-]*?)(?=\s+(?:with|who|having|and|without|no|missing|overdue|upcoming|active|inactive|prospect|follow)|[?.!,]|$)/i);
+  const assignedFundraiser = assignedMatch?.[1]?.trim() || '';
+  let searchable = lower
+    .replace(/assigned\s+(?:to\s+)?[a-z][a-z .'-]*?(?=\s+(?:with|who|having|and|without|no|missing|overdue|upcoming|active|inactive|prospect|follow)|[?.!,]|$)/gi, ' ')
+    .replace(/\b(how many|count|number of|find|show|list|search|which|all|me|the|donor|donors|records?|people|person|are|is|do|does|have|has|with|without|an?|email|emails|duplicate|duplicates|duplicated|active|inactive|prospects?|status|no|missing|scheduled|overdue|upcoming|future|follow|up|followup|follow-up|assigned|to|who|and|having)\b/g, ' ')
+    .replace(/[^a-z0-9@+.'-]+/g, ' ').trim();
+  const quoted = Array.from(original.matchAll(/["']([^"']+)["']/g)).map((match) => match[1].trim()).filter(Boolean);
+  const terms = quoted.length ? quoted : (searchable ? searchable.split(/\s+/).filter((term) => term.length > 1).slice(0, 10) : []);
+  return { intent, terms, assignedFundraiser, followUp, dateFrom: '', dateTo: '', status, duplicatesOnly, hasEmail, limit: 20 };
+}
+
 export type TaskManagementAction =
   | {
       type: 'update_task';
@@ -94,13 +116,21 @@ Return valid minified JSON exactly as {"answer":string}. Keep the answer concise
 }
 
 export async function parseDonorQuestion(question: string): Promise<DonorQueryPlan> {
-  if (!isAiConfigured) throw new Error('The AI donor assistant is not configured.');
+  if (!isAiConfigured) return parseDonorQuestionLocally(question);
   const today = new Date().toISOString().slice(0, 10);
   const system = `You interpret questions from an authorized fundraising administrator into a donor-directory query. Today is ${today}.
 Return ONLY valid minified JSON exactly matching:
 {"intent":"search"|"count","terms":string[],"assignedFundraiser":string,"followUp":"any"|"missing"|"scheduled"|"overdue"|"upcoming","dateFrom":string,"dateTo":string,"status":"any"|"active"|"prospect"|"inactive","duplicatesOnly":boolean,"hasEmail":"any"|"yes"|"no","limit":number}
 Use terms for names, initiated names, email, phone, organization, address, tags, or notes explicitly mentioned by the user. Use ISO dates for dateFrom/dateTo and an empty string when unspecified. Choose count only when the user asks how many. Limit must be 1-50 and defaults to 20. Do not answer the question and do not invent donor data.`;
-  const raw = extractJson(await generateWithResilience(question, system));
+  let raw: any;
+  try {
+    raw = extractJson(await generateWithResilience(question, system));
+  } catch (error) {
+    // Donor filtering itself is local and deterministic. If the optional AI
+    // interpreter is blocked, offline, rate-limited, or misconfigured, keep
+    // the feature usable without sending donor records anywhere.
+    return parseDonorQuestionLocally(question);
+  }
   const allowedFollowUp = ['any', 'missing', 'scheduled', 'overdue', 'upcoming'];
   const allowedStatus = ['any', 'active', 'prospect', 'inactive'];
   const allowedEmail = ['any', 'yes', 'no'];
