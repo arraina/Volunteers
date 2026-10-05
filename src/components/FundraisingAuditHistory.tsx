@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, doc, getDoc, getDocs, limit, orderBy, query, QueryDocumentSnapshot, startAfter, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, QueryDocumentSnapshot, startAfter, where } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
 const display = (value: any): string => {
@@ -75,4 +75,22 @@ export default FundraisingAuditHistory;
 export const FundraisingRecordAudit: React.FC<{ targetPath: string }> = ({ targetPath }) => {
   const [open, setOpen] = useState(false);
   return <section className="full"><button type="button" className="secondary-btn" onClick={() => setOpen(!open)}>{open ? 'Hide audit history' : 'View record audit & lineage'}</button>{open && <FundraisingAuditHistory targetPath={targetPath} />}</section>;
+};
+
+export const FundraisingPaymentAudit: React.FC<{ paymentId: string }> = ({ paymentId }) => {
+  const targetPath = `fundraisingPledgePayments/${paymentId}`;
+  const [latest, setLatest] = useState<QueryDocumentSnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    setLoading(true); setLatest(null); setError('');
+    return onSnapshot(query(collection(db, 'fundraisingAuditLogs'), where('targetPath', '==', targetPath), orderBy('occurredAt', 'desc'), limit(1)), (snapshot) => {
+      setLatest(snapshot.docs[0] || null); setLoading(false);
+    }, (cause) => { setError(cause.message); setLoading(false); });
+  }, [targetPath]);
+  const data = latest?.data();
+  return <div>
+    {loading ? <p className="muted small">Loading who changed this payment…</p> : error ? <p className="error-message" role="alert">Audit could not be loaded: {error}</p> : data ? <p className="small"><strong>{data.action === 'created' ? 'Recorded by' : 'Last changed by'}: {data.actorName || data.actorEmail || 'Unknown user'}</strong><br />{display(data.occurredAt)}{data.actorEmail && <><br />{data.actorEmail}</>}</p> : <p className="muted small">No audit entry yet. Changes made before audit tracking began are not available.</p>}
+    <FundraisingRecordAudit targetPath={targetPath} />
+  </div>;
 };
