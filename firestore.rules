@@ -421,6 +421,8 @@ service cloud.firestore {
         && request.resource.data.paidAmount is number
         && request.resource.data.paidAmount >= 0
         && request.resource.data.paidAmount <= request.resource.data.pledgedAmount
+        && request.resource.data.openBalanceKnown is bool
+        && request.resource.data.openBalanceSource is string
         && request.resource.data.frequency in ['one-time', 'monthly', 'quarterly', 'annual', 'custom']
         && request.resource.data.status in ['active', 'fulfilled', 'on-hold', 'cancelled'];
       allow delete: if isOwner();

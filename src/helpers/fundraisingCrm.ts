@@ -93,6 +93,8 @@ export interface FundraisingPledge {
   purpose: string;
   pledgedAmount: number;
   paidAmount: number;
+  openBalanceKnown: boolean;
+  openBalanceSource: string;
   pledgeDate: Date | null;
   dueDate: Date | null;
   nextPaymentDate: Date | null;
@@ -261,6 +263,7 @@ export function subscribeFundraisingPledges(cb: (pledges: FundraisingPledge[]) =
         donorFirstName: String(data.donorFirstName || ''), donorLastName: String(data.donorLastName || ''),
         sourceCampaignEntryId: String(data.sourceCampaignEntryId || ''), purpose: String(data.purpose || ''),
         pledgedAmount: Number(data.pledgedAmount) || 0, paidAmount: Number(data.paidAmount) || 0,
+        openBalanceKnown: data.openBalanceKnown !== false, openBalanceSource: String(data.openBalanceSource || ''),
         pledgeDate: data.pledgeDate ? firestoreTimestampToDate(data.pledgeDate) : null,
         dueDate: data.dueDate ? firestoreTimestampToDate(data.dueDate) : null,
         nextPaymentDate: data.nextPaymentDate ? firestoreTimestampToDate(data.nextPaymentDate) : null,
@@ -281,6 +284,7 @@ export async function saveFundraisingPledge(pledge: Omit<FundraisingPledge, 'id'
     donorFirstName: pledge.donorFirstName.trim(), donorLastName: pledge.donorLastName.trim(),
     sourceCampaignEntryId: pledge.sourceCampaignEntryId, purpose: pledge.purpose.trim(),
     pledgedAmount: Math.max(0, pledge.pledgedAmount), paidAmount: Math.max(0, pledge.paidAmount),
+    openBalanceKnown: pledge.openBalanceKnown, openBalanceSource: pledge.openBalanceSource.trim(),
     pledgeDate: pledge.pledgeDate, dueDate: pledge.dueDate, nextPaymentDate: pledge.nextPaymentDate,
     frequency: pledge.frequency, status: pledge.paidAmount >= pledge.pledgedAmount ? 'fulfilled' : pledge.status,
     notes: pledge.notes.trim(),
