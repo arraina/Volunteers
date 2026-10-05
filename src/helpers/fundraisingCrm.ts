@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, documentId, DocumentData, getDocs, limit, onSnapshot, orderBy, query, Query, QueryDocumentSnapshot, QuerySnapshot, serverTimestamp, startAfter, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, documentId, DocumentData, getDocs, limit, onSnapshot, orderBy, query, Query, QueryDocumentSnapshot, QuerySnapshot, runTransaction, serverTimestamp, startAfter, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { functions } from '../config/firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -101,6 +101,19 @@ export interface FundraisingPledge {
   notes: string;
   createdAt: Date | null;
   updatedAt: Date | null;
+}
+
+export type PledgePaymentMethod = 'zelle' | 'check' | 'cash' | 'card' | 'bank-transfer' | 'other';
+export interface FundraisingPledgePayment {
+  id: string;
+  pledgeId: string;
+  amount: number;
+  receivedAt: Date;
+  method: PledgePaymentMethod;
+  reference: string;
+  comments: string;
+  createdBy: string;
+  createdAt: Date | null;
 }
 
 const cleanPhone = (value: string) => value.replace(/\D/g, '');
@@ -269,4 +282,33 @@ export async function saveFundraisingPledge(pledge: Omit<FundraisingPledge, 'id'
   };
   if (pledge.id) return updateDoc(doc(db, 'fundraisingPledges', pledge.id), payload);
   return addDoc(collection(db, 'fundraisingPledges'), { ...payload, createdAt: serverTimestamp(), createdBy: uid || null });
+}
+
+export function subscribeFundraisingPledgePayments(cb: (payments: FundraisingPledgePayment[]) => void, onError?: (error: Error) => void) {
+  return onSnapshot(collection(db, 'fundraisingPledgePayments'), (snapshot) => cb(snapshot.docs.map((item) => {
+    const data = item.data();
+    return {
+      id: item.id, pledgeId: String(data.pledgeId || ''), amount: Number(data.amount) || 0,
+      receivedAt: firestoreTimestampToDate(data.receivedAt),
+      method: ['zelle', 'check', 'cash', 'card', 'bank-transfer', 'other'].includes(data.method) ? data.method : 'other',
+      reference: String(data.reference || ''), comments: String(data.comments || ''),
+      createdBy: String(data.createdBy || ''), createdAt: data.createdAt ? firestoreTimestampToDate(data.createdAt) : null,
+    } as FundraisingPledgePayment;
+  }).sort((a, b) => Number(b.receivedAt) - Number(a.receivedAt))), (error) => onError?.(error));
+}
+
+export async function recordFundraisingPledgePayment(input: Omit<FundraisingPledgePayment, 'id' | 'createdAt' | 'createdBy'>, uid: string) {
+  const pledgeRef = doc(db, 'fundraisingPledges', input.pledgeId);
+  const paymentRef = doc(collection(db, 'fundraisingPledgePayments'));
+  await runTransaction(db, async (transaction) => {
+    const pledgeSnapshot = await transaction.get(pledgeRef);
+    if (!pledgeSnapshot.exists()) throw new Error('Save the pledge before recording a payment.');
+    const pledge = pledgeSnapshot.data();
+    const pledgedAmount = Number(pledge.pledgedAmount) || 0;
+    const paidAmount = Number(pledge.paidAmount) || 0;
+    if (input.amount <= 0 || paidAmount + input.amount > pledgedAmount) throw new Error('Payment must be greater than zero and cannot exceed the remaining pledge balance.');
+    const newPaidAmount = paidAmount + input.amount;
+    transaction.set(paymentRef, { ...input, reference: input.reference.trim(), comments: input.comments.trim(), createdBy: uid, createdAt: serverTimestamp() });
+    transaction.update(pledgeRef, { paidAmount: newPaidAmount, status: newPaidAmount >= pledgedAmount ? 'fulfilled' : 'active', updatedAt: serverTimestamp(), updatedBy: uid });
+  });
 }

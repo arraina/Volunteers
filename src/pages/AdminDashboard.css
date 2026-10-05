@@ -121,6 +121,16 @@
 .pledge-source-note, .pledge-donor-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 0.55rem 1rem; padding: 0.85rem 1rem; border: 1px solid #bbf7d0; border-radius: 12px; background: #f0fdf4; }
 .pledge-source-note span, .pledge-donor-summary span { flex: 1 1 20rem; color: var(--muted); }
 .pledge-donor-summary .secondary-btn { width: auto; }
+.pledge-payment-history { display: grid; gap: 0.9rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.pledge-payment-history h3 { margin: 0; }
+.pledge-payment-entry { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; padding: 1rem; border: 1px solid var(--line); border-radius: 12px; background: #fbfefb; }
+.pledge-payment-entry label { display: grid; gap: 0.35rem; }
+.pledge-payment-entry .full { grid-column: 1 / -1; }
+.pledge-payment-entry .primary-btn { grid-column: 1 / -1; }
+.pledge-payment-list { display: grid; gap: 0.55rem; }
+.pledge-payment-list article { display: grid; grid-template-columns: minmax(9rem, 0.4fr) 1fr; gap: 1rem; padding: 0.8rem; border: 1px solid var(--line); border-radius: 10px; background: white; }
+.pledge-payment-list article div { display: grid; gap: 0.2rem; }
+.pledge-payment-list article span, .pledge-payment-list article p { margin: 0; color: var(--muted); }
 .quickbooks-connect { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .quickbooks-connect > div { max-width: 48rem; }
 .quickbooks-controls { display: grid; grid-template-columns: 1.2fr repeat(2, minmax(9rem, 0.8fr)) auto auto; align-items: end; gap: 0.75rem; margin-bottom: 1rem; }
@@ -352,6 +362,7 @@
   .fundraising-call-entry { grid-template-columns: 1fr; }
   .fundraising-pledge-list > button { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fundraising-pledge-list > button > span:first-child { grid-column: 1 / -1; }
+  .pledge-payment-entry, .pledge-payment-list article { grid-template-columns: 1fr; }
   .quickbooks-connect { align-items: stretch; flex-direction: column; }
   .quickbooks-controls { grid-template-columns: 1fr; }
   .fundraising-hero { align-items: stretch; flex-direction: column; }
