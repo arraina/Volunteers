@@ -80,16 +80,24 @@ export interface CampaignSummary {
   loans: number;
   donorCount: number;
   locked: boolean;
-  entries: Array<{ firstName: string; lastName: string; type: 'pledge' | 'loan' | 'donation'; amount: number }>;
+  entries: Array<{ id: string; firstName: string; lastName: string; type: 'pledge' | 'loan' | 'donation'; amount: number; comments: string }>;
 }
 
 export interface FundraisingPledge {
   id: string;
   donorId: string;
   eventId: string;
+  donorFirstName: string;
+  donorLastName: string;
+  sourceCampaignEntryId: string;
+  purpose: string;
   pledgedAmount: number;
   paidAmount: number;
+  pledgeDate: Date | null;
   dueDate: Date | null;
+  nextPaymentDate: Date | null;
+  frequency: 'one-time' | 'monthly' | 'quarterly' | 'annual' | 'custom';
+  status: 'active' | 'fulfilled' | 'on-hold' | 'cancelled';
   notes: string;
   createdAt: Date | null;
   updatedAt: Date | null;
@@ -217,8 +225,9 @@ export async function loadCampaignSummaries(eventNames: Record<string, string>):
       donations: total('donation'), pledges: total('pledge'), loans: total('loan'), donorCount: entries.length,
       locked: data.locked === true,
       entries: entries.map((entry: any) => ({
-        firstName: String(entry.firstName || ''), lastName: String(entry.lastName || ''),
+        id: String(entry.id || ''), firstName: String(entry.firstName || ''), lastName: String(entry.lastName || ''),
         type: ['pledge', 'loan', 'donation'].includes(entry.type) ? entry.type : 'donation', amount: Number(entry.amount) || 0,
+        comments: String(entry.comments || ''),
       })),
     };
   }).sort((a, b) => b.current - a.current);
@@ -230,8 +239,15 @@ export function subscribeFundraisingPledges(cb: (pledges: FundraisingPledge[]) =
       const data = item.data();
       return {
         id: item.id, donorId: String(data.donorId || ''), eventId: String(data.eventId || ''),
+        donorFirstName: String(data.donorFirstName || ''), donorLastName: String(data.donorLastName || ''),
+        sourceCampaignEntryId: String(data.sourceCampaignEntryId || ''), purpose: String(data.purpose || ''),
         pledgedAmount: Number(data.pledgedAmount) || 0, paidAmount: Number(data.paidAmount) || 0,
-        dueDate: data.dueDate ? firestoreTimestampToDate(data.dueDate) : null, notes: String(data.notes || ''),
+        pledgeDate: data.pledgeDate ? firestoreTimestampToDate(data.pledgeDate) : null,
+        dueDate: data.dueDate ? firestoreTimestampToDate(data.dueDate) : null,
+        nextPaymentDate: data.nextPaymentDate ? firestoreTimestampToDate(data.nextPaymentDate) : null,
+        frequency: ['one-time', 'monthly', 'quarterly', 'annual', 'custom'].includes(data.frequency) ? data.frequency : 'one-time',
+        status: ['active', 'fulfilled', 'on-hold', 'cancelled'].includes(data.status) ? data.status : ((Number(data.paidAmount) || 0) >= (Number(data.pledgedAmount) || 0) ? 'fulfilled' : 'active'),
+        notes: String(data.notes || ''),
         createdAt: data.createdAt ? firestoreTimestampToDate(data.createdAt) : null,
         updatedAt: data.updatedAt ? firestoreTimestampToDate(data.updatedAt) : null,
       } as FundraisingPledge;
@@ -242,8 +258,13 @@ export function subscribeFundraisingPledges(cb: (pledges: FundraisingPledge[]) =
 
 export async function saveFundraisingPledge(pledge: Omit<FundraisingPledge, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }, uid?: string) {
   const payload = {
-    donorId: pledge.donorId, eventId: pledge.eventId, pledgedAmount: Math.max(0, pledge.pledgedAmount),
-    paidAmount: Math.max(0, pledge.paidAmount), dueDate: pledge.dueDate, notes: pledge.notes.trim(),
+    donorId: pledge.donorId, eventId: pledge.eventId,
+    donorFirstName: pledge.donorFirstName.trim(), donorLastName: pledge.donorLastName.trim(),
+    sourceCampaignEntryId: pledge.sourceCampaignEntryId, purpose: pledge.purpose.trim(),
+    pledgedAmount: Math.max(0, pledge.pledgedAmount), paidAmount: Math.max(0, pledge.paidAmount),
+    pledgeDate: pledge.pledgeDate, dueDate: pledge.dueDate, nextPaymentDate: pledge.nextPaymentDate,
+    frequency: pledge.frequency, status: pledge.paidAmount >= pledge.pledgedAmount ? 'fulfilled' : pledge.status,
+    notes: pledge.notes.trim(),
     updatedAt: serverTimestamp(), updatedBy: uid || null,
   };
   if (pledge.id) return updateDoc(doc(db, 'fundraisingPledges', pledge.id), payload);

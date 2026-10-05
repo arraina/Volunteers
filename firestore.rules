@@ -411,13 +411,18 @@ service cloud.firestore {
       allow read: if isOwner() || isDepartmentAdmin('fundraising');
       allow create, update: if (isOwner() || isDepartmentAdmin('fundraising'))
         && request.resource.data.donorId is string
-        && request.resource.data.donorId.size() > 0
+        && request.resource.data.donorFirstName is string
+        && (request.resource.data.donorId.size() > 0 || request.resource.data.donorFirstName.size() > 0)
         && request.resource.data.eventId is string
+        && request.resource.data.sourceCampaignEntryId is string
+        && request.resource.data.purpose is string
         && request.resource.data.pledgedAmount is number
         && request.resource.data.pledgedAmount > 0
         && request.resource.data.paidAmount is number
         && request.resource.data.paidAmount >= 0
-        && request.resource.data.paidAmount <= request.resource.data.pledgedAmount;
+        && request.resource.data.paidAmount <= request.resource.data.pledgedAmount
+        && request.resource.data.frequency in ['one-time', 'monthly', 'quarterly', 'annual', 'custom']
+        && request.resource.data.status in ['active', 'fulfilled', 'on-hold', 'cancelled'];
       allow delete: if isOwner();
     }
 

@@ -116,7 +116,11 @@
 .fundraising-pledge-list > button.overdue { border-color: #f59e0b; background: #fffbeb; }
 .fundraising-pledge-list span { display: grid; gap: 0.15rem; }
 .fundraising-pledge-list small { color: var(--muted); }
+.fundraising-pledge-list .pledge-comment-preview { overflow: hidden; max-width: 32rem; text-overflow: ellipsis; white-space: nowrap; }
 .fundraising-pledge-list .overdue span:last-child small { color: #b45309; font-weight: 800; }
+.pledge-source-note, .pledge-donor-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 0.55rem 1rem; padding: 0.85rem 1rem; border: 1px solid #bbf7d0; border-radius: 12px; background: #f0fdf4; }
+.pledge-source-note span, .pledge-donor-summary span { flex: 1 1 20rem; color: var(--muted); }
+.pledge-donor-summary .secondary-btn { width: auto; }
 .quickbooks-connect { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .quickbooks-connect > div { max-width: 48rem; }
 .quickbooks-controls { display: grid; grid-template-columns: 1.2fr repeat(2, minmax(9rem, 0.8fr)) auto auto; align-items: end; gap: 0.75rem; margin-bottom: 1rem; }
