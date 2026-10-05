@@ -104,12 +104,18 @@ export interface FundraisingPledge {
 }
 
 export type PledgePaymentMethod = 'zelle' | 'check' | 'cash' | 'card' | 'bank-transfer' | 'other';
+export type PledgePaymentStatus = 'received' | 'deposited' | 'cleared';
 export interface FundraisingPledgePayment {
   id: string;
   pledgeId: string;
   amount: number;
   receivedAt: Date;
   method: PledgePaymentMethod;
+  status: PledgePaymentStatus;
+  receivedBy: string;
+  depositedAt: Date | null;
+  receiptNumber: string;
+  designation: string;
   reference: string;
   comments: string;
   createdBy: string;
@@ -291,6 +297,9 @@ export function subscribeFundraisingPledgePayments(cb: (payments: FundraisingPle
       id: item.id, pledgeId: String(data.pledgeId || ''), amount: Number(data.amount) || 0,
       receivedAt: firestoreTimestampToDate(data.receivedAt),
       method: ['zelle', 'check', 'cash', 'card', 'bank-transfer', 'other'].includes(data.method) ? data.method : 'other',
+      status: ['received', 'deposited', 'cleared'].includes(data.status) ? data.status : 'received',
+      receivedBy: String(data.receivedBy || ''), depositedAt: data.depositedAt ? firestoreTimestampToDate(data.depositedAt) : null,
+      receiptNumber: String(data.receiptNumber || ''), designation: String(data.designation || ''),
       reference: String(data.reference || ''), comments: String(data.comments || ''),
       createdBy: String(data.createdBy || ''), createdAt: data.createdAt ? firestoreTimestampToDate(data.createdAt) : null,
     } as FundraisingPledgePayment;
@@ -308,7 +317,7 @@ export async function recordFundraisingPledgePayment(input: Omit<FundraisingPled
     const paidAmount = Number(pledge.paidAmount) || 0;
     if (input.amount <= 0 || paidAmount + input.amount > pledgedAmount) throw new Error('Payment must be greater than zero and cannot exceed the remaining pledge balance.');
     const newPaidAmount = paidAmount + input.amount;
-    transaction.set(paymentRef, { ...input, reference: input.reference.trim(), comments: input.comments.trim(), createdBy: uid, createdAt: serverTimestamp() });
+    transaction.set(paymentRef, { ...input, receivedBy: input.receivedBy.trim(), receiptNumber: input.receiptNumber.trim(), designation: input.designation.trim(), reference: input.reference.trim(), comments: input.comments.trim(), createdBy: uid, createdAt: serverTimestamp() });
     transaction.update(pledgeRef, { paidAmount: newPaidAmount, status: newPaidAmount >= pledgedAmount ? 'fulfilled' : 'active', updatedAt: serverTimestamp(), updatedBy: uid });
   });
 }

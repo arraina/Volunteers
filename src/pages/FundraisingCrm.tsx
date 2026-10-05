@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TempleEvent } from '../helpers/types';
-import { addDonorInteraction, CampaignSummary, donorDuplicateKeys, DonorContactInteraction, FundraisingDonor, FundraisingPledge, FundraisingPledgePayment, loadCampaignSummaries, PledgePaymentMethod, recordFundraisingPledgePayment, saveFundraisingDonor, saveFundraisingPledge, subscribeDonorInteractions, subscribeFundraisingDonors, subscribeFundraisingPledgePayments, subscribeFundraisingPledges, uploadFundraisingDonorPicture } from '../helpers/fundraisingCrm';
+import { addDonorInteraction, CampaignSummary, donorDuplicateKeys, DonorContactInteraction, FundraisingDonor, FundraisingPledge, FundraisingPledgePayment, loadCampaignSummaries, PledgePaymentMethod, PledgePaymentStatus, recordFundraisingPledgePayment, saveFundraisingDonor, saveFundraisingPledge, subscribeDonorInteractions, subscribeFundraisingDonors, subscribeFundraisingPledgePayments, subscribeFundraisingPledges, uploadFundraisingDonorPicture } from '../helpers/fundraisingCrm';
 import { isAiConfigured, parseDonorQuestion } from '../helpers/ai';
 import QuickBooksReports from './QuickBooksReports';
 
@@ -79,6 +79,11 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentDate, setPaymentDate] = useState(dateValue(new Date()));
   const [paymentMethod, setPaymentMethod] = useState<PledgePaymentMethod>('zelle');
+  const [paymentStatus, setPaymentStatus] = useState<PledgePaymentStatus>('received');
+  const [paymentReceivedBy, setPaymentReceivedBy] = useState('');
+  const [paymentDepositedDate, setPaymentDepositedDate] = useState('');
+  const [paymentReceiptNumber, setPaymentReceiptNumber] = useState('');
+  const [paymentDesignation, setPaymentDesignation] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
   const [paymentComments, setPaymentComments] = useState('');
 
@@ -329,9 +334,9 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     if (!uid || !paymentDate || paymentAmount <= 0) return setError('Enter a received date and payment amount greater than zero.');
     setSaving(true); setError(''); setMessage('');
     try {
-      await recordFundraisingPledgePayment({ pledgeId: editingPledge.id, amount: paymentAmount, receivedAt: new Date(`${paymentDate}T12:00:00`), method: paymentMethod, reference: paymentReference, comments: paymentComments }, uid);
+      await recordFundraisingPledgePayment({ pledgeId: editingPledge.id, amount: paymentAmount, receivedAt: new Date(`${paymentDate}T12:00:00`), method: paymentMethod, status: paymentStatus, receivedBy: paymentReceivedBy, depositedAt: paymentDepositedDate ? new Date(`${paymentDepositedDate}T12:00:00`) : null, receiptNumber: paymentReceiptNumber, designation: paymentDesignation, reference: paymentReference, comments: paymentComments }, uid);
       setEditingPledge({ ...editingPledge, paidAmount: editingPledge.paidAmount + paymentAmount, status: editingPledge.paidAmount + paymentAmount >= editingPledge.pledgedAmount ? 'fulfilled' : 'active' });
-      setPaymentAmount(0); setPaymentReference(''); setPaymentComments(''); setPaymentDate(dateValue(new Date()));
+      setPaymentAmount(0); setPaymentReference(''); setPaymentComments(''); setPaymentReceivedBy(''); setPaymentDepositedDate(''); setPaymentReceiptNumber(''); setPaymentDesignation(''); setPaymentStatus('received'); setPaymentDate(dateValue(new Date()));
       setMessage('Pledge payment recorded in the payment history.');
     } catch (error) { setError(error instanceof Error ? error.message : 'Could not record the pledge payment.'); }
     finally { setSaving(false); }
@@ -435,11 +440,16 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
             <label><span>Date received *</span><input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /></label>
             <label><span>Amount received *</span><div className="money-input"><span>$</span><input type="number" min="0.01" max={Math.max(0, editingPledge.pledgedAmount - editingPledge.paidAmount)} step="0.01" value={paymentAmount || ''} onChange={(event) => setPaymentAmount(Number(event.target.value) || 0)} /></div></label>
             <label><span>Payment mode *</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PledgePaymentMethod)}><option value="zelle">Zelle</option><option value="check">Check</option><option value="cash">Cash</option><option value="card">Credit/debit card</option><option value="bank-transfer">Bank transfer</option><option value="other">Other</option></select></label>
+            <label><span>Payment status</span><select value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value as PledgePaymentStatus)}><option value="received">Received</option><option value="deposited">Deposited</option><option value="cleared">Cleared</option></select></label>
             <label><span>Reference / check number</span><input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Transaction ID, check number, etc." /></label>
+            <label><span>Received by</span><input value={paymentReceivedBy} onChange={(event) => setPaymentReceivedBy(event.target.value)} placeholder="Fundraiser or volunteer name" /></label>
+            <label><span>Deposited / processed date</span><input type="date" value={paymentDepositedDate} onChange={(event) => setPaymentDepositedDate(event.target.value)} /></label>
+            <label><span>Receipt number</span><input value={paymentReceiptNumber} onChange={(event) => setPaymentReceiptNumber(event.target.value)} /></label>
+            <label className="full"><span>Fund / designation</span><input value={paymentDesignation} onChange={(event) => setPaymentDesignation(event.target.value)} placeholder="General fund, building fund, event, deity seva, etc." /></label>
             <label className="full"><span>Payment comments and other details</span><textarea rows={3} value={paymentComments} onChange={(event) => setPaymentComments(event.target.value)} placeholder="Add Zelle sender, cash receipt details, restrictions, or other notes" /></label>
             <button type="button" className="primary-btn" disabled={saving || paymentAmount <= 0 || !paymentDate} onClick={recordPledgePayment}>Record received payment</button>
           </div>
-          <div className="pledge-payment-list">{pledgePayments.filter((payment) => payment.pledgeId === editingPledge.id).map((payment) => <article key={payment.id}><div><strong>{money.format(payment.amount)}</strong><span>{payment.receivedAt.toLocaleDateString()} · {payment.method.replace('-', ' ')}</span></div><div><b>{payment.reference || 'No reference'}</b><p>{payment.comments || 'No additional comments'}</p></div></article>)}{!pledgePayments.some((payment) => payment.pledgeId === editingPledge.id) && <p className="muted small">No received payments have been recorded yet.</p>}</div>
+          <div className="pledge-payment-list">{pledgePayments.filter((payment) => payment.pledgeId === editingPledge.id).map((payment) => <article key={payment.id}><div><strong>{money.format(payment.amount)}</strong><span>Received {payment.receivedAt.toLocaleDateString()} · {payment.method.replace('-', ' ')}</span><span>Status: {payment.status}{payment.depositedAt ? ` · Processed ${payment.depositedAt.toLocaleDateString()}` : ''}</span></div><div><b>{payment.reference || payment.receiptNumber || 'No reference'}</b><p>{[payment.receivedBy ? `Received by ${payment.receivedBy}` : '', payment.receiptNumber ? `Receipt ${payment.receiptNumber}` : '', payment.designation ? `For ${payment.designation}` : ''].filter(Boolean).join(' · ')}</p><p>{payment.comments || 'No additional comments'}</p></div></article>)}{!pledgePayments.some((payment) => payment.pledgeId === editingPledge.id) && <p className="muted small">No received payments have been recorded yet.</p>}</div>
         </>}
       </section>
     </div><div className="modal-actions"><button className="secondary-btn" onClick={() => setEditingPledge(null)}>Cancel</button><button className="primary-btn" disabled={saving} onClick={savePledge}>{saving ? 'Saving…' : 'Save pledge'}</button></div></section></div>}

@@ -437,6 +437,11 @@ service cloud.firestore {
         && request.resource.data.amount > 0
         && request.resource.data.receivedAt is timestamp
         && request.resource.data.method in ['zelle', 'check', 'cash', 'card', 'bank-transfer', 'other']
+        && request.resource.data.status in ['received', 'deposited', 'cleared']
+        && request.resource.data.receivedBy is string
+        && (request.resource.data.depositedAt == null || request.resource.data.depositedAt is timestamp)
+        && request.resource.data.receiptNumber is string
+        && request.resource.data.designation is string
         && request.resource.data.reference is string
         && request.resource.data.comments is string
         && request.resource.data.createdBy == request.auth.uid;
