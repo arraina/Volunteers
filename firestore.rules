@@ -424,7 +424,10 @@ service cloud.firestore {
         && request.resource.data.openBalanceKnown is bool
         && request.resource.data.openBalanceSource is string
         && request.resource.data.frequency in ['one-time', 'monthly', 'quarterly', 'annual', 'custom']
-        && request.resource.data.status in ['active', 'fulfilled', 'on-hold', 'cancelled'];
+        && request.resource.data.status in ['active', 'fulfilled', 'on-hold', 'cancelled']
+        && request.resource.data.get('cancellationReason', '') is string
+        && (request.resource.data.get('cancelledAt', null) == null || request.resource.data.cancelledAt is timestamp)
+        && request.resource.data.get('cancelledBy', '') is string;
       allow delete: if isOwner();
     }
 
@@ -435,6 +438,7 @@ service cloud.firestore {
       allow create: if (isOwner() || isDepartmentAdmin('fundraising'))
         && request.resource.data.pledgeId is string
         && request.resource.data.pledgeId.size() > 0
+        && get(/databases/$(database)/documents/fundraisingPledges/$(request.resource.data.pledgeId)).data.status != 'cancelled'
         && request.resource.data.amount is number
         && request.resource.data.amount > 0
         && request.resource.data.receivedAt is timestamp

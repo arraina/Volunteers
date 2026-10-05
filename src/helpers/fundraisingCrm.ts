@@ -100,6 +100,9 @@ export interface FundraisingPledge {
   nextPaymentDate: Date | null;
   frequency: 'one-time' | 'monthly' | 'quarterly' | 'annual' | 'custom';
   status: 'active' | 'fulfilled' | 'on-hold' | 'cancelled';
+  cancellationReason: string;
+  cancelledAt: Date | null;
+  cancelledBy: string;
   notes: string;
   createdAt: Date | null;
   updatedAt: Date | null;
@@ -269,6 +272,7 @@ export function subscribeFundraisingPledges(cb: (pledges: FundraisingPledge[]) =
         nextPaymentDate: data.nextPaymentDate ? firestoreTimestampToDate(data.nextPaymentDate) : null,
         frequency: ['one-time', 'monthly', 'quarterly', 'annual', 'custom'].includes(data.frequency) ? data.frequency : 'one-time',
         status: ['active', 'fulfilled', 'on-hold', 'cancelled'].includes(data.status) ? data.status : ((Number(data.paidAmount) || 0) >= (Number(data.pledgedAmount) || 0) ? 'fulfilled' : 'active'),
+        cancellationReason: String(data.cancellationReason || ''), cancelledAt: data.cancelledAt ? firestoreTimestampToDate(data.cancelledAt) : null, cancelledBy: String(data.cancelledBy || ''),
         notes: String(data.notes || ''),
         createdAt: data.createdAt ? firestoreTimestampToDate(data.createdAt) : null,
         updatedAt: data.updatedAt ? firestoreTimestampToDate(data.updatedAt) : null,
@@ -286,7 +290,8 @@ export async function saveFundraisingPledge(pledge: Omit<FundraisingPledge, 'id'
     pledgedAmount: Math.max(0, pledge.pledgedAmount), paidAmount: Math.max(0, pledge.paidAmount),
     openBalanceKnown: pledge.openBalanceKnown, openBalanceSource: pledge.openBalanceSource.trim(),
     pledgeDate: pledge.pledgeDate, dueDate: pledge.dueDate, nextPaymentDate: pledge.nextPaymentDate,
-    frequency: pledge.frequency, status: pledge.paidAmount >= pledge.pledgedAmount ? 'fulfilled' : pledge.status,
+    frequency: pledge.frequency, status: pledge.status === 'cancelled' ? 'cancelled' : pledge.paidAmount >= pledge.pledgedAmount ? 'fulfilled' : pledge.status,
+    cancellationReason: pledge.cancellationReason.trim(), cancelledAt: pledge.cancelledAt, cancelledBy: pledge.cancelledBy,
     notes: pledge.notes.trim(),
     updatedAt: serverTimestamp(), updatedBy: uid || null,
   };
@@ -319,6 +324,7 @@ export async function recordFundraisingPledgePayment(input: Omit<FundraisingPled
     const pledge = pledgeSnapshot.data();
     const pledgedAmount = Number(pledge.pledgedAmount) || 0;
     const paidAmount = Number(pledge.paidAmount) || 0;
+    if (pledge.status === 'cancelled') throw new Error('Payments cannot be added to a cancelled pledge.');
     if (input.amount <= 0 || paidAmount + input.amount > pledgedAmount) throw new Error('Payment must be greater than zero and cannot exceed the remaining pledge balance.');
     const newPaidAmount = paidAmount + input.amount;
     transaction.set(paymentRef, { ...input, receivedBy: input.receivedBy.trim(), receiptNumber: input.receiptNumber.trim(), designation: input.designation.trim(), reference: input.reference.trim(), comments: input.comments.trim(), createdBy: uid, createdAt: serverTimestamp() });

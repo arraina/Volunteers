@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { TempleEvent } from '../helpers/types';
 import { addDonorInteraction, CampaignSummary, donorDuplicateKeys, DonorContactInteraction, FundraisingDonor, FundraisingPledge, FundraisingPledgePayment, loadCampaignSummaries, PledgePaymentMethod, PledgePaymentStatus, recordFundraisingPledgePayment, saveFundraisingDonor, saveFundraisingPledge, subscribeDonorInteractions, subscribeFundraisingDonors, subscribeFundraisingPledgePayments, subscribeFundraisingPledges, uploadFundraisingDonorPicture } from '../helpers/fundraisingCrm';
-import { parseDonorQuestion } from '../helpers/ai';
 import QuickBooksReports from './QuickBooksReports';
 
 const blankDonor = (): FundraisingDonor => ({
@@ -12,7 +11,7 @@ const blankDonor = (): FundraisingDonor => ({
   autoDeductDonationAmount: 0, autoDeductBillingAmount: 0, monthlyDonor: false, autoDeductPledgeAmount: 0, autoDeductPledgeStart: null, autoDeductPledgeRemaining: 0,
   cardLastFour: '', cardBillingAddress: '', cardBillingZip: '', facebookUrl: '', linkedinUrl: '', twitterHandle: '', websiteUrl: '', gotra: '', status: 'active', tags: [], notes: '', nextFollowUp: null, assignedTo: '', archived: false, createdAt: null, updatedAt: null,
 });
-const blankPledge = (): FundraisingPledge => ({ id: '', donorId: '', eventId: '', donorFirstName: '', donorLastName: '', sourceCampaignEntryId: '', purpose: '', pledgedAmount: 0, paidAmount: 0, openBalanceKnown: true, openBalanceSource: '', pledgeDate: new Date(), dueDate: null, nextPaymentDate: null, frequency: 'one-time', status: 'active', notes: '', createdAt: null, updatedAt: null });
+const blankPledge = (): FundraisingPledge => ({ id: '', donorId: '', eventId: '', donorFirstName: '', donorLastName: '', sourceCampaignEntryId: '', purpose: '', pledgedAmount: 0, paidAmount: 0, openBalanceKnown: true, openBalanceSource: '', pledgeDate: new Date(), dueDate: null, nextPaymentDate: null, frequency: 'one-time', status: 'active', cancellationReason: '', cancelledAt: null, cancelledBy: '', notes: '', createdAt: null, updatedAt: null });
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const dateValue = (date: Date | null) => date ? date.toISOString().slice(0, 10) : '';
 const csvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -70,10 +69,8 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   const [message, setMessage] = useState('');
   const [donorLoadComplete, setDonorLoadComplete] = useState(false);
   const [donorRefresh, setDonorRefresh] = useState(0);
-  const [donorQuestion, setDonorQuestion] = useState('');
-  const [donorAnswer, setDonorAnswer] = useState('');
-  const [donorQueryResults, setDonorQueryResults] = useState<FundraisingDonor[]>([]);
-  const [donorQueryLoading, setDonorQueryLoading] = useState(false);
+  const [pledgeSearch, setPledgeSearch] = useState('');
+  const [cancellationReason, setCancellationReason] = useState('');
   const [callDate, setCallDate] = useState(dateValue(new Date()));
   const [callNotes, setCallNotes] = useState('');
   const [paymentAmount, setPaymentAmount] = useState(0);
@@ -112,7 +109,17 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       .map((entry) => { const matchingDonor = donors.find((donor) => duplicateText(`${donor.firstName} ${donor.lastName}`) === duplicateText(`${entry.firstName} ${entry.lastName}`)); return { ...blankPledge(), id: `dashboard:${campaign.eventId}:${entry.id}`, donorId: matchingDonor?.id || '', eventId: campaign.eventId, donorFirstName: entry.firstName, donorLastName: entry.lastName, sourceCampaignEntryId: entry.id, purpose: campaign.name, pledgedAmount: entry.amount, notes: entry.comments }; }));
     return [...pledges, ...dashboardPledges];
   }, [campaigns, donors, pledges]);
-  const pledgeTotals = displayedPledges.reduce((total, pledge) => ({ pledged: total.pledged + pledge.pledgedAmount, paid: total.paid + pledge.paidAmount, remaining: total.remaining + (pledge.openBalanceKnown ? Math.max(0, pledge.pledgedAmount - pledge.paidAmount) : 0), unknown: total.unknown + (pledge.openBalanceKnown ? 0 : 1) }), { pledged: 0, paid: 0, remaining: 0, unknown: 0 });
+  const visiblePledges = useMemo(() => {
+    const terms = pledgeSearch.toLowerCase().replace(/[$,]/g, '').split(/\s+/).filter(Boolean);
+    return displayedPledges.filter((pledge) => {
+      const linkedDonor = donors.find((donor) => donor.id === pledge.donorId);
+      const eventName = events.find((event) => event.id === pledge.eventId)?.name || campaigns.find((campaign) => campaign.eventId === pledge.eventId)?.name || pledge.purpose;
+      const haystack = `${linkedDonor ? donorName(linkedDonor) : `${pledge.donorFirstName} ${pledge.donorLastName}`} ${eventName} ${pledge.notes} ${pledge.status} ${pledge.pledgedAmount} ${pledge.paidAmount} ${Math.max(0, pledge.pledgedAmount - pledge.paidAmount)} ${pledge.cancellationReason}`.toLowerCase().replace(/[$,]/g, '');
+      return terms.every((term) => haystack.includes(term));
+    });
+  }, [campaigns, displayedPledges, donors, events, pledgeSearch]);
+  const activePledges = displayedPledges.filter((pledge) => pledge.status !== 'cancelled');
+  const pledgeTotals = activePledges.reduce((total, pledge) => ({ pledged: total.pledged + pledge.pledgedAmount, paid: total.paid + pledge.paidAmount, remaining: total.remaining + (pledge.openBalanceKnown ? Math.max(0, pledge.pledgedAmount - pledge.paidAmount) : 0), unknown: total.unknown + (pledge.openBalanceKnown ? 0 : 1) }), { pledged: 0, paid: 0, remaining: 0, unknown: 0 });
 
   const openNewDonor = () => {
     setError('');
@@ -271,38 +278,6 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     const link = document.createElement('a'); link.href = url; link.download = `fundraising-donors-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   };
 
-  const askDonorAssistant = async () => {
-    if (!donorQuestion.trim()) return;
-    if (!donorLoadComplete) return setError('Please wait until the donor directory finishes loading before asking a question.');
-    setDonorQueryLoading(true); setError(''); setDonorAnswer(''); setDonorQueryResults([]);
-    try {
-      const plan = await parseDonorQuestion(donorQuestion.trim());
-      const now = new Date();
-      const from = plan.dateFrom ? new Date(`${plan.dateFrom}T00:00:00`) : null;
-      const to = plan.dateTo ? new Date(`${plan.dateTo}T23:59:59`) : null;
-      const matched = donors.filter((donor) => {
-        if (donor.archived) return false;
-        const haystack = `${donor.firstName} ${donor.lastName} ${donor.initiatedName} ${donor.email} ${donor.phone} ${donor.organization} ${donor.address} ${donor.tags.join(' ')} ${donor.notes}`.toLowerCase();
-        if (plan.terms.length && !plan.terms.every((term) => haystack.includes(term.toLowerCase()))) return false;
-        if (plan.assignedFundraiser && !donor.assignedTo.toLowerCase().includes(plan.assignedFundraiser.toLowerCase())) return false;
-        if (plan.status !== 'any' && donor.status !== plan.status) return false;
-        if (plan.hasEmail === 'yes' && !donor.email) return false;
-        if (plan.hasEmail === 'no' && donor.email) return false;
-        if (plan.duplicatesOnly && !duplicateIds.has(donor.id)) return false;
-        if (plan.followUp === 'missing' && donor.nextFollowUp) return false;
-        if (plan.followUp === 'scheduled' && !donor.nextFollowUp) return false;
-        if (plan.followUp === 'overdue' && (!donor.nextFollowUp || donor.nextFollowUp >= now)) return false;
-        if (plan.followUp === 'upcoming' && (!donor.nextFollowUp || donor.nextFollowUp < now)) return false;
-        if (from && (!donor.nextFollowUp || donor.nextFollowUp < from)) return false;
-        if (to && (!donor.nextFollowUp || donor.nextFollowUp > to)) return false;
-        return true;
-      });
-      setDonorAnswer(plan.intent === 'count' ? `${matched.length.toLocaleString()} donor${matched.length === 1 ? '' : 's'} matched your question.` : `${matched.length.toLocaleString()} donor${matched.length === 1 ? '' : 's'} matched. Showing up to ${plan.limit}.`);
-      setDonorQueryResults(matched.slice(0, plan.limit));
-    } catch (error) { setError(error instanceof Error ? error.message : 'The donor assistant could not answer that question.'); }
-    finally { setDonorQueryLoading(false); }
-  };
-
   const savePledge = async () => {
     if (!editingPledge) return;
     if (!editingPledge.donorId && !editingPledge.donorFirstName.trim()) return setError('Choose a donor or enter the donor name.');
@@ -343,6 +318,19 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     finally { setSaving(false); }
   };
 
+  const cancelPledge = async () => {
+    if (!editingPledge || !editingPledge.id || editingPledge.id.startsWith('dashboard:')) return setError('Save this pledge before cancelling it.');
+    if (!cancellationReason.trim()) return setError('Enter a cancellation reason before cancelling the pledge.');
+    setSaving(true); setError(''); setMessage('');
+    try {
+      const cancelled = { ...editingPledge, status: 'cancelled' as const, cancellationReason: cancellationReason.trim(), cancelledAt: new Date(), cancelledBy: uid || '' };
+      await saveFundraisingPledge(cancelled, uid);
+      setEditingPledge(null); setCancellationReason('');
+      setMessage('Pledge cancelled. Its record and payment history were retained, and its amounts were removed from active totals.');
+    } catch (error) { setError(error instanceof Error ? error.message : 'Could not cancel the pledge.'); }
+    finally { setSaving(false); }
+  };
+
   return <div className="fundraising-crm">
     <section className="fundraising-crm-summary">
       <div><span>Donors</span><strong>{donors.filter((donor) => !donor.archived).length}</strong></div>
@@ -361,7 +349,6 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     {message && <div className="success-message">{message}</div>}
     {(view === 'donors' || view === 'raw') && <section className="panel">
       <div className="panel-head"><div><h2>{view === 'raw' ? 'Raw Donor Information' : 'Donors'}</h2><p className="muted small">{view === 'raw' ? 'Imported source information retained separately for reference and cleanup.' : 'Verified donor profiles entered and maintained by the fundraising team.'}</p></div><div className="row">{view === 'raw' && <label className="secondary-btn fundraising-import-btn">{saving ? 'Importing…' : 'Import raw donor data'}<input type="file" accept=".csv,text/csv" disabled={saving} onChange={(event) => { const file = event.target.files?.[0]; if (file) importDonors(file); event.target.value = ''; }} /></label>}<button className="secondary-btn" onClick={exportDonors}>Export {view === 'raw' ? 'raw data' : 'donors'}</button>{view === 'donors' && <button type="button" className="primary-btn" onClick={openNewDonor}>New donor</button>}</div></div>
-      <section className="fundraising-donor-assistant" aria-label="Donor assistant"><div><h3>Ask about donors</h3><p className="muted small">Your question is interpreted without sharing donor records. Local search automatically takes over if Gemini is unavailable.</p></div><div className="fundraising-donor-question"><input value={donorQuestion} onChange={(event) => setDonorQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') askDonorAssistant(); }} placeholder="Example: Which donors assigned to Priya have an overdue follow-up?" /><button className="primary-btn" disabled={!donorLoadComplete || donorQueryLoading} onClick={askDonorAssistant}>{donorQueryLoading ? 'Searching…' : 'Ask'}</button></div><p className="muted small">{donorLoadComplete ? `${donors.length.toLocaleString()} donor records ready to search.` : `Loading donor directory… ${donors.length.toLocaleString()} records available.`}</p>{donorAnswer && <div className="fundraising-donor-answer"><strong>{donorAnswer}</strong>{donorQueryResults.map((donor) => <button key={donor.id} onClick={() => setEditing({ ...donor })}><span><b>{donorName(donor)}</b><small>{donor.initiatedName || donor.email || donor.phone || 'No contact information'}</small></span><span><small>Assigned fundraiser</small><b>{donor.assignedTo || 'Unassigned'}</b></span><span><small>Next follow-up</small><b>{donor.nextFollowUp?.toLocaleDateString() || 'Not scheduled'}</b></span></button>)}</div>}</section>
       <div className="fundraising-crm-filters"><input value={search} onChange={(event) => { setSearch(event.target.value); setDonorDisplayLimit(100); }} placeholder="Search donors, contact details, or tags" /><label><input type="checkbox" checked={showArchived} onChange={(event) => { setShowArchived(event.target.checked); setDonorDisplayLimit(100); }} /> Show archived</label><span className="muted small">Showing {Math.min(visibleDonors.length, filtered.length).toLocaleString()} of {filtered.length.toLocaleString()} donors</span></div>
       <div className="fundraising-crm-list">
         <div className="fundraising-donor-list-head"><span>First name</span><span>Last name</span><span>Phone</span><span>Last donation</span><span>Last amount</span><span>Biggest donation</span><span>Biggest amount</span><span>Actions</span></div>
@@ -377,8 +364,9 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       </div>
     </section>}
     {view === 'pledges' && <section className="panel"><div className="panel-head"><div><h2>Pledge tracking</h2><p className="muted small">Track the original commitment, payments received, remaining balance, and due date.</p></div><button className="primary-btn" onClick={() => setEditingPledge(blankPledge())}>Add pledge</button></div>
+      <div className="fundraising-pledge-search"><label><span>Smart pledge search</span><input value={pledgeSearch} onChange={(event) => setPledgeSearch(event.target.value)} placeholder="Search donor, event, comments, status, or amount" /></label><span className="muted small">Showing {visiblePledges.length} of {displayedPledges.length} pledge records</span></div>
       <div className="fundraising-report-grid fundraising-pledge-totals"><div><span>Total pledged</span><strong>{money.format(pledgeTotals.pledged)}</strong></div><div><span>Paid</span><strong>{money.format(pledgeTotals.paid)}</strong></div><div><span>Known remaining</span><strong>{money.format(pledgeTotals.remaining)}</strong></div><div><span>Balances needing review</span><strong>{pledgeTotals.unknown}</strong></div></div>
-      <div className="fundraising-pledge-list">{displayedPledges.map((pledge) => { const remaining = Math.max(0, pledge.pledgedAmount - pledge.paidAmount); const overdue = Boolean(pledge.openBalanceKnown && remaining > 0 && pledge.dueDate && pledge.dueDate < new Date()); const linkedDonor = donors.find((donor) => donor.id === pledge.donorId); const eventName = events.find((event) => event.id === pledge.eventId)?.name || campaigns.find((campaign) => campaign.eventId === pledge.eventId)?.name || pledge.purpose || 'General pledge'; return <button className={overdue ? 'overdue' : ''} onClick={() => setEditingPledge({ ...pledge })} key={pledge.id}><span><strong>{linkedDonor ? donorName(linkedDonor) : [pledge.donorFirstName, pledge.donorLastName].filter(Boolean).join(' ') || 'Unknown donor'}</strong><small>{eventName}{pledge.sourceCampaignEntryId ? ' · Dashboard pledge' : ''}</small><small className="pledge-comment-preview">{pledge.notes || 'No comments'}</small></span><span><small>Pledged</small><b>{money.format(pledge.pledgedAmount)}</b></span><span><small>Paid</small><b>{pledge.openBalanceKnown ? money.format(pledge.paidAmount) : 'Not provided'}</b></span><span><small>Remaining</small><b>{pledge.openBalanceKnown ? money.format(remaining) : 'Needs review'}</b></span><span><small>{overdue ? 'Overdue' : pledge.status === 'fulfilled' ? 'Status' : 'Due'}</small><b>{pledge.status === 'fulfilled' ? 'Fulfilled' : pledge.dueDate?.toLocaleDateString() || 'No date'}</b></span></button>; })}{!displayedPledges.length && <div className="empty-state"><strong>No pledges tracked yet</strong><span>Add a pledge to begin tracking payments and due dates.</span></div>}</div>
+      <div className="fundraising-pledge-list">{visiblePledges.map((pledge) => { const remaining = Math.max(0, pledge.pledgedAmount - pledge.paidAmount); const overdue = Boolean(pledge.status !== 'cancelled' && pledge.openBalanceKnown && remaining > 0 && pledge.dueDate && pledge.dueDate < new Date()); const linkedDonor = donors.find((donor) => donor.id === pledge.donorId); const eventName = events.find((event) => event.id === pledge.eventId)?.name || campaigns.find((campaign) => campaign.eventId === pledge.eventId)?.name || pledge.purpose || 'General pledge'; return <button className={`${overdue ? 'overdue ' : ''}${pledge.status === 'cancelled' ? 'cancelled' : ''}`} onClick={() => { setCancellationReason(pledge.cancellationReason); setEditingPledge({ ...pledge }); }} key={pledge.id}><span><strong>{linkedDonor ? donorName(linkedDonor) : [pledge.donorFirstName, pledge.donorLastName].filter(Boolean).join(' ') || 'Unknown donor'}</strong><small>{eventName}{pledge.sourceCampaignEntryId ? ' · Dashboard pledge' : ''}</small><small className="pledge-comment-preview">{pledge.status === 'cancelled' ? `Cancelled: ${pledge.cancellationReason}` : pledge.notes || 'No comments'}</small></span><span><small>Pledged</small><b>{pledge.status === 'cancelled' ? 'Voided' : money.format(pledge.pledgedAmount)}</b></span><span><small>Paid</small><b>{pledge.status === 'cancelled' ? 'Voided' : pledge.openBalanceKnown ? money.format(pledge.paidAmount) : 'Not provided'}</b></span><span><small>Remaining</small><b>{pledge.status === 'cancelled' ? money.format(0) : pledge.openBalanceKnown ? money.format(remaining) : 'Needs review'}</b></span><span><small>{pledge.status === 'cancelled' ? 'Status' : overdue ? 'Overdue' : pledge.status === 'fulfilled' ? 'Status' : 'Due'}</small><b>{pledge.status === 'cancelled' ? 'Cancelled' : pledge.status === 'fulfilled' ? 'Fulfilled' : pledge.dueDate?.toLocaleDateString() || 'No date'}</b></span></button>; })}{!visiblePledges.length && <div className="empty-state"><strong>No pledges found</strong><span>Change the smart-search terms or add a pledge.</span></div>}</div>
     </section>}
     {view === 'campaigns' && <section className="panel"><div className="panel-head"><div><h2>Campaigns</h2><p className="muted small">Live totals from the existing fundraising dashboards.</p></div></div><div className="fundraising-campaign-list">{campaigns.map((campaign) => <article key={campaign.eventId}><div><strong>{campaign.name}</strong><span>{campaign.donorCount} entries · {campaign.locked ? 'Frozen' : 'Open'}</span></div><b>{money.format(campaign.current)}</b><small>of {money.format(campaign.target)} target</small></article>)}</div></section>}
     {view === 'followups' && <section className="panel"><div className="panel-head"><div><h2>Stewardship</h2><p className="muted small">Upcoming donor calls, acknowledgements, and follow-ups.</p></div></div><div className="fundraising-followups">{followups.map((donor) => <button onClick={() => { setView('donors'); setEditing({ ...donor }); }} key={donor.id}><span><strong>{donor.firstName} {donor.lastName}</strong><small>{donor.assignedTo ? `Assigned to ${donor.assignedTo}` : 'Unassigned'}</small></span><b>{donor.nextFollowUp?.toLocaleDateString()}</b></button>)}{!followups.length && <div className="empty-state"><strong>No follow-ups scheduled</strong><span>Add a date to a donor profile.</span></div>}</div></section>}
@@ -433,11 +421,12 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <label><span>Due date</span><input type="date" value={dateValue(editingPledge.dueDate)} onChange={(event) => setEditingPledge({ ...editingPledge, dueDate: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null })} /></label>
       <label><span>Payment frequency</span><select value={editingPledge.frequency} onChange={(event) => setEditingPledge({ ...editingPledge, frequency: event.target.value as FundraisingPledge['frequency'] })}><option value="one-time">One-time</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option><option value="custom">Custom</option></select></label>
       <label><span>Next payment date</span><input type="date" value={dateValue(editingPledge.nextPaymentDate)} onChange={(event) => setEditingPledge({ ...editingPledge, nextPaymentDate: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null })} /></label>
-      <label><span>Status</span><select value={editingPledge.status} onChange={(event) => setEditingPledge({ ...editingPledge, status: event.target.value as FundraisingPledge['status'] })}><option value="active">Active</option><option value="fulfilled">Fulfilled</option><option value="on-hold">On hold</option><option value="cancelled">Cancelled</option></select></label>
+      <label><span>Status</span><select disabled={editingPledge.status === 'cancelled'} value={editingPledge.status} onChange={(event) => setEditingPledge({ ...editingPledge, status: event.target.value as FundraisingPledge['status'] })}><option value="active">Active</option><option value="fulfilled">Fulfilled</option><option value="on-hold">On hold</option>{editingPledge.status === 'cancelled' && <option value="cancelled">Cancelled</option>}</select></label>
       {editingPledge.donorId && (() => { const donor = donors.find((item) => item.id === editingPledge.donorId); return donor ? <div className="full pledge-donor-summary"><strong>{donorName(donor)}</strong><span>{[donor.email, donor.phone, donor.address].filter(Boolean).join(' · ') || 'No contact details recorded'}</span><button type="button" className="secondary-btn" onClick={() => { setEditingPledge(null); setEditing({ ...donor }); setView('donors'); }}>Open full donor record</button></div> : null; })()}
       <label className="full"><span>Comments and pledge details</span><textarea rows={7} value={editingPledge.notes} onChange={(event) => setEditingPledge({ ...editingPledge, notes: event.target.value })} placeholder="Record pledge details, payment notes, and follow-up information" /></label>
+      {editingPledge.status === 'cancelled' ? <section className="full pledge-cancelled-notice"><strong>Cancelled pledge</strong><span>{editingPledge.cancellationReason}</span><small>Cancelled {editingPledge.cancelledAt?.toLocaleString() || 'previously'}. Original amounts and payment history are retained for audit.</small></section> : editingPledge.id && !editingPledge.id.startsWith('dashboard:') ? <section className="full pledge-cancel-control"><h3>Cancel pledge</h3><p className="muted small">This voids the pledge from active totals without deleting its record or payment history.</p><label><span>Cancellation reason *</span><textarea rows={2} value={cancellationReason} onChange={(event) => setCancellationReason(event.target.value)} placeholder="Explain why the pledge is being cancelled" /></label><button type="button" className="danger-btn" disabled={saving || !cancellationReason.trim()} onClick={cancelPledge}>Cancel pledge and void amount</button></section> : null}
       <section className="full pledge-payment-history"><div><h3>Payment history</h3><p className="muted small">Record when pledge money was received, its payment mode, and supporting details.</p></div>
-        {editingPledge.id.startsWith('dashboard:') || !editingPledge.id ? <div className="pledge-source-note"><span>Save and link this pledge first. Then reopen it to record received payments.</span></div> : <>
+        {editingPledge.status === 'cancelled' ? <><div className="pledge-source-note"><span>This pledge is cancelled. Existing receipts remain visible, but new payments cannot be added.</span></div><div className="pledge-payment-list">{pledgePayments.filter((payment) => payment.pledgeId === editingPledge.id).map((payment) => <article key={payment.id}><div><strong>{money.format(payment.amount)}</strong><span>Received {payment.receivedAt.toLocaleDateString()} · {payment.method.replace('-', ' ')}</span><span>Status: {payment.status}</span></div><div><b>{payment.reference || payment.receiptNumber || 'No reference'}</b><p>{payment.comments || 'No additional comments'}</p></div></article>)}{!pledgePayments.some((payment) => payment.pledgeId === editingPledge.id) && <p className="muted small">No received payments were recorded.</p>}</div></> : editingPledge.id.startsWith('dashboard:') || !editingPledge.id ? <div className="pledge-source-note"><span>Save and link this pledge first. Then reopen it to record received payments.</span></div> : <>
           <div className="pledge-payment-entry">
             <label><span>Date received *</span><input type="date" max={dateValue(new Date())} value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /></label>
             <label><span>Amount received *</span><div className="money-input"><span>$</span><input type="number" min="0.01" max={Math.max(0, editingPledge.pledgedAmount - editingPledge.paidAmount)} step="0.01" value={paymentAmount || ''} onChange={(event) => setPaymentAmount(Number(event.target.value) || 0)} /></div></label>
@@ -454,7 +443,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
           <div className="pledge-payment-list">{pledgePayments.filter((payment) => payment.pledgeId === editingPledge.id).map((payment) => <article key={payment.id}><div><strong>{money.format(payment.amount)}</strong><span>Received {payment.receivedAt.toLocaleDateString()} · {payment.method.replace('-', ' ')}</span><span>Status: {payment.status}{payment.depositedAt ? ` · Processed ${payment.depositedAt.toLocaleDateString()}` : ''}</span></div><div><b>{payment.reference || payment.receiptNumber || 'No reference'}</b><p>{[payment.receivedBy ? `Received by ${payment.receivedBy}` : '', payment.receiptNumber ? `Receipt ${payment.receiptNumber}` : '', payment.designation ? `For ${payment.designation}` : ''].filter(Boolean).join(' · ')}</p><p>{payment.comments || 'No additional comments'}</p></div></article>)}{!pledgePayments.some((payment) => payment.pledgeId === editingPledge.id) && <p className="muted small">No received payments have been recorded yet.</p>}</div>
         </>}
       </section>
-    </div><div className="modal-actions"><button className="secondary-btn" onClick={() => setEditingPledge(null)}>Cancel</button><button className="primary-btn" disabled={saving} onClick={savePledge}>{saving ? 'Saving…' : 'Save pledge'}</button></div></section></div>}
+    </div><div className="modal-actions"><button className="secondary-btn" onClick={() => setEditingPledge(null)}>Close</button>{editingPledge.status !== 'cancelled' && <button className="primary-btn" disabled={saving} onClick={savePledge}>{saving ? 'Saving…' : 'Save pledge'}</button>}</div></section></div>}
   </div>;
 };
 
