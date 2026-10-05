@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { TempleEvent } from '../helpers/types';
 import { addDonorInteraction, CampaignSummary, donorDuplicateKeys, DonorContactInteraction, FundraisingDonor, FundraisingPledge, FundraisingPledgePayment, loadCampaignSummaries, PledgePaymentMethod, PledgePaymentStatus, recordFundraisingPledgePayment, saveFundraisingDonor, saveFundraisingPledge, subscribeDonorInteractions, subscribeFundraisingDonors, subscribeFundraisingPledgePayments, subscribeFundraisingPledges, uploadFundraisingDonorPicture } from '../helpers/fundraisingCrm';
 import QuickBooksReports from './QuickBooksReports';
+import { getDepartmentDirectory } from '../helpers/departments';
 
 const blankDonor = (): FundraisingDonor => ({
   id: '', firstName: '', lastName: '', title: '', middleInitial: '', initiatedName: '', email: '', phone: '', officePhone: '', organization: '', address: '', city: '', state: '', postalCode: '', country: '',
@@ -54,6 +55,7 @@ function csvBoolean(value: string): boolean {
 
 const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: (message: string) => void }> = ({ events, uid, setError }) => {
   const [donors, setDonors] = useState<FundraisingDonor[]>([]);
+  const [fundraisingAdminNames, setFundraisingAdminNames] = useState<string[]>([]);
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
   const [pledges, setPledges] = useState<FundraisingPledge[]>([]);
   const [pledgePayments, setPledgePayments] = useState<FundraisingPledgePayment[]>([]);
@@ -89,6 +91,15 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     return subscribeFundraisingDonors((records, complete) => { setDonors(records); setDonorLoadComplete(complete); }, (error) => setError(error.message), donorDataset);
   }, [setError, donorRefresh, donorDataset]);
   useEffect(() => subscribeFundraisingPledges(setPledges, (error) => setError(error.message)), [setError]);
+  useEffect(() => {
+    let active = true;
+    getDepartmentDirectory().then((directory) => {
+      if (active) setFundraisingAdminNames(Array.from(new Set(directory.memberships
+        .filter((member) => member.departmentId === 'fundraising' && member.role === 'admin')
+        .map((member) => member.name.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)));
+    }).catch(() => { if (active) setFundraisingAdminNames([]); });
+    return () => { active = false; };
+  }, []);
   useEffect(() => subscribeFundraisingPledgePayments(setPledgePayments, (error) => setError(error.message)), [setError]);
   useEffect(() => subscribeDonorInteractions(setInteractions, (error) => setError(error.message)), [setError]);
   useEffect(() => { loadCampaignSummaries(Object.fromEntries(events.map((event) => [event.id, event.name]))).then(setCampaigns).catch((error) => setError(error.message)); }, [events, setError]);
@@ -332,6 +343,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   };
 
   return <div className="fundraising-crm">
+    <datalist id="fundraising-admin-name-options">{fundraisingAdminNames.map((name) => <option value={name} key={name} />)}</datalist>
     <nav className="fundraising-crm-tabs" aria-label="Fundraising CRM sections">
       <button className={view === 'donors' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingCuratedDonors'); setView('donors'); }}>Donors</button>
       <button className={view === 'raw' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingDonors'); setView('raw'); }}>Raw Donor Information</button>
@@ -390,7 +402,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <label><span>Pledge start date</span><input type="date" value={dateValue(editing.autoDeductPledgeStart)} onChange={(event) => setEditing({ ...editing, autoDeductPledgeStart: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null })} /></label><label><span>Pledge remaining</span><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={editing.autoDeductPledgeRemaining || ''} onChange={(event) => setEditing({ ...editing, autoDeductPledgeRemaining: Number(event.target.value) || 0 })} /></div></label>
       <label><span>Card last four digits only</span><input inputMode="numeric" maxLength={4} value={editing.cardLastFour} onChange={(event) => setEditing({ ...editing, cardLastFour: event.target.value.replace(/\D/g, '').slice(0, 4) })} placeholder="1234" /></label><label><span>Card billing ZIP</span><input value={editing.cardBillingZip} onChange={(event) => setEditing({ ...editing, cardBillingZip: event.target.value })} /></label>
       <label className="full"><span>Card billing address</span><textarea rows={2} value={editing.cardBillingAddress} onChange={(event) => setEditing({ ...editing, cardBillingAddress: event.target.value })} /></label><p className="full muted small">For security, store only the last four card digits here. Full card numbers must remain with the payment processor.</p>
-      <label id="donor-profile-other"><span>Tags (comma separated)</span><input value={editing.tags.join(', ')} onChange={(event) => setEditing({ ...editing, tags: event.target.value.split(',') })} /></label><label><span>Assigned fundraiser</span><input value={editing.assignedTo} onChange={(event) => setEditing({ ...editing, assignedTo: event.target.value })} /></label>
+      <label id="donor-profile-other"><span>Tags (comma separated)</span><input value={editing.tags.join(', ')} onChange={(event) => setEditing({ ...editing, tags: event.target.value.split(',') })} /></label><label><span>Assigned fundraiser</span><input list="fundraising-admin-name-options" value={editing.assignedTo} onChange={(event) => setEditing({ ...editing, assignedTo: event.target.value })} placeholder="Choose fundraising admin or enter a name" /><small className="muted">Select an admin from the suggestions or type another name.</small></label>
       <section className="full fundraising-donor-picture"><div>{editing.pictureUrl ? <img src={editing.pictureUrl} alt={`${donorName(editing)} donor profile`} /> : <span>No donor picture</span>}</div><label className="secondary-btn"><span>{editing.pictureUrl ? 'Replace donor picture' : 'Upload donor picture'}</span><input type="file" accept="image/jpeg,image/png,image/webp" disabled={saving} onChange={(event) => { uploadDonorPicture(event.target.files?.[0]); event.target.value = ''; }} /></label>{editing.pictureUrl && <button type="button" className="link-btn danger" onClick={() => setEditing({ ...editing, pictureUrl: '', picturePath: '' })}>Remove picture</button>}</section><label><span>Picture URL</span><input type="url" value={editing.pictureUrl} onChange={(event) => setEditing({ ...editing, pictureUrl: event.target.value, picturePath: '' })} /></label><label><span>Website</span><input type="url" value={editing.websiteUrl} onChange={(event) => setEditing({ ...editing, websiteUrl: event.target.value })} /></label>
       <label><span>Facebook link</span><input type="url" value={editing.facebookUrl} onChange={(event) => setEditing({ ...editing, facebookUrl: event.target.value })} /></label><label><span>LinkedIn link</span><input type="url" value={editing.linkedinUrl} onChange={(event) => setEditing({ ...editing, linkedinUrl: event.target.value })} /></label>
       <label><span>Twitter / X</span><input value={editing.twitterHandle} onChange={(event) => setEditing({ ...editing, twitterHandle: event.target.value })} /></label><label><span>Phone append date</span><input type="date" value={dateValue(editing.phoneAppendDate)} onChange={(event) => setEditing({ ...editing, phoneAppendDate: event.target.value ? new Date(`${event.target.value}T12:00:00`) : null })} /></label>
@@ -427,7 +439,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
             <label><span>Payment mode *</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PledgePaymentMethod)}><option value="zelle">Zelle</option><option value="check">Check</option><option value="cash">Cash</option><option value="card">Credit/debit card</option><option value="bank-transfer">Bank transfer</option><option value="other">Other</option></select></label>
             <label><span>Payment status</span><select value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value as PledgePaymentStatus)}><option value="received">Received</option><option value="deposited">Deposited</option><option value="cleared">Cleared</option></select></label>
             <label><span>Reference / check number</span><input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} placeholder="Transaction ID, check number, etc." /></label>
-            <label><span>Received by</span><input value={paymentReceivedBy} onChange={(event) => setPaymentReceivedBy(event.target.value)} placeholder="Fundraiser or volunteer name" /></label>
+            <label><span>Received by</span><input list="fundraising-admin-name-options" value={paymentReceivedBy} onChange={(event) => setPaymentReceivedBy(event.target.value)} placeholder="Choose fundraising admin or enter a name" /><small className="muted">Select an admin from the suggestions or type another name.</small></label>
             <label><span>Deposited / processed date</span><input type="date" value={paymentDepositedDate} onChange={(event) => setPaymentDepositedDate(event.target.value)} /></label>
             <label><span>Receipt number</span><input value={paymentReceiptNumber} onChange={(event) => setPaymentReceiptNumber(event.target.value)} /></label>
             <label className="full"><span>Fund / designation</span><input value={paymentDesignation} onChange={(event) => setPaymentDesignation(event.target.value)} placeholder="General fund, building fund, event, deity seva, etc." /></label>
