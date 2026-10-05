@@ -332,9 +332,10 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   const recordPledgePayment = async () => {
     if (!editingPledge || editingPledge.id.startsWith('dashboard:')) return setError('Save this dashboard pledge first, then reopen it to record payments.');
     if (!uid || !paymentDate || paymentAmount <= 0) return setError('Enter a received date and payment amount greater than zero.');
+    if (paymentDate > dateValue(new Date())) return setError('Date received cannot be in the future.');
     setSaving(true); setError(''); setMessage('');
     try {
-      await recordFundraisingPledgePayment({ pledgeId: editingPledge.id, amount: paymentAmount, receivedAt: new Date(`${paymentDate}T12:00:00`), method: paymentMethod, status: paymentStatus, receivedBy: paymentReceivedBy, depositedAt: paymentDepositedDate ? new Date(`${paymentDepositedDate}T12:00:00`) : null, receiptNumber: paymentReceiptNumber, designation: paymentDesignation, reference: paymentReference, comments: paymentComments }, uid);
+      await recordFundraisingPledgePayment({ pledgeId: editingPledge.id, amount: paymentAmount, receivedAt: new Date(`${paymentDate}T00:00:00`), method: paymentMethod, status: paymentStatus, receivedBy: paymentReceivedBy, depositedAt: paymentDepositedDate ? new Date(`${paymentDepositedDate}T12:00:00`) : null, receiptNumber: paymentReceiptNumber, designation: paymentDesignation, reference: paymentReference, comments: paymentComments }, uid);
       setEditingPledge({ ...editingPledge, paidAmount: editingPledge.paidAmount + paymentAmount, status: editingPledge.paidAmount + paymentAmount >= editingPledge.pledgedAmount ? 'fulfilled' : 'active' });
       setPaymentAmount(0); setPaymentReference(''); setPaymentComments(''); setPaymentReceivedBy(''); setPaymentDepositedDate(''); setPaymentReceiptNumber(''); setPaymentDesignation(''); setPaymentStatus('received'); setPaymentDate(dateValue(new Date()));
       setMessage('Pledge payment recorded in the payment history.');
@@ -437,7 +438,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <section className="full pledge-payment-history"><div><h3>Payment history</h3><p className="muted small">Record when pledge money was received, its payment mode, and supporting details.</p></div>
         {editingPledge.id.startsWith('dashboard:') || !editingPledge.id ? <div className="pledge-source-note"><span>Save and link this pledge first. Then reopen it to record received payments.</span></div> : <>
           <div className="pledge-payment-entry">
-            <label><span>Date received *</span><input type="date" value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /></label>
+            <label><span>Date received *</span><input type="date" max={dateValue(new Date())} value={paymentDate} onChange={(event) => setPaymentDate(event.target.value)} /></label>
             <label><span>Amount received *</span><div className="money-input"><span>$</span><input type="number" min="0.01" max={Math.max(0, editingPledge.pledgedAmount - editingPledge.paidAmount)} step="0.01" value={paymentAmount || ''} onChange={(event) => setPaymentAmount(Number(event.target.value) || 0)} /></div></label>
             <label><span>Payment mode *</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as PledgePaymentMethod)}><option value="zelle">Zelle</option><option value="check">Check</option><option value="cash">Cash</option><option value="card">Credit/debit card</option><option value="bank-transfer">Bank transfer</option><option value="other">Other</option></select></label>
             <label><span>Payment status</span><select value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value as PledgePaymentStatus)}><option value="received">Received</option><option value="deposited">Deposited</option><option value="cleared">Cleared</option></select></label>
