@@ -44,6 +44,7 @@
 .fundraising-space-tabs { margin-bottom: 1rem; }
 .fundraising-space-tabs button, .fundraising-crm-tabs button { flex: 0 0 auto; padding: 0.65rem 1rem; border: 0; border-radius: 10px; color: var(--muted); background: transparent; font-weight: 800; }
 .fundraising-space-tabs button.active, .fundraising-crm-tabs button.active { color: #fff; background: var(--green-600); }
+.fundraising-open-followup-count { display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; margin-left: 0.3rem; padding: 0.1rem 0.4rem; border-radius: 999px; color: #b91c1c; background: #fff1f2; font-weight: 800; }
 .fundraising-crm { display: grid; gap: 1rem; }
 .fundraising-crm-summary, .fundraising-report-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.8rem; }
 .fundraising-crm-summary > div, .fundraising-report-grid > div { display: grid; gap: 0.25rem; padding: 1rem; border: 1px solid #cfe2d2; border-radius: 14px; background: linear-gradient(145deg, #fff, #f2faf4); }

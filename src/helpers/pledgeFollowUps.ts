@@ -8,6 +8,11 @@ export interface PledgeFollowUp {
   assignedTo: string; status: 'open' | 'completed'; createdBy: string;
 }
 
+export function subscribeOpenPledgeFollowUpCount(callback: (count: number) => void, onError: (error: Error) => void) {
+  return onSnapshot(query(collection(db, 'fundraisingPledgeFollowUps'), where('status', '==', 'open')),
+    snapshot => callback(snapshot.size), onError);
+}
+
 export function validateFollowUp(title: string, details: string, dueAt: Date): string {
   if (!title.trim() || title.trim().length > 180) return 'Enter a task title of 1–180 characters.';
   if (details.length > 5000) return 'Keep task details within 5,000 characters.';

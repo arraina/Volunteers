@@ -9,6 +9,7 @@ import { comparePledgeDates, eventPledgeDate } from '../helpers/pledgeEditing';
 import { syncEventPledgeDate } from '../helpers/fundraisingCrm';
 import PledgeFollowUpPanel from '../components/PledgeFollowUpPanel';
 import DepartmentWorkspacePage from './DepartmentWorkspacePage';
+import { subscribeOpenPledgeFollowUpCount } from '../helpers/pledgeFollowUps';
 
 const blankDonor = (): FundraisingDonor => ({
   id: '', firstName: '', lastName: '', title: '', middleInitial: '', initiatedName: '', email: '', phone: '', officePhone: '', organization: '', address: '', city: '', state: '', postalCode: '', country: '',
@@ -47,6 +48,12 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   const [editing, setEditing] = useState<FundraisingDonor | null>(null);
   const [editingPledge, setEditingPledge] = useState<FundraisingPledge | null>(null);
   const [followUpPledge, setFollowUpPledge] = useState<FundraisingPledge | null>(null);
+  const [openFollowUpCount, setOpenFollowUpCount] = useState<number | null>(null);
+  useEffect(() => {
+    setOpenFollowUpCount(null);
+    if (!uid) return;
+    return subscribeOpenPledgeFollowUpCount(setOpenFollowUpCount, error => { setOpenFollowUpCount(null); setError(error.message); });
+  }, [uid, setError]);
   useEffect(() => {
     if (!followUpPledge) return;
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setFollowUpPledge(null); };
@@ -309,7 +316,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <button className={view === 'followups' ? 'active' : ''} onClick={() => setView('followups')}>Stewardship</button>
       <button className={view === 'reports' ? 'active' : ''} onClick={() => setView('reports')}>Reports</button>
       <button className={view === 'audit' ? 'active' : ''} onClick={() => setView('audit')}>Audit &amp; lineage</button>
-      <button className={view === 'pledge-followups' ? 'active' : ''} onClick={() => setView('pledge-followups')}>Pledge follow-ups</button>
+      <button className={view === 'pledge-followups' ? 'active' : ''} onClick={() => setView('pledge-followups')}>Pledge follow-ups {openFollowUpCount !== null && <span className="fundraising-open-followup-count" aria-label={`${openFollowUpCount} open follow-ups`} aria-live="polite">{openFollowUpCount}</span>}</button>
       <button className={view === 'workspace' ? 'active' : ''} onClick={() => setView('workspace')}>Team workspace</button>
     </nav>
     {message && <div className="success-message">{message}</div>}
