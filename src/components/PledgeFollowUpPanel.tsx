@@ -6,7 +6,7 @@ import { FundraisingRecordAudit } from './FundraisingAuditHistory';
 
 const dateLabel = (date: Date) => date.toLocaleString('en-US', { timeZone: 'America/New_York' });
 
-const PledgeFollowUpPanel: React.FC<{ pledge?: FundraisingPledge; uid?: string; contacts?: DonorContactInteraction[]; onOpenPledge?: (id: string) => void }> = ({ pledge, uid, contacts = [], onOpenPledge }) => {
+const PledgeFollowUpPanel: React.FC<{ pledge?: FundraisingPledge; uid?: string; contacts?: DonorContactInteraction[]; onOpenPledge?: (id: string) => void; focusTask?: boolean }> = ({ pledge, uid, contacts = [], onOpenPledge, focusTask = false }) => {
   const [records, setRecords] = useState<PledgeFollowUp[]>([]);
   const [error, setError] = useState(''); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<PledgeFollowUp | null>(null);
@@ -45,7 +45,7 @@ const PledgeFollowUpPanel: React.FC<{ pledge?: FundraisingPledge; uid?: string; 
     {writable && <div className="fundraising-donor-form">
       <h4 className="full">{editing ? 'Edit follow-up' : 'Create a task or reminder'}</h4>
       <label><span>Type</span><select value={kind} onChange={(event) => setKind(event.target.value as 'task' | 'reminder')}><option value="task">To-do task</option><option value="reminder">Reminder</option></select></label>
-      <label><span>Title *</span><input maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+      <label><span>Title *</span><input autoFocus={focusTask} maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
       <label><span>Due date and time (Eastern) *</span><input type="datetime-local" value={due} onChange={(event) => setDue(event.target.value)} /></label>
       <label><span>Assigned fundraiser</span><input list="fundraising-admin-name-options" value={assignee} onChange={(event) => setAssignee(event.target.value)} placeholder="Choose admin or enter a name" /></label>
       <label className="full"><span>Details</span><textarea rows={4} maxLength={5000} value={details} onChange={(event) => setDetails(event.target.value)} /></label>

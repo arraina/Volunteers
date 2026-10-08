@@ -5,6 +5,21 @@ import { httpsCallable } from 'firebase/functions';
 import { firestoreTimestampToDate } from './types';
 
 export type DonorStatus = 'active' | 'prospect' | 'inactive';
+// Change only the date, preserving financial fields and attributing the correction.
+export async function syncEventPledgeDate(id: string, uid: string) {
+  await runTransaction(db, async transaction => {
+    const ref = doc(db, 'fundraisingPledges', id);
+    const pledge = await transaction.get(ref);
+    if (!pledge.exists() || !pledge.data().eventId) return;
+    const event = await transaction.get(doc(db, 'events', pledge.data().eventId));
+    if (!event.exists() || !event.data().date) return;
+    const date = firestoreTimestampToDate(event.data().date);
+    if (!Number.isFinite(date.getTime())) return;
+    const previous = pledge.data().pledgeDate;
+    if (previous && firestoreTimestampToDate(previous).getTime() === date.getTime()) return;
+    transaction.update(ref, { pledgeDate: date, updatedBy: uid, updatedAt: serverTimestamp() });
+  });
+}
 export interface DonorChild { name: string; birthDate: Date | null; }
 export interface DonorContactInteraction { id: string; donorId: string; calledAt: Date; notes: string; createdBy: string; createdAt: Date | null; pledgeId?: string; method?: string; outcome?: string; contactedBy?: string; }
 

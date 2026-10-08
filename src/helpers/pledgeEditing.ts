@@ -5,3 +5,7 @@ export function comparePledgeDates(a: { id: string; pledgeDate: Date | null }, b
   const difference = leftKnown && rightKnown ? left! - right! : 0;
   return (direction === 'asc' ? difference : -difference) || a.id.localeCompare(b.id);
 }
+export function eventPledgeDate(eventId: string, fallback: Date | null, events: Array<{ id: string; date?: Date }>): Date | null {
+  const date = events.find(event => event.id === eventId)?.date;
+  return date && Number.isFinite(date.getTime()) ? date : fallback;
+}
