@@ -1,4 +1,4 @@
-const COLLECTIONS = new Set(['fundraisingCuratedDonors', 'fundraisingPledges', 'fundraisingPledgePayments', 'fundraisingCampaigns', 'fundraisingDonorInteractions', 'fundraisingShareLinks']);
+const COLLECTIONS = new Set(['fundraisingCuratedDonors', 'fundraisingPledges', 'fundraisingPledgePayments', 'fundraisingCampaigns', 'fundraisingDonorInteractions', 'fundraisingShareLinks', 'fundraisingPledgeFollowUps']);
 
 function safeSnapshot(collection, data) {
   if (!data) return null;
@@ -31,7 +31,7 @@ function financialValues(collection, data) {
 }
 
 function lineage(data) {
-  return Object.fromEntries(['donorId', 'pledgeId', 'eventId', 'sourceCampaignEntryId', 'sourceImportKey', 'openBalanceSource', 'purpose', 'designation'].filter((key) => data?.[key] != null).map((key) => [key, data[key]]));
+  return Object.fromEntries(['donorId', 'pledgeId', 'eventId', 'sourceCampaignEntryId', 'sourceImportKey', 'openBalanceSource', 'purpose', 'designation', 'assignedTo'].filter((key) => data?.[key] != null).map((key) => [key, data[key]]));
 }
 
 module.exports = { COLLECTIONS, changes, financialValues, lineage, safeSnapshot };

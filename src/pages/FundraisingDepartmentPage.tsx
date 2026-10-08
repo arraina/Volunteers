@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { signOut } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
@@ -8,32 +8,36 @@ import { subscribeEvents } from '../helpers/store';
 import { TempleEvent } from '../helpers/types';
 import FundraisingDashboard from './FundraisingDashboard';
 import FundraisingCrm from './FundraisingCrm';
+import DepartmentWorkspacePage from './DepartmentWorkspacePage';
 import './AdminDashboard.css';
 
 const FundraisingDepartmentPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, isAdmin, isOwner } = useAuth();
   const [events, setEvents] = useState<TempleEvent[]>([]);
   const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [canManage, setCanManage] = useState(false);
   const [accessError, setAccessError] = useState('');
   const [error, setError] = useState('');
   const [section, setSection] = useState<'crm' | 'dashboard'>('crm');
 
   useEffect(() => {
+    setAllowed(null); setCanManage(false);
     setAccessError('');
     getDepartmentWorkspace('fundraising')
-      .then((workspace) => setAllowed(workspace.canManage || isOwner))
+      .then((workspace) => { setCanManage(workspace.canManage || isOwner); setAllowed(true); })
       .catch((cause) => {
         const message = cause instanceof Error ? cause.message : 'Fundraising access could not be verified.';
         setAccessError(message);
         setAllowed(false);
       });
-  }, [isOwner]);
+  }, [isOwner, user?.uid]);
 
   useEffect(() => {
-    if (!allowed) return;
+    if (!allowed || !canManage) return;
     return subscribeEvents(setEvents);
-  }, [allowed]);
+  }, [allowed, canManage]);
 
   if (allowed === null) return <div className="loading">Checking Fundraising access…</div>;
   if (!allowed) {
@@ -45,8 +49,8 @@ const FundraisingDepartmentPage: React.FC = () => {
     <header className="dashboard-header"><div><h1>ISKCON Parsippany Community Hub</h1><p>Serve. Connect. Grow. · Fundraising</p></div><div className="header-actions"><button className="logout-btn" onClick={() => navigate(isAdmin ? '/admin?tab=departments' : '/dashboard?tab=departments')}>Community Hub</button><button className="logout-btn" onClick={async () => { await signOut(auth); navigate('/login'); }}>Logout</button></div></header>
     <main className="dashboard-content">
       {error && <div className="error-message">{error}</div>}
-      <nav className="fundraising-space-tabs" aria-label="Fundraising workspace"><button className={section === 'crm' ? 'active' : ''} onClick={() => setSection('crm')}>Fundraising CRM</button><button className={section === 'dashboard' ? 'active' : ''} onClick={() => setSection('dashboard')}>Live dashboard</button></nav>
-      {section === 'crm' ? <FundraisingCrm events={events} uid={user?.uid} setError={setError} /> : <FundraisingDashboard events={events} uid={user?.uid} isOwner={isOwner} canCreateEvent={isAdmin} setError={setError} />}
+      {canManage ? <><nav className="fundraising-space-tabs" aria-label="Fundraising workspace"><button className={section === 'crm' ? 'active' : ''} onClick={() => setSection('crm')}>Fundraising CRM</button><button className={section === 'dashboard' ? 'active' : ''} onClick={() => setSection('dashboard')}>Live dashboard</button></nav>
+      {section === 'crm' ? <FundraisingCrm events={events} uid={user?.uid} setError={setError} initialView={searchParams.get('tab') === 'workspace' ? 'workspace' : undefined} /> : <FundraisingDashboard events={events} uid={user?.uid} isOwner={isOwner} canCreateEvent={isAdmin} setError={setError} />}</> : <section className="panel"><h2>Fundraising CRM · Team workspace</h2><p className="muted">Department members can collaborate here. Donor, pledge, and financial records remain restricted to fundraising admins and the Owner.</p><DepartmentWorkspacePage embedded departmentOverride="fundraising" /></section>}
     </main>
   </div>;
 };

@@ -1375,7 +1375,7 @@ exports.auditApplicationActivity = onDocumentWrittenWithAuthContext(
         actorName = profile.name || [profile.firstName, profile.lastName].filter(Boolean).join(' ') || (user.status === 'fulfilled' && user.value.displayName) || actorEmail || actorName;
       }
       const ref = db.doc(`fundraisingAuditLogs/${createHash('sha256').update(event.id).digest('hex')}`);
-      let label = [data.donorFirstName || data.firstName, data.donorLastName || data.lastName].filter(Boolean).join(' ') || data.dashboardName || data.organization || documentId;
+      let label = [data.donorFirstName || data.firstName, data.donorLastName || data.lastName].filter(Boolean).join(' ') || data.title || data.donorName || data.dashboardName || data.organization || documentId;
       let relatedLineage = {};
       if (collectionId === 'fundraisingPledgePayments' && data.pledgeId) {
         const pledge = (await db.doc(`fundraisingPledges/${data.pledgeId}`).get()).data();

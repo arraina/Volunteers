@@ -6,7 +6,7 @@ import { firestoreTimestampToDate } from './types';
 
 export type DonorStatus = 'active' | 'prospect' | 'inactive';
 export interface DonorChild { name: string; birthDate: Date | null; }
-export interface DonorContactInteraction { id: string; donorId: string; calledAt: Date; notes: string; createdBy: string; createdAt: Date | null; }
+export interface DonorContactInteraction { id: string; donorId: string; calledAt: Date; notes: string; createdBy: string; createdAt: Date | null; pledgeId?: string; method?: string; outcome?: string; contactedBy?: string; }
 
 export interface FundraisingDonor {
   id: string;
@@ -227,12 +227,14 @@ export async function uploadFundraisingDonorPicture(dataUrl: string): Promise<{ 
 export function subscribeDonorInteractions(cb: (records: DonorContactInteraction[]) => void, onError?: (error: Error) => void) {
   return onSnapshot(collection(db, 'fundraisingDonorInteractions'), (snapshot) => cb(snapshot.docs.map((item) => {
     const data = item.data();
-    return { id: item.id, donorId: String(data.donorId || ''), calledAt: firestoreTimestampToDate(data.calledAt), notes: String(data.notes || ''), createdBy: String(data.createdBy || ''), createdAt: data.createdAt ? firestoreTimestampToDate(data.createdAt) : null };
+    return { id: item.id, donorId: String(data.donorId || ''), calledAt: firestoreTimestampToDate(data.calledAt), notes: String(data.notes || ''), createdBy: String(data.createdBy || ''), createdAt: data.createdAt ? firestoreTimestampToDate(data.createdAt) : null, pledgeId: String(data.pledgeId || ''), method: String(data.method || 'phone'), outcome: String(data.outcome || ''), contactedBy: String(data.contactedBy || '') };
   }).sort((a, b) => Number(b.calledAt) - Number(a.calledAt))), (error) => onError?.(error));
 }
 
-export async function addDonorInteraction(donorId: string, calledAt: Date, notes: string, uid?: string) {
+export async function addDonorInteraction(donorId: string, calledAt: Date, notes: string, uid?: string, pledgeContact?: { pledgeId: string; method: string; outcome: string; contactedBy: string }) {
+  if (pledgeContact && (!Number.isFinite(calledAt.getTime()) || calledAt > new Date())) throw new Error('Contact date and time cannot be in the future.');
   return addDoc(collection(db, 'fundraisingDonorInteractions'), {
+    ...(pledgeContact || {}),
     donorId, calledAt, notes: notes.trim(), createdBy: uid || '', createdAt: serverTimestamp(),
   });
 }
