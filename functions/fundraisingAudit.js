@@ -1,4 +1,4 @@
-const COLLECTIONS = new Set(['fundraisingCuratedDonors', 'fundraisingPledges', 'fundraisingPledgePayments', 'fundraisingCampaigns', 'fundraisingDonorInteractions', 'fundraisingShareLinks', 'fundraisingPledgeFollowUps']);
+const COLLECTIONS = new Set(['fundraisingCuratedDonors', 'fundraisingPledges', 'fundraisingPledgePayments', 'fundraisingCampaigns', 'fundraisingDonorInteractions', 'fundraisingShareLinks', 'fundraisingPledgeFollowUps', 'fundraisingReceipts']);
 
 function safeSnapshot(collection, data) {
   if (!data) return null;
@@ -14,6 +14,7 @@ function changes(before, after) {
 
 function financialValues(collection, data) {
   if (!data) return null;
+  if (collection === 'fundraisingReceipts') return data.kind === 'loan' ? { principalReceived: data.amount || 0, returned: data.repaidAmount || 0, remaining: Math.max(0, (data.amount || 0) - (data.repaidAmount || 0)) } : { donationReceived: data.amount || 0 };
   if (collection === 'fundraisingPledges') return {
     originalPledged: data.pledgedAmount || 0,
     paid: data.openBalanceKnown === false ? null : data.paidAmount || 0,

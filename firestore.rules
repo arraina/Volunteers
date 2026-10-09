@@ -422,6 +422,11 @@ service cloud.firestore {
       }
     }
 
+    // Financial receipts and loan repayments are validated by callable functions.
+    match /fundraisingReceipts/{receiptId} {
+      allow read: if isOwner() || isDepartmentAdmin('fundraising');
+      allow write: if false;
+    }
     match /fundraisingPledges/{pledgeId} {
       allow read: if isOwner() || isDepartmentAdmin('fundraising');
       allow create, update: if (isOwner() || isDepartmentAdmin('fundraising'))

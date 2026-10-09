@@ -10,6 +10,7 @@ import { syncEventPledgeDate } from '../helpers/fundraisingCrm';
 import PledgeFollowUpPanel from '../components/PledgeFollowUpPanel';
 import DepartmentWorkspacePage from './DepartmentWorkspacePage';
 import { subscribeOpenPledgeFollowUpCount } from '../helpers/pledgeFollowUps';
+import FundraisingReceiptsPanel from '../components/FundraisingReceiptsPanel';
 
 const blankDonor = (): FundraisingDonor => ({
   id: '', firstName: '', lastName: '', title: '', middleInitial: '', initiatedName: '', email: '', phone: '', officePhone: '', organization: '', address: '', city: '', state: '', postalCode: '', country: '',
@@ -43,7 +44,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
   const [pledges, setPledges] = useState<FundraisingPledge[]>([]);
   const [pledgePayments, setPledgePayments] = useState<FundraisingPledgePayment[]>([]);
   const [interactions, setInteractions] = useState<DonorContactInteraction[]>([]);
-  const [view, setView] = useState<'donors' | 'raw' | 'pledges' | 'campaigns' | 'followups' | 'reports' | 'audit' | 'workspace' | 'pledge-followups'>(initialView || 'donors');
+  const [view, setView] = useState<'donors' | 'raw' | 'pledges' | 'loans' | 'donations' | 'campaigns' | 'followups' | 'reports' | 'audit' | 'workspace' | 'pledge-followups'>(initialView || 'donors');
   const [donorDataset, setDonorDataset] = useState<'fundraisingCuratedDonors' | 'fundraisingDonors'>('fundraisingCuratedDonors');
   const [editing, setEditing] = useState<FundraisingDonor | null>(null);
   const [editingPledge, setEditingPledge] = useState<FundraisingPledge | null>(null);
@@ -312,6 +313,8 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <button className={view === 'donors' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingCuratedDonors'); setView('donors'); }}>Donors</button>
       <button className={view === 'raw' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingDonors'); setView('raw'); }}>Raw Donor Information</button>
       <button className={view === 'pledges' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingCuratedDonors'); setView('pledges'); }}>Pledges</button>
+      <button className={view === 'loans' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingCuratedDonors'); setView('loans'); }}>Loans</button>
+      <button className={view === 'donations' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingCuratedDonors'); setView('donations'); }}>Donations</button>
       <button className={view === 'campaigns' ? 'active' : ''} onClick={() => setView('campaigns')}>Campaigns</button>
       <button className={view === 'followups' ? 'active' : ''} onClick={() => setView('followups')}>Stewardship</button>
       <button className={view === 'reports' ? 'active' : ''} onClick={() => setView('reports')}>Reports</button>
@@ -321,6 +324,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     </nav>
     {message && <div className="success-message">{message}</div>}
     {view === 'audit' && <FundraisingAuditHistory />}
+    {(view === 'loans' || view === 'donations') && <FundraisingReceiptsPanel key={view} kind={view === 'loans' ? 'loan' : 'donation'} donors={donorDataset === 'fundraisingCuratedDonors' ? donors : []} events={events} campaigns={campaigns} onOpenDonor={donor => { setView('donors'); setEditing({ ...donor }); }} />}
     {view === 'workspace' && <DepartmentWorkspacePage embedded departmentOverride="fundraising" />}
     {view === 'pledge-followups' && <PledgeFollowUpPanel uid={uid} onOpenPledge={(id) => { const pledge = displayedPledges.find((item) => item.id === id); if (!pledge) return setError('This pledge is no longer available.'); setView('pledges'); setEditingPledge({ ...pledge }); setCancellationReason(pledge.cancellationReason); }} />}
     {(view === 'donors' || view === 'raw') && <section className="panel">

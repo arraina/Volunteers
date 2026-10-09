@@ -146,6 +146,54 @@ async function requireDepartmentAccess(request, departmentId, manage = false) {
   return { isOwner: false, isDepartmentAdmin };
 }
 
+const fundraisingReceipts = require('./fundraisingReceipts');
+exports.saveFundraisingReceipt = onCall({ region: 'us-central1', maxInstances: 4 }, async request => {
+  await requireDepartmentAccess(request, 'fundraising', true);
+  let input;
+  try { input = fundraisingReceipts.receipt(request.data || {}); } catch (error) { throw new HttpsError('invalid-argument', error.message); }
+  const id = request.data.id || '';
+  if (id && (typeof id !== 'string' || !/^[\w-]{1,180}$/.test(id))) throw new HttpsError('invalid-argument', 'Invalid record ID.');
+  // Deterministic source IDs prevent duplicate conversion of dashboard entries.
+  const sourceId = input.sourceCampaignEntryId ? tokenHash(`${input.eventId}:${input.sourceCampaignEntryId}:${input.kind}`) : '';
+  const ref = id ? db.doc(`fundraisingReceipts/${id}`) : sourceId ? db.doc(`fundraisingReceipts/source_${sourceId}`) : db.collection('fundraisingReceipts').doc();
+  await db.runTransaction(async transaction => {
+    const existing = await transaction.get(ref);
+    const donor = await transaction.get(db.doc(`fundraisingCuratedDonors/${input.donorId}`));
+    if (!donor.exists) throw new HttpsError('failed-precondition', 'Choose a verified donor/lender record.');
+    if (id && !existing.exists) throw new HttpsError('not-found', 'Record not found.');
+    const before = existing.data();
+    if (!id && before) throw new HttpsError('already-exists', 'This dashboard receipt has already been saved. Refresh and open the existing record.');
+    if (before && (before.kind !== input.kind || before.eventId !== input.eventId && before.sourceCampaignEntryId || before.sourceCampaignEntryId !== input.sourceCampaignEntryId)) throw new HttpsError('failed-precondition', 'Record type and source lineage cannot be changed.');
+    const payments = before?.repayments || [];
+    const repaidAmount = fundraisingReceipts.returned(payments);
+    if (input.amount < repaidAmount || payments.some(payment => payment.paidDate < input.receivedDate)) throw new HttpsError('failed-precondition', 'Loan principal or received date conflicts with recorded repayments.');
+    transaction.set(ref, { ...input, donorName: [donor.data().firstName, donor.data().lastName].filter(Boolean).join(' ') || donor.data().organization, repayments: payments, repaidAmount, createdBy: before?.createdBy || request.auth.uid, createdAt: before?.createdAt || admin.firestore.FieldValue.serverTimestamp(), updatedBy: request.auth.uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+  });
+  return { id: ref.id };
+});
+exports.recordFundraisingLoanRepayment = onCall({ region: 'us-central1', maxInstances: 4 }, async request => {
+  await requireDepartmentAccess(request, 'fundraising', true);
+  const id = request.data?.id; const paymentId = request.data?.paymentId || '';
+  if (typeof id !== 'string' || !/^[\w-]{1,180}$/.test(id) || typeof paymentId !== 'string' || paymentId && !/^[\w-]{1,180}$/.test(paymentId)) throw new HttpsError('invalid-argument', 'Invalid record ID.');
+  let input; try { input = fundraisingReceipts.repayment(request.data); } catch (error) { throw new HttpsError('invalid-argument', error.message); }
+  const ref = db.doc(`fundraisingReceipts/${id}`);
+  await db.runTransaction(async transaction => {
+    const snapshot = await transaction.get(ref); const loan = snapshot.data();
+    if (!loan || loan.kind !== 'loan') throw new HttpsError('not-found', 'Loan not found.');
+    if (input.paidDate < loan.receivedDate) throw new HttpsError('invalid-argument', 'Repayment cannot precede the loan received date.');
+    const payments = [...(loan.repayments || [])]; const index = payments.findIndex(payment => payment.id === paymentId);
+    if (paymentId && index < 0) throw new HttpsError('not-found', 'Repayment not found.');
+    if (!paymentId && payments.length >= 100) throw new HttpsError('resource-exhausted', 'This loan has reached 100 repayment entries.');
+    const previous = index >= 0 ? payments[index] : null;
+    const payment = { ...input, id: paymentId || db.collection('fundraisingReceipts').doc().id, createdBy: previous?.createdBy || request.auth.uid, createdAt: previous?.createdAt || new Date().toISOString(), updatedBy: request.auth.uid, updatedAt: new Date().toISOString() };
+    if (index >= 0) payments[index] = payment; else payments.push(payment);
+    const repaidAmount = fundraisingReceipts.returned(payments);
+    if (repaidAmount > loan.amount) throw new HttpsError('invalid-argument', 'Repayment cannot exceed the remaining principal.');
+    transaction.update(ref, { repayments: payments, repaidAmount, updatedBy: request.auth.uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+  });
+  return { success: true };
+});
+
 exports.initializeDepartments = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
   await requireAdmin(request, true);
   const batch = db.batch();

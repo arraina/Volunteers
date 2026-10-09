@@ -1,6 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { changes, financialValues, lineage, safeSnapshot, COLLECTIONS } = require('./fundraisingAudit');
+test('loan and donation receipts retain snapshots and audit financial impact', () => {
+  const loan = { kind: 'loan', amount: 1000, repaidAmount: 250, repayments: [{ amount: 250 }] };
+  assert.equal(COLLECTIONS.has('fundraisingReceipts'), true);
+  assert.equal(safeSnapshot('fundraisingReceipts', loan), loan);
+  assert.deepEqual(financialValues('fundraisingReceipts', loan), { principalReceived: 1000, returned: 250, remaining: 750 });
+  assert.deepEqual(financialValues('fundraisingReceipts', { kind: 'donation', amount: 50 }), { donationReceived: 50 });
+});
 test('raw donor imports are excluded from auditing; curated donors and pledges remain covered', () => {
   assert.equal(COLLECTIONS.has('fundraisingDonors'), false);
   assert.equal(COLLECTIONS.has('fundraisingCuratedDonors'), true);
