@@ -51,6 +51,9 @@
 .fundraising-receipt-list small { display: block; margin-top: 0.25rem; color: var(--muted); }
 .fundraising-receipt-list > button.overdue { border-color: #b91c1c; background: #fff1f2; }
 .fundraising-receipt-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.fundraising-combined-table { overflow-x: auto; margin: 1rem 0; }
+.fundraising-combined-table table { border-collapse: collapse; width: 100%; min-width: 740px; }
+.fundraising-combined-table th, .fundraising-combined-table td { text-align: left; padding: 0.65rem; border-bottom: 1px solid var(--line); }
 @media (max-width: 760px) { .fundraising-receipt-head { display: none; } .fundraising-receipt-list > button { grid-template-columns: 1fr 1fr; } }
 .fundraising-crm { display: grid; gap: 1rem; }
 .fundraising-crm-summary, .fundraising-report-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.8rem; }
