@@ -16,14 +16,21 @@ const FundraisingReceiptsPanel: React.FC<{ kind: 'loan' | 'donation'; donors: Fu
   useEffect(() => subscribeReceipts(kind, setRecords, cause => setError(cause.message)), [kind]);
   useEffect(() => { if (!editing) return; const close = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busy) setEditing(null); }; document.addEventListener('keydown', close); return () => document.removeEventListener('keydown', close); }, [editing, busy]);
   const eventName = (id: string) => events.find(event => event.id === id)?.name || campaigns.find(campaign => campaign.eventId === id)?.name || 'General / no event';
+  const donationEventDate = (id: string) => {
+    const date = events.find(event => event.id === id)?.date;
+    return kind === 'donation' && date && Number.isFinite(date.getTime()) ? toEasternDateTimeInput(date).slice(0, 10) : '';
+  };
   const all = useMemo(() => {
     const sources = new Set(records.map(record => `${record.eventId}:${record.sourceCampaignEntryId}`));
     const drafts = campaigns.flatMap(campaign => campaign.entries.filter(entry => entry.type === kind && !sources.has(`${campaign.eventId}:${entry.id}`)).map(entry => {
       const donor = donors.find(donor => name(donor).trim().toLowerCase() === `${entry.firstName} ${entry.lastName}`.trim().toLowerCase());
       return { ...blankReceipt(kind), id: `dashboard:${campaign.eventId}:${entry.id}`, eventId: campaign.eventId, sourceCampaignEntryId: entry.id, donorId: donor?.id || '', donorName: `${entry.firstName} ${entry.lastName}`.trim(), amount: entry.amount, notes: entry.comments };
     }));
-    return [...records, ...drafts];
-  }, [records, campaigns, donors, kind]);
+    return [...records, ...drafts].map(record => {
+      const date = events.find(event => event.id === record.eventId)?.date;
+      return kind === 'donation' && date && Number.isFinite(date.getTime()) ? { ...record, receivedDate: toEasternDateTimeInput(date).slice(0, 10) } : record;
+    });
+  }, [records, campaigns, donors, kind, events]);
   const visible = all.filter(record => `${record.donorName} ${eventName(record.eventId)} ${record.notes} ${record.reference} ${record.amount} ${record.receivedDate} ${record.dueDate}`.toLowerCase().includes(search.toLowerCase())).sort((a, b) => {
     if (!a.receivedDate !== !b.receivedDate) return a.receivedDate ? -1 : 1;
     return (sort === 'asc' ? 1 : -1) * a.receivedDate.localeCompare(b.receivedDate) || a.id.localeCompare(b.id);
@@ -32,7 +39,7 @@ const FundraisingReceiptsPanel: React.FC<{ kind: 'loan' | 'donation'; donors: Fu
   const update = (field: keyof FundraisingReceipt, value: string | number) => setEditing(previous => previous && ({ ...previous, [field]: value }));
   const open = (record: FundraisingReceipt) => { setEditing({ ...record }); setPayment(blankPayment()); setError(''); setMessage(''); };
   const run = async (work: () => Promise<void>) => { setBusy(true); setError(''); setMessage(''); try { await work(); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save.'); } finally { setBusy(false); } };
-  const save = () => run(async () => { if (!editing) return; const result = await saveReceipt({ ...editing, id: editing.id.startsWith('dashboard:') ? '' : editing.id }); setEditing(previous => previous && ({ ...previous, id: result.id })); setMessage(`${label} saved.`); });
+  const save = () => run(async () => { if (!editing) return; const receivedDate = donationEventDate(editing.eventId) || editing.receivedDate; const result = await saveReceipt({ ...editing, receivedDate, id: editing.id.startsWith('dashboard:') ? '' : editing.id }); setEditing(previous => previous && ({ ...previous, receivedDate, id: result.id })); setMessage(`${label} saved.`); });
   const repay = () => run(async () => { if (!editing) return; await saveLoanRepayment(editing.id, payment); setPayment(blankPayment()); setMessage('Repayment saved and remaining principal updated.'); });
   const exportCsv = () => {
     const rows = [['Donor / lender', 'Event', 'Amount received', 'Date received', 'Payment mode', 'Reference', 'Received by', 'Receipt number', 'Designation', 'Final return date', 'Return mode', 'Frequency', 'Installment amount', 'Next return date', 'Amount returned', 'Remaining', 'Comments', 'Repayment history', 'Source'], ...visible.map(record => [record.donorName, eventName(record.eventId), record.amount, record.receivedDate, record.method, record.reference, record.receivedBy, record.receiptNumber, record.designation, loan ? record.dueDate : '', loan ? record.repaymentMode : '', loan ? record.frequency : '', loan ? record.installmentAmount : '', loan ? record.nextRepaymentDate : '', loan && !record.id.startsWith('dashboard:') ? record.repaidAmount : '', loan && !record.id.startsWith('dashboard:') ? record.amount - record.repaidAmount : '', record.notes, JSON.stringify(record.repayments), record.id.startsWith('dashboard:') ? 'Unverified dashboard entry' : 'Verified receipt'])];
@@ -53,7 +60,7 @@ const FundraisingReceiptsPanel: React.FC<{ kind: 'loan' | 'donation'; donors: Fu
         <label><span>{loan ? 'Linked lender record' : 'Linked donor'} *</span><select value={editing.donorId} onChange={event => update('donorId', event.target.value)}><option value="">Choose donor / lender</option>{donors.filter(donor => !donor.archived).map(donor => <option key={donor.id} value={donor.id}>{name(donor)}</option>)}</select><small>Create a donor in the Donors tab if the person is missing.</small></label>
         <label><span>Event (optional)</span><select disabled={!!editing.sourceCampaignEntryId} value={editing.eventId} onChange={event => update('eventId', event.target.value)}><option value="">General / no event</option>{events.map(event => <option key={event.id} value={event.id}>{event.name}</option>)}</select></label>
         <label><span>{loan ? 'Loan principal received' : 'Donation amount'} *</span><input type="number" min="0.01" step="0.01" value={editing.amount || ''} onChange={event => update('amount', Number(event.target.value))} /></label>
-        <label><span>Date received *</span><input type="date" max={today} value={editing.receivedDate} onChange={event => update('receivedDate', event.target.value)} /></label>
+        <label><span>Date received *</span><input type="date" max={today} readOnly={!!donationEventDate(editing.eventId)} value={donationEventDate(editing.eventId) || editing.receivedDate} onChange={event => update('receivedDate', event.target.value)} />{donationEventDate(editing.eventId) && <small>Uses the linked event date (Eastern). Future event dates cannot be recorded as received.</small>}</label>
         <label><span>Payment method *</span><select value={editing.method} onChange={event => update('method', event.target.value)}>{modes.map(mode => <option key={mode}>{mode}</option>)}</select></label>
         <label><span>Received by</span><input list="fundraising-admin-name-options" value={editing.receivedBy} onChange={event => update('receivedBy', event.target.value)} placeholder="Choose fundraising admin or enter a name" /></label>
         <label><span>Reference / check number</span><input value={editing.reference} onChange={event => update('reference', event.target.value)} /></label><label><span>Receipt number</span><input value={editing.receiptNumber} onChange={event => update('receiptNumber', event.target.value)} /></label>

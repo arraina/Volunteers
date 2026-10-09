@@ -315,8 +315,6 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       <button className={view === 'pledges' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingCuratedDonors'); setView('pledges'); }}>Pledges</button>
       <button className={view === 'loans' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingCuratedDonors'); setView('loans'); }}>Loans</button>
       <button className={view === 'donations' ? 'active' : ''} onClick={() => { setDonorDataset('fundraisingCuratedDonors'); setView('donations'); }}>Donations</button>
-      <button className={view === 'campaigns' ? 'active' : ''} onClick={() => setView('campaigns')}>Campaigns</button>
-      <button className={view === 'followups' ? 'active' : ''} onClick={() => setView('followups')}>Stewardship</button>
       <button className={view === 'reports' ? 'active' : ''} onClick={() => setView('reports')}>Reports</button>
       <button className={view === 'audit' ? 'active' : ''} onClick={() => setView('audit')}>Audit &amp; lineage</button>
       <button className={view === 'pledge-followups' ? 'active' : ''} onClick={() => setView('pledge-followups')}>Pledge follow-ups {openFollowUpCount !== null && <span className="fundraising-open-followup-count" aria-label={`${openFollowUpCount} open follow-ups`} aria-live="polite">{openFollowUpCount}</span>}</button>

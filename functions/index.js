@@ -150,7 +150,14 @@ const fundraisingReceipts = require('./fundraisingReceipts');
 exports.saveFundraisingReceipt = onCall({ region: 'us-central1', maxInstances: 4 }, async request => {
   await requireDepartmentAccess(request, 'fundraising', true);
   let input;
-  try { input = fundraisingReceipts.receipt(request.data || {}); } catch (error) { throw new HttpsError('invalid-argument', error.message); }
+  const receiptData = { ...(request.data || {}) };
+  if (receiptData.kind === 'donation' && receiptData.eventId) {
+    if (typeof receiptData.eventId !== 'string' || !/^[\w-]{1,180}$/.test(receiptData.eventId)) throw new HttpsError('invalid-argument', 'Invalid event ID.');
+    const event = await db.doc(`events/${receiptData.eventId}`).get();
+    const eventDate = event.data()?.date;
+    if (eventDate?.toDate) receiptData.receivedDate = eventDate.toDate().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  }
+  try { input = fundraisingReceipts.receipt(receiptData); } catch (error) { throw new HttpsError('invalid-argument', error.message); }
   const id = request.data.id || '';
   if (id && (typeof id !== 'string' || !/^[\w-]{1,180}$/.test(id))) throw new HttpsError('invalid-argument', 'Invalid record ID.');
   // Deterministic source IDs prevent duplicate conversion of dashboard entries.
