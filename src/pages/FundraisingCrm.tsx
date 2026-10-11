@@ -12,6 +12,7 @@ import DepartmentWorkspacePage from './DepartmentWorkspacePage';
 import { subscribeOpenPledgeFollowUpCount } from '../helpers/pledgeFollowUps';
 import FundraisingReceiptsPanel from '../components/FundraisingReceiptsPanel';
 import FundraisingCombinedReport from '../components/FundraisingCombinedReport';
+import { compareDonorFields, DonorSortField } from '../helpers/donorSorting';
 
 const blankDonor = (): FundraisingDonor => ({
   id: '', firstName: '', lastName: '', title: '', middleInitial: '', initiatedName: '', email: '', phone: '', officePhone: '', organization: '', address: '', city: '', state: '', postalCode: '', country: '',
@@ -63,6 +64,8 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     return () => document.removeEventListener('keydown', closeOnEscape);
   }, [followUpPledge]);
   const [pledgeDateSort, setPledgeDateSort] = useState<'asc' | 'desc'>('desc');
+  const [rawSort, setRawSort] = useState<{ field: DonorSortField; direction: 'asc' | 'desc' }>({ field: 'firstName', direction: 'asc' });
+  const rawSortButton = (field: DonorSortField, label: string) => <button type="button" className="link-btn" onClick={() => { setRawSort({ field, direction: rawSort.field === field && rawSort.direction === 'asc' ? 'desc' : 'asc' }); setDonorDisplayLimit(100); }} aria-label={`Sort by ${label}, ${rawSort.field === field && rawSort.direction === 'asc' ? 'descending' : 'ascending'}`}>{label}{rawSort.field === field ? rawSort.direction === 'asc' ? ' ↑' : ' ↓' : ''}</button>;
   const [search, setSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [donorDisplayLimit, setDonorDisplayLimit] = useState(100);
@@ -110,6 +113,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     return new Set(Array.from(seen.values()).filter((ids) => ids.length > 1).flat());
   }, [donors]);
   const filtered = donors.filter((donor) => (showArchived || !donor.archived) && `${donor.firstName} ${donor.lastName} ${donor.initiatedName} ${donor.email} ${donor.phone} ${donor.organization} ${donor.address} ${donor.tags.join(' ')}`.toLowerCase().includes(search.toLowerCase()));
+  if (view === 'raw') filtered.sort((a, b) => compareDonorFields(a, b, rawSort.field, rawSort.direction));
   const visibleDonors = filtered.slice(0, donorDisplayLimit);
   const followups = donors.filter((donor) => !donor.archived && donor.nextFollowUp).sort((a, b) => Number(a.nextFollowUp) - Number(b.nextFollowUp));
   const displayedPledges = useMemo(() => {
@@ -328,13 +332,12 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
     {(view === 'donors' || view === 'raw') && <section className="panel">
       <div className="panel-head"><div><h2>{view === 'raw' ? 'Raw Donor Information' : 'Donors'}</h2><p className="muted small">{view === 'raw' ? 'Imported source information retained separately for reference and cleanup.' : 'Verified donor profiles entered and maintained by the fundraising team.'}</p></div><div className="row"><button className="secondary-btn" onClick={exportDonors}>Export {view === 'raw' ? 'raw data' : 'donors'}</button>{view === 'donors' && <button type="button" className="primary-btn" onClick={openNewDonor}>New donor</button>}</div></div>
       <div className="fundraising-crm-filters"><input value={search} onChange={(event) => { setSearch(event.target.value); setDonorDisplayLimit(100); }} placeholder="Search donors, contact details, or tags" /><label><input type="checkbox" checked={showArchived} onChange={(event) => { setShowArchived(event.target.checked); setDonorDisplayLimit(100); }} /> Show archived</label><span className="muted small">Showing {Math.min(visibleDonors.length, filtered.length).toLocaleString()} of {filtered.length.toLocaleString()} donors</span></div>
-      <div className="fundraising-crm-list">
-        <div className="fundraising-donor-list-head"><span>First name</span><span>Last name</span><span>Phone</span><span>Last donation</span><span>Last amount</span><span>Biggest donation</span><span>Biggest amount</span><span>Actions</span></div>
+      <div className={`fundraising-crm-list${view === 'raw' ? ' fundraising-raw-list' : ''}`}>
+        {view === 'raw' ? <div className="fundraising-donor-list-head">{rawSortButton('firstName', 'First name')}{rawSortButton('lastName', 'Last name')}{rawSortButton('phone', 'Phone')}{rawSortButton('email', 'Email')}{rawSortButton('address', 'Address')}<span>Actions</span></div> : <div className="fundraising-donor-list-head"><span>First name</span><span>Last name</span><span>Phone</span><span>Last donation</span><span>Last amount</span><span>Biggest donation</span><span>Biggest amount</span><span>Actions</span></div>}
         {visibleDonors.map((donor) => <article className={`fundraising-donor-card${duplicateIds.has(donor.id) ? ' possible-duplicate' : ''}`} key={donor.id} role="button" tabIndex={0} aria-label={`Open ${donorName(donor)} donor record`} onClick={() => setEditing({ ...donor })} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setEditing({ ...donor }); } }}>
           <span className="fundraising-donor-open">{donor.firstName || donor.organization || '—'}{duplicateIds.has(donor.id) && <small className="duplicate-warning">Possible duplicate</small>}</span>
           <span>{donor.lastName || '—'}</span><span>{donor.phone || '—'}</span>
-          <span>{donor.lastDonationDate?.toLocaleDateString() || 'Not recorded'}</span><strong>{donor.lastDonationAmount ? money.format(donor.lastDonationAmount) : '—'}</strong>
-          <span>{donor.biggestDonationDate?.toLocaleDateString() || 'Not recorded'}</span><strong>{donor.biggestDonationAmount ? money.format(donor.biggestDonationAmount) : '—'}</strong>
+          {view === 'raw' ? <><span>{donor.email || '—'}</span><span>{donor.address || '—'}</span></> : <><span>{donor.lastDonationDate?.toLocaleDateString() || 'Not recorded'}</span><strong>{donor.lastDonationAmount ? money.format(donor.lastDonationAmount) : '—'}</strong><span>{donor.biggestDonationDate?.toLocaleDateString() || 'Not recorded'}</span><strong>{donor.biggestDonationAmount ? money.format(donor.biggestDonationAmount) : '—'}</strong></>}
           {donor.archived && <div className="fundraising-donor-actions"><button className="secondary-btn" disabled={saving} onClick={(event) => { event.stopPropagation(); setDonorArchived(donor, false); }}>Restore</button></div>}
         </article>)}
         {!filtered.length && <div className="empty-state"><strong>No donors found</strong><span>Add a donor or change the search.</span></div>}

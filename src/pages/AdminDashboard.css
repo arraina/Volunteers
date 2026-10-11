@@ -68,6 +68,8 @@
 .fundraising-crm-list { overflow-x: auto; }
 .fundraising-donor-list-head, .fundraising-donor-card { display: grid; grid-template-columns: minmax(9rem, 1fr) minmax(8rem, .9fr) minmax(9rem, .9fr) minmax(8rem, .8fr) minmax(7rem, .7fr) minmax(8rem, .8fr) minmax(7rem, .7fr) auto; align-items: center; gap: 0.75rem; min-width: 76rem; }
 .fundraising-donor-list-head { padding: 0 0.85rem; color: var(--muted); font-size: 0.75rem; font-weight: 800; }
+.fundraising-raw-list .fundraising-donor-list-head, .fundraising-raw-list .fundraising-donor-card { grid-template-columns: minmax(9rem, 1fr) minmax(9rem, 1fr) minmax(10rem, 1fr) minmax(16rem, 1.5fr) minmax(20rem, 2fr) auto; }
+.fundraising-raw-list .fundraising-donor-list-head button { text-align: left; padding: 0.5rem 0; font-weight: 800; }
 .fundraising-donor-card, .fundraising-followups button { padding: 0.85rem; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fbfefb; text-align: left; }
 .fundraising-donor-card { width: 100%; cursor: pointer; }
 .fundraising-donor-card:focus-visible { outline: 3px solid rgba(47, 143, 59, 0.35); outline-offset: 2px; }

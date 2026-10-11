@@ -2,6 +2,16 @@ import { buildFundingReport, fundingActivityTotals } from './fundraisingReportin
 import type { FundraisingReceipt } from './fundraisingReceipts';
 import type { CampaignSummary, FundraisingPledge, FundraisingPledgePayment } from './fundraisingCrm';
 
+test('cancelled loans retain historic cash activity but have no active balance', () => {
+  const receipts = [{ id: 'loan', kind: 'loan', status: 'cancelled', amount: 100, repaidAmount: 20, receivedDate: '2026-09-01', repayments: [{ id: 'payment', amount: 20, paidDate: '2026-09-20' }] }] as unknown as FundraisingReceipt[];
+  const report = buildFundingReport(receipts, [], [], [], []);
+  expect(report.records[0].remaining).toBe(0);
+  expect(report.records[0].amount).toBe(100);
+  expect(report.records[0].source).toContain('Cancelled');
+  expect(fundingActivityTotals(report.activities).loans).toBe(100);
+  expect(fundingActivityTotals(report.activities).returns).toBe(20);
+});
+
 test('September includes dashboard loans and donations alongside non-event receipts', () => {
   const campaigns = [{ eventId: 'september', entries: [{ id: 'donation', type: 'donation', amount: 333710.01 }, { id: 'loan', type: 'loan', amount: 500 }] }] as CampaignSummary[];
   const receipts = [{ id: 'standalone', kind: 'donation', eventId: '', amount: 20, receivedDate: '2026-09-10', repayments: [] }, { id: 'october', kind: 'loan', eventId: '', amount: 100, receivedDate: '2026-10-01', repaidAmount: 0, repayments: [] }] as unknown as FundraisingReceipt[];

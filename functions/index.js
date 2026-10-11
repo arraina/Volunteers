@@ -149,6 +149,18 @@ async function requireDepartmentAccess(request, departmentId, manage = false) {
 const fundraisingReceipts = require('./fundraisingReceipts');
 exports.saveFundraisingReceipt = onCall({ region: 'us-central1', maxInstances: 4 }, async request => {
   await requireDepartmentAccess(request, 'fundraising', true);
+  if (request.data?.action === 'cancel') {
+    const { id, reason } = request.data;
+    if (typeof id !== 'string' || !/^[\w-]{1,180}$/.test(id) || typeof reason !== 'string' || !reason.trim() || reason.length > 5000) throw new HttpsError('invalid-argument', 'Enter a cancellation reason.');
+    const ref = db.doc(`fundraisingReceipts/${id}`);
+    await db.runTransaction(async transaction => {
+      const snapshot = await transaction.get(ref);
+      if (!snapshot.exists || snapshot.data().kind !== 'loan') throw new HttpsError('not-found', 'Save the loan before cancelling it.');
+      if (snapshot.data().status === 'cancelled') return;
+      transaction.update(ref, { status: 'cancelled', cancellationReason: reason.trim(), cancelledBy: request.auth.uid, cancelledAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: request.auth.uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    });
+    return { id };
+  }
   let input;
   const receiptData = { ...(request.data || {}) };
   if (receiptData.kind === 'donation' && receiptData.eventId) {
@@ -169,6 +181,7 @@ exports.saveFundraisingReceipt = onCall({ region: 'us-central1', maxInstances: 4
     if (!donor.exists) throw new HttpsError('failed-precondition', 'Choose a verified donor/lender record.');
     if (id && !existing.exists) throw new HttpsError('not-found', 'Record not found.');
     const before = existing.data();
+    if (before?.status === 'cancelled') throw new HttpsError('failed-precondition', 'Cancelled loans are read-only.');
     if (!id && before) throw new HttpsError('already-exists', 'This dashboard receipt has already been saved. Refresh and open the existing record.');
     if (before && (before.kind !== input.kind || before.eventId !== input.eventId && before.sourceCampaignEntryId || before.sourceCampaignEntryId !== input.sourceCampaignEntryId)) throw new HttpsError('failed-precondition', 'Record type and source lineage cannot be changed.');
     const payments = before?.repayments || [];
@@ -187,6 +200,7 @@ exports.recordFundraisingLoanRepayment = onCall({ region: 'us-central1', maxInst
   await db.runTransaction(async transaction => {
     const snapshot = await transaction.get(ref); const loan = snapshot.data();
     if (!loan || loan.kind !== 'loan') throw new HttpsError('not-found', 'Loan not found.');
+    if (loan.status === 'cancelled') throw new HttpsError('failed-precondition', 'Cancelled loans cannot receive repayment changes.');
     if (input.paidDate < loan.receivedDate) throw new HttpsError('invalid-argument', 'Repayment cannot precede the loan received date.');
     const payments = [...(loan.repayments || [])]; const index = payments.findIndex(payment => payment.id === paymentId);
     if (paymentId && index < 0) throw new HttpsError('not-found', 'Repayment not found.');

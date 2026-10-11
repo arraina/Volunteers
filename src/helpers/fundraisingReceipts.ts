@@ -3,6 +3,7 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../config/firebase';
 export interface LoanRepayment { id: string; amount: number; paidDate: string; method: string; reference: string; paidBy: string; notes: string; updatedBy?: string; updatedAt?: string; }
 export interface FundraisingReceipt {
+  status?: 'cancelled'; cancellationReason?: string;
   id: string; kind: 'loan' | 'donation'; donorId: string; donorName: string; eventId: string; sourceCampaignEntryId: string;
   amount: number; receivedDate: string; method: string; reference: string; receivedBy: string; designation: string; receiptNumber: string; notes: string;
   dueDate: string; repaymentMode: 'single' | 'installments'; frequency: string; installmentAmount: number; nextRepaymentDate: string; repaidAmount: number; repayments: LoanRepayment[];
@@ -13,3 +14,4 @@ export function subscribeReceipts(kind: FundraisingReceipt['kind'], callback: (r
 }
 export async function saveReceipt(record: FundraisingReceipt) { return (await httpsCallable<FundraisingReceipt, { id: string }>(functions, 'saveFundraisingReceipt')(record)).data; }
 export async function saveLoanRepayment(id: string, payment: LoanRepayment) { await httpsCallable(functions, 'recordFundraisingLoanRepayment')({ ...payment, id, paymentId: payment.id }); }
+export async function cancelLoan(id: string, reason: string) { await httpsCallable(functions, 'saveFundraisingReceipt')({ action: 'cancel', id, reason }); }

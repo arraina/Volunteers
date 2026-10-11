@@ -11,7 +11,7 @@ export function buildFundingReport(receipts: FundraisingReceipt[], pledges: Fund
   receipts.forEach(receipt => {
     const date = receipt.kind === 'donation' ? day(events.find(event => event.id === receipt.eventId)?.date) || receipt.receivedDate : receipt.receivedDate;
     const loan = receipt.kind === 'loan';
-    records.push({ id: receipt.id, type: loan ? 'Loan' : 'Donation', name: receipt.donorName, eventId: receipt.eventId, date, amount: receipt.amount, received: receipt.amount, returned: loan ? receipt.repaidAmount : 0, remaining: loan ? cents(receipt.amount - receipt.repaidAmount) : 0, source: 'Verified receipt' });
+    records.push({ id: receipt.id, type: loan ? 'Loan' : 'Donation', name: receipt.donorName, eventId: receipt.eventId, date, amount: receipt.amount, received: receipt.amount, returned: loan ? receipt.repaidAmount : 0, remaining: loan && receipt.status !== 'cancelled' ? cents(receipt.amount - receipt.repaidAmount) : 0, source: receipt.status === 'cancelled' ? 'Cancelled loan · historical receipt' : 'Verified receipt' });
     activities.push({ id: receipt.id, date, type: loan ? 'Loan received' : 'Donation received', name: receipt.donorName, eventId: receipt.eventId, amount: receipt.amount, reference: receipt.reference, source: 'Saved receipt' });
     if (loan) receipt.repayments.forEach(payment => activities.push({ id: `${receipt.id}:${payment.id}`, date: payment.paidDate, type: 'Loan returned', name: receipt.donorName, eventId: receipt.eventId, amount: payment.amount, reference: payment.reference, source: 'Recorded repayment' }));
   });
