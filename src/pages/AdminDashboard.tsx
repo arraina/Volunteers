@@ -157,6 +157,7 @@ const emptyVolunteerForm = {
 };
 
 const taskEditValues = (task: VolunteerTask) => ({
+  eventId: task.eventId || '',
   title: task.title,
   description: task.description || '',
   startDateTime: toEasternDateTimeInput(task.startDateTime),
@@ -1117,6 +1118,7 @@ const OccurrenceRow: React.FC<{
     setSavingEdit(true);
     try {
       await updateTaskManagementFieldsScoped(task, {
+        ...(editForm.eventId !== (task.eventId || '') ? { eventId: editForm.eventId } : {}),
         title: editForm.title,
         description: editForm.description,
         ...(startChanged ? { startDateTime: start } : {}),
@@ -1163,6 +1165,7 @@ const OccurrenceRow: React.FC<{
         </ul>
       )}
       {canManage && editing && <form className="task-edit-form" onSubmit={saveTaskEdit}>
+        <label className="task-edit-wide"><span>Event</span><select value={editForm.eventId} onChange={event => setEditForm({ ...editForm, eventId: event.target.value })}><option value="">No event / ungrouped</option>{editForm.eventId && !events.some(event => event.id === editForm.eventId) && <option value={editForm.eventId}>{task.eventName || 'Existing event'}</option>}{events.map(event => <option key={event.id} value={event.id}>{event.name}</option>)}</select><small className="field-hint">Move this task into an event or choose no event to detach it. Its time, assignments, reminders, and link remain unchanged unless you edit them.</small></label>
         <label><span>Task title</span><input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} required /></label>
         <label className="task-edit-wide"><span>Description</span><textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} /></label>
         <label><span>Start (Eastern Time — ET)</span><AutoCommitDateInput type="datetime-local" value={editForm.startDateTime} onValueChange={(value) => setEditForm({ ...editForm, startDateTime: value })} min={toEasternDateTimeInput(new Date())} disabled={isHistoricalTask} required />{isHistoricalTask && <small className="field-hint">Historical task times are locked. Other task details can still be edited.</small>}</label>
@@ -2011,9 +2014,10 @@ const AnnouncementsTab: React.FC<{ uid?: string; setError: (s: string) => void }
 
 const OwnerHistoryTaskEditor: React.FC<{
   task: VolunteerTask;
+  events: TempleEvent[];
   setError: (message: string) => void;
   onSaved: () => void;
-}> = ({ task, setError, onSaved }) => {
+}> = ({ task, events, setError, onSaved }) => {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(() => taskEditValues(task));
@@ -2044,6 +2048,7 @@ const OwnerHistoryTaskEditor: React.FC<{
     setSaving(true);
     try {
       await updateTaskManagementFields(task.id, {
+        ...(form.eventId !== (task.eventId || '') ? { eventId: form.eventId } : {}),
         title: form.title,
         description: form.description,
         ...(startChanged ? { startDateTime: start } : {}),
@@ -2068,6 +2073,7 @@ const OwnerHistoryTaskEditor: React.FC<{
       setEditing((value) => !value);
     }}>{editing ? 'Close editor' : 'Edit Task'}</button>
     {editing && <form className="task-edit-form" onSubmit={save}>
+      <label className="task-edit-wide"><span>Event</span><select value={form.eventId} onChange={event => setForm({ ...form, eventId: event.target.value })}><option value="">No event / ungrouped</option>{form.eventId && !events.some(event => event.id === form.eventId) && <option value={form.eventId}>{task.eventName || 'Existing event'}</option>}{events.map(event => <option key={event.id} value={event.id}>{event.name}</option>)}</select></label>
       <label><span>Task title</span><input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required /></label>
       <label className="task-edit-wide"><span>Description</span><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
       <label><span>Start (Eastern Time — ET)</span><AutoCommitDateInput type="datetime-local" value={form.startDateTime} onValueChange={(value) => setForm({ ...form, startDateTime: value })} min={toEasternDateTimeInput(new Date())} required /><small className="field-hint">Choose a future time to return this task to the active task lists.</small></label>
@@ -2202,6 +2208,7 @@ const HistoryTab: React.FC<{
                   )}
                   <OwnerHistoryTaskEditor
                     task={task}
+                    events={events}
                     setError={setError}
                     onSaved={() => {
                       setMessage('Task updated. If its new date is in the future, it is now shown under Tasks.');

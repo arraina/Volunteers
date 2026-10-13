@@ -1,3 +1,4 @@
+import { taskEventLink } from './taskEventLink';
 import {
   addDoc,
   arrayRemove,
@@ -707,7 +708,15 @@ export async function trashOwnTask(taskId: string, volunteerId: string): Promise
   await call({ taskId, scope: 'one' });
 }
 
+async function resolveTaskEventLink(eventId: string | null | undefined) {
+  if (!eventId) return taskEventLink(eventId);
+  if (!/^[\w-]{1,180}$/.test(eventId)) throw new Error('Invalid event selection.');
+  const event = await getDoc(doc(db, 'events', eventId));
+  return taskEventLink(eventId, event.exists() ? { name: String(event.data().name || '') } : undefined);
+}
+
 export interface TaskManagementFields {
+  eventId?: string | null;
   title?: string;
   description?: string;
   startDateTime?: Date;
@@ -724,7 +733,7 @@ export async function updateTaskManagementFields(
   fields: TaskManagementFields
 ): Promise<void> {
   if (fields.startDateTime !== undefined) assertTaskStartNotPast(fields.startDateTime);
-  const patch: Record<string, any> = { updatedAt: serverTimestamp() };
+  const patch: Record<string, any> = { updatedAt: serverTimestamp(), ...await resolveTaskEventLink(fields.eventId) };
   if (typeof fields.title === 'string' && fields.title.trim()) patch.title = fields.title.trim();
   if (typeof fields.description === 'string') patch.description = fields.description.trim();
   if (fields.startDateTime instanceof Date && !Number.isNaN(fields.startDateTime.getTime())) {
@@ -776,6 +785,7 @@ export async function updateTaskManagementFieldsScoped(
   }
 
   const newSelectedStart = fields.startDateTime || task.startDateTime;
+  const eventLink = await resolveTaskEventLink(fields.eventId);
   const startDelta = fields.startDateTime ? fields.startDateTime.getTime() - task.startDateTime.getTime() : 0;
   const newDuration = fields.endDateTime instanceof Date
     ? fields.endDateTime.getTime() - newSelectedStart.getTime()
@@ -787,7 +797,7 @@ export async function updateTaskManagementFieldsScoped(
       const data = item.data();
       const originalStart: Date = data.startDateTime.toDate();
       const shiftedStart = new Date(originalStart.getTime() + startDelta);
-      const patch: Record<string, any> = { updatedAt: serverTimestamp() };
+      const patch: Record<string, any> = { updatedAt: serverTimestamp(), ...eventLink };
       if (typeof fields.title === 'string' && fields.title.trim()) patch.title = fields.title.trim();
       if (typeof fields.description === 'string') patch.description = fields.description.trim();
       if (typeof fields.location === 'string') patch.location = fields.location.trim();
