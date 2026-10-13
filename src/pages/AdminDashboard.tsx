@@ -91,7 +91,7 @@ import EventCalendar from './EventCalendar';
 import FundraisingDashboard from './FundraisingDashboard';
 import DepartmentDirectory from './DepartmentDirectory';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
-import ReminderDeliveryNotice from '../components/ReminderDeliveryNotice';
+import ReminderDeliveryNotice, { ReminderQuietHoursPolicy } from '../components/ReminderDeliveryNotice';
 import { assertTaskStartNotPast, fromEasternDateTimeInput, toEasternDateTimeInput } from '../helpers/taskDateTime';
 import { normalizePhoneNumber } from '../helpers/phone';
 import './AdminDashboard.css';
@@ -913,6 +913,7 @@ const TasksTab: React.FC<{
           Showing the next several months. Recurring tasks are grouped — expand a series to
           assign different volunteers to each date.
         </p>
+        <ReminderQuietHoursPolicy />
         {eventSections.length === 0 && <div className="empty-state"><strong>No matching tasks</strong><span>Adjust the filters or create a new task.</span></div>}
         {eventSections.map((section) => (
           <div key={section.key} className="event-section">
@@ -1149,6 +1150,7 @@ const OccurrenceRow: React.FC<{
         {task.assignedVolunteers.length}/{task.volunteersNeeded} filled · {openSlots(task)} open
       </p>
       {canManage && <ReminderDeliveryNotice
+        compact
         startValue={toEasternDateTimeInput(task.startDateTime)}
         reminderValue={task.reminderHoursBefore.join(', ')}
       />}

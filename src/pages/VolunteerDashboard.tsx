@@ -41,7 +41,7 @@ import EventFeedback from './EventFeedback';
 import EventCalendar from './EventCalendar';
 import DepartmentDirectory from './DepartmentDirectory';
 import AutoCommitDateInput from '../components/AutoCommitDateInput';
-import ReminderDeliveryNotice from '../components/ReminderDeliveryNotice';
+import ReminderDeliveryNotice, { ReminderQuietHoursPolicy } from '../components/ReminderDeliveryNotice';
 
 type Tab = 'open' | 'mine' | 'create' | 'calendar' | 'departments' | 'past' | 'feedback' | 'profile';
 const VOLUNTEER_TABS: Tab[] = ['open', 'mine', 'create', 'calendar', 'departments', 'past', 'feedback', 'profile'];
@@ -522,10 +522,11 @@ const VolunteerTaskManagement: React.FC<{
     <section className="panel">
       <h2>Tasks Created by Me ({createdTasks.length})</h2>
       {createdTasks.length === 0 && <div className="empty-state"><strong>No upcoming tasks created</strong><span>Create a task using the form.</span></div>}
+      <ReminderQuietHoursPolicy />
       <div className="task-list">{createdTasks.map((task) => <div className="task-card" key={task.id}>
         <div className="task-card-head"><div><h3>{task.title}</h3><p className="muted">{formatDate(task.startDateTime)}{task.location ? ` · ${task.location}` : ''}</p></div><span>{task.assignedVolunteers.length}/{task.volunteersNeeded}</span></div>
         <p className="muted small">Reminder: {task.reminderHoursBefore[0]} hour(s) before</p>
-        <ReminderDeliveryNotice startValue={toEasternDateTimeInput(task.startDateTime)} reminderValue={String(task.reminderHoursBefore[0] || 24)} />
+        <ReminderDeliveryNotice compact startValue={toEasternDateTimeInput(task.startDateTime)} reminderValue={task.reminderHoursBefore.join(', ')} />
         <label><span>Assign a volunteer</span><select value={assignmentChoice[task.id] || ''} onChange={(e) => setAssignmentChoice({ ...assignmentChoice, [task.id]: e.target.value })}>
           <option value="">Choose volunteer…</option>{directory.filter((item) => !task.assignedVolunteers.includes(item.uid)).map((item) => <option key={item.uid} value={item.uid}>{item.name}</option>)}
         </select></label>

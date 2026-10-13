@@ -45,6 +45,12 @@
 .fundraising-space-tabs button, .fundraising-crm-tabs button { flex: 0 0 auto; padding: 0.65rem 1rem; border: 0; border-radius: 10px; color: var(--muted); background: transparent; font-weight: 800; }
 .fundraising-space-tabs button.active, .fundraising-crm-tabs button.active { color: #fff; background: var(--green-600); }
 .fundraising-open-followup-count { display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; margin-left: 0.3rem; padding: 0.1rem 0.4rem; border-radius: 999px; color: #b91c1c; background: #fff1f2; font-weight: 800; }
+.reminder-quiet-policy { margin: 0.75rem 0 1rem; color: var(--muted); font-size: 0.85rem; }
+.reminder-quiet-policy summary, .reminder-adjustment summary { cursor: pointer; }
+.reminder-delivery-compact { margin: 0.45rem 0 0.75rem; font-size: 0.85rem; color: var(--muted); }
+.reminder-delivery-compact > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
+.reminder-adjustment { font-size: 0.8rem; color: #92400e; }
+.reminder-adjustment p { max-width: 40rem; }
 .fundraising-receipt-head, .fundraising-receipt-list > button { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.3fr 1.3fr; gap: 1rem; align-items: center; padding: 1rem; }
 .fundraising-receipt-head { font-weight: 800; border-bottom: 1px solid var(--line); }
 .fundraising-receipt-list > button { width: 100%; text-align: left; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 12px; margin-top: 0.65rem; cursor: pointer; }
