@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   createUserWithEmailAndPassword,
   deleteUser,
@@ -12,7 +12,8 @@ import { functions } from '../config/firebase';
 import { deleteApp, initializeApp } from 'firebase/app';
 import { auth, firebaseConfig } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
-import { shareTask } from '../helpers/taskShare';
+import TaskShareControls from '../components/TaskShareControls';
+import { getTask } from '../helpers/store';
 import {
   NotificationChannel,
   Announcement,
@@ -424,6 +425,17 @@ const TasksTab: React.FC<{
   isOwner: boolean;
   view: TaskWorkspaceView;
 }> = ({ tasks, volunteers, events, setError, uid, isOwner, view }) => {
+  const [taskParams, setTaskParams] = useSearchParams();
+  const selectedTaskId = taskParams.get('taskId') || '';
+  const [selectedTask, setSelectedTask] = useState<VolunteerTask | null>(null);
+  const [selectedTaskLoading, setSelectedTaskLoading] = useState(false);
+  const [selectedTaskError, setSelectedTaskError] = useState('');
+  useEffect(() => {
+    if (!selectedTaskId) { setSelectedTask(null); return; }
+    let active = true; setSelectedTaskLoading(true); setSelectedTaskError(''); setSelectedTask(null);
+    getTask(selectedTaskId).then(task => { if (active) setSelectedTask(task); }).catch(error => { if (active) setSelectedTaskError(error.message); }).finally(() => { if (active) setSelectedTaskLoading(false); });
+    return () => { active = false; };
+  }, [selectedTaskId, tasks]);
   const [form, setForm] = useState(emptyTaskForm);
   const [saving, setSaving] = useState(false);
   const [taskSearch, setTaskSearch] = useState('');
@@ -474,6 +486,7 @@ const TasksTab: React.FC<{
   const selectedEventDateKeys = useMemo(() => eventDateKeys(selectedEvent), [selectedEvent]);
 
   const filteredTasks = useMemo(() => {
+    if (selectedTaskId) return selectedTask ? [tasks.find(task => task.id === selectedTaskId) || selectedTask] : [];
     const q = taskSearch.trim().toLowerCase();
     const result = activeTasks.filter((task) => {
       const matchesSearch = !q || [task.title, task.description, task.location, task.eventName]
@@ -492,7 +505,7 @@ const TasksTab: React.FC<{
       const delta = a.startDateTime.getTime() - b.startDateTime.getTime();
       return taskSort === 'latest' ? -delta : delta;
     });
-  }, [activeTasks, taskSearch, statusFilter, eventFilter, creatorFilter, taskSort, uid]);
+  }, [activeTasks, taskSearch, statusFilter, eventFilter, creatorFilter, taskSort, uid, selectedTaskId, selectedTask, tasks]);
 
   const taskStats = useMemo(() => ({
     total: activeTasks.length,
@@ -675,8 +688,9 @@ const TasksTab: React.FC<{
   };
 
   return (
-    <div className={view === 'manage' ? 'two-col' : 'task-workspace-layout'}>
-      {view === 'manage' && <section className="panel">
+    <div className={view === 'manage' && !selectedTaskId ? 'two-col' : 'task-workspace-layout'}>
+      {selectedTaskId && <section className="panel"><h2>Task opened from direct link</h2>{selectedTaskLoading ? <p>Loading task…</p> : selectedTaskError ? <p className="error-message">{selectedTaskError}</p> : !selectedTask ? <p>This task is unavailable or has been removed. Check Task Trash if it was moved there.</p> : <p>Viewing this occurrence. Use Edit Task below to update its details.</p>}<button className="secondary-btn" onClick={() => setTaskParams({ tab: 'tasks', view })}>Back to all tasks</button></section>}
+      {view === 'manage' && !selectedTaskId && <section className="panel">
         <h2>Create Task</h2>
         <form onSubmit={handleCreate} className="stacked-form">
           <input
@@ -954,7 +968,7 @@ const SeriesCard: React.FC<{
   setError: (s: string) => void;
 }> = ({ group, volunteers, volunteerById, events, onAssign, onRemove, onTrash, selfUid, onSelfSignup, onSelfWithdraw, canManage, onRepeatAcrossEventDates, setError }) => {
   const isSeries = group.recurrence !== 'none' && !!group.seriesId;
-  const [expanded, setExpanded] = useState(!isSeries);
+  const [expanded, setExpanded] = useState(!isSeries || group.occurrences.length === 1);
   const [scopeRequest, setScopeRequest] = useState<{
     verb: string;
     resolve: (scope: SeriesScope | null) => void;
@@ -1160,7 +1174,7 @@ const OccurrenceRow: React.FC<{
         <div className="task-edit-actions task-edit-wide"><button className="primary-btn" disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</button><button type="button" className="secondary-btn" onClick={() => { setEditForm(taskEditValues(task)); setEditing(false); }}>Cancel edit</button></div>
       </form>}
       <div className="task-actions">
-        {canManage && (!task.createdBy || task.createdBy === selfUid) && <button className="secondary-btn" onClick={() => shareTask(task)}>Share task</button>}
+        <TaskShareControls task={task} />
         {selfUid && (selfAssigned || !assignmentClosed) && <button
           className={selfAssigned ? 'secondary-btn' : 'primary-btn'}
           disabled={selfServiceBusy}
@@ -2429,7 +2443,7 @@ const AuditTab: React.FC = () => {
           <td><strong>{log.summary || log.action || log.event}</strong><div className="muted small">{log.action}</div></td>
           <td>{log.email || (log.role === 'system' ? 'Automated system' : log.actorId)}</td>
           <td><span className="admin-tag">{log.role}</span></td>
-          <td>{log.targetLabel || '—'}{log.targetType && <div className="muted small">{log.targetType} · {log.targetId}</div>}</td>
+          <td>{log.targetType === 'task' && log.targetId ? <Link to={`/admin?tab=tasks&view=manage&taskId=${encodeURIComponent(log.targetId)}`}>{log.targetLabel || 'Open task'}</Link> : log.targetLabel || '—'}{log.targetType && <div className="muted small">{log.targetType} · {log.targetId}</div>}</td>
           <td>{log.changedFields?.length ? `Changed: ${log.changedFields.join(', ')}` : log.event === 'login' ? [log.platform, log.timezone].filter(Boolean).join(' · ') : '—'}</td>
         </tr>)}</tbody>
       </table></div>}

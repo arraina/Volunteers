@@ -5,7 +5,7 @@ import { auth } from '../config/firebase';
 import { useAuth } from '../helpers/useAuth';
 import { assignVolunteerToTask, getTask, getVolunteer } from '../helpers/store';
 import { VolunteerProfile, VolunteerTask, effectiveTaskStatus, formatDate, isTaskFull, openSlots } from '../helpers/types';
-import { shareTask } from '../helpers/taskShare';
+import TaskShareControls from '../components/TaskShareControls';
 import '../pages/AdminDashboard.css';
 import './SharedTask.css';
 
@@ -79,7 +79,8 @@ const SharedTask: React.FC = () => {
         {!assigned && signupClosed && <div className="empty-state"><strong>Signup unavailable</strong><span>This task is full, closed, cancelled, completed, or has already started.</span></div>}
         <div className="shared-task-actions">
           {!assigned && !signupClosed && profile && <button className="primary-btn" disabled={busy} onClick={signup}>{busy ? 'Signing up…' : 'Confirm signup'}</button>}
-          <button className="secondary-btn" onClick={() => shareTask(task)}>Share task</button>
+          <TaskShareControls task={task} />
+          {isAdmin && <button className="secondary-btn" onClick={() => navigate(`/admin?tab=tasks&view=manage&taskId=${encodeURIComponent(task.id)}`)}>Edit task</button>}
           <button className="secondary-btn" onClick={() => navigate(isAdmin ? '/admin' : '/dashboard')}>Go to dashboard</button>
         </div>
       </>}
