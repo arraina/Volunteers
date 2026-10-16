@@ -171,12 +171,18 @@
 .quickbooks-report-tools label { display: grid; flex: 1; gap: 0.35rem; font-weight: 700; }
 .quickbooks-report-tools input { width: 100%; }
 .quickbooks-sort-note { margin: -0.25rem 0 0.75rem; }
-.quickbooks-report-table { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+.quickbooks-report-table { max-width: 100%; min-width: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; scrollbar-width: auto; scrollbar-color: var(--green-600) #eef3ef; }
 .quickbooks-report-title { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem; background: #eff8f1; }
-.quickbooks-report-table table { width: 100%; border-collapse: collapse; background: #fff; }
-.quickbooks-report-table th, .quickbooks-report-table td { padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.quickbooks-reports { min-width: 0; max-width: 100%; }
+.quickbooks-report-table table { width: max-content; max-width: none; border-collapse: collapse; background: #fff; font-size: 0.85rem; }
+.quickbooks-report-table th, .quickbooks-report-table td { padding: 0.35rem 0.4rem; max-width: 18rem; border-bottom: 1px solid var(--line); text-align: right; white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
 .quickbooks-report-table th:first-child, .quickbooks-report-table td:first-child { text-align: left; }
-.quickbooks-sort-button { appearance: none; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.quickbooks-sort-button { appearance: none; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 800; cursor: pointer; white-space: normal; }
+.quickbooks-scroll-hint { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem 0; color: var(--green-700); font-size: 0.85rem; font-weight: 700; }
+.quickbooks-scroll-hint small { display: inline-block; font-weight: 400; }
+.quickbooks-scroll-hint > div { display: flex; gap: 0.4rem; }
+.quickbooks-scroll-hint button { padding: 0.35rem 0.65rem; }
+.quickbooks-report-table:focus-visible { outline: 2px solid var(--green-600); outline-offset: 2px; }
 .quickbooks-sort-button:hover, .quickbooks-sort-button:focus-visible { color: var(--green-700); text-decoration: underline; }
 .quickbooks-report-table tr.heading td { color: var(--green-700); background: #f7fbf8; font-weight: 800; }
 

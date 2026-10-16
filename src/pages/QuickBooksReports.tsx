@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { connectQuickBooks, disconnectQuickBooks, getQuickBooksReport, getQuickBooksStatus, QuickBooksReportType, QuickBooksStatus } from '../helpers/quickbooks';
 import { QuickBooksReportLine, QuickBooksReportSort, visibleQuickBooksLines } from '../helpers/quickbooksReport';
 
@@ -19,6 +19,9 @@ const QuickBooksReports: React.FC<{ setError: (message: string) => void }> = ({ 
   const [startDate, setStartDate] = useState(isoDate(yearStart)); const [endDate, setEndDate] = useState(isoDate(now));
   const [report, setReport] = useState<any>(null); const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState(''); const [sort, setSort] = useState<QuickBooksReportSort | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollId = useId();
+  const [scrollEdges, setScrollEdges] = useState({ left: false, right: false });
 
   useEffect(() => { getQuickBooksStatus().then(setStatus).catch((error) => setError(error.message)); }, [setError]);
   useEffect(() => {
@@ -28,6 +31,18 @@ const QuickBooksReports: React.FC<{ setError: (message: string) => void }> = ({ 
   }, [setError]);
   const columns = report?.Columns?.Column || []; const lines = useMemo(() => reportLines(report?.Rows?.Row || []), [report]);
   const visibleLines = useMemo(() => visibleQuickBooksLines(lines, search, sort), [lines, search, sort]);
+  useEffect(() => {
+    const viewport = scrollRef.current;
+    if (!viewport) return;
+    const update = () => setScrollEdges({ left: viewport.scrollLeft > 2, right: viewport.scrollWidth - viewport.clientWidth - viewport.scrollLeft > 2 });
+    update(); viewport.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    observer?.observe(viewport);
+    const table = viewport.querySelector('table'); if (table) observer?.observe(table);
+    return () => { viewport.removeEventListener('scroll', update); window.removeEventListener('resize', update); observer?.disconnect(); };
+  }, [report, visibleLines]);
+  const scrollColumns = (direction: number) => scrollRef.current?.scrollBy({ left: direction * Math.max(200, scrollRef.current.clientWidth * 0.7), behavior: 'smooth' });
   const changeSort = (column: number) => setSort(current => current?.column === column
     ? current.direction === 'asc' ? { column, direction: 'desc' } : null
     : { column, direction: 'asc' });
@@ -45,7 +60,7 @@ const QuickBooksReports: React.FC<{ setError: (message: string) => void }> = ({ 
 
   return <section className="panel quickbooks-reports"><div className="panel-head"><div><p className="eyebrow">QUICKBOOKS ONLINE · LIVE</p><h2>Accounting reports</h2><p className="muted small">Connected company ID: {status.companyId}</p></div>{status.canManageConnection && <button className="danger-btn" onClick={async () => { if (!window.confirm('Disconnect QuickBooks? Reports will stop loading until the Owner reconnects.')) return; const result = await disconnectQuickBooks(); setStatus({ ...status, connected: false }); setReport(null); if (!result.revocationConfirmed) setError('The Hub removed its local QuickBooks connection, but Intuit did not confirm remote revocation. Review the QuickBooks app connections and contact support if it remains listed.'); }}>Disconnect</button>}</div>
     <div className="quickbooks-controls"><label><span>Report</span><select value={reportType} onChange={(event) => { setReportType(event.target.value as QuickBooksReportType); setReport(null); setSearch(''); setSort(null); }}><option value="ProfitAndLoss">Profit &amp; Loss</option><option value="BalanceSheet">Balance Sheet</option><option value="TransactionList">Transaction List</option></select></label><label><span>Start date</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label><span>End date</span><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label><button className="primary-btn" disabled={loading} onClick={load}>{loading ? 'Loading…' : 'Run report'}</button>{report && <button className="secondary-btn" onClick={exportCsv}>Export CSV</button>}</div>
-    {report && <><div className="quickbooks-report-tools"><label><span>Search report</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search accounts, names, dates, or amounts" /></label><span className="muted small">Showing {visibleLines.length.toLocaleString()} of {lines.length.toLocaleString()} rows</span>{sort && <button type="button" className="secondary-btn" onClick={() => setSort(null)}>Restore QuickBooks order</button>}</div>{sort && <p className="muted small quickbooks-sort-note">Sorted view temporarily flattens the accounting hierarchy. Restore QuickBooks order to see the original statement structure.</p>}<div className="quickbooks-report-table"><div className="quickbooks-report-title"><strong>{report.Header?.ReportName || reportType}</strong><span>{report.Header?.StartPeriod} to {report.Header?.EndPeriod}</span></div><table><thead><tr>{columns.map((column: any, index: number) => <th key={index}><button type="button" className="quickbooks-sort-button" onClick={() => changeSort(index)} aria-label={`Sort by ${column.ColTitle || (index === 0 ? 'Account' : `column ${index + 1}`)}`}>{column.ColTitle || (index === 0 ? 'Account' : '')}{sortIndicator(index)}</button></th>)}</tr></thead><tbody>{visibleLines.map((line, index) => <tr className={line.heading ? 'heading' : ''} key={`${line.label}-${index}`}><td style={{ paddingLeft: `${0.75 + line.depth * 1.1}rem` }}>{line.label}</td>{Array.from({ length: Math.max(0, columns.length - 1) }, (_, valueIndex) => <td key={valueIndex}>{line.values[valueIndex] || ''}</td>)}</tr>)}</tbody></table>{!visibleLines.length && <div className="empty-state"><strong>No report rows found</strong><span>Try a different search.</span></div>}</div></>}
+    {report && <><div className="quickbooks-report-tools"><label><span>Search report</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search accounts, names, dates, or amounts" /></label><span className="muted small">Showing {visibleLines.length.toLocaleString()} of {lines.length.toLocaleString()} rows</span>{sort && <button type="button" className="secondary-btn" onClick={() => setSort(null)}>Restore QuickBooks order</button>}</div>{sort && <p className="muted small quickbooks-sort-note">Sorted view temporarily flattens the accounting hierarchy. Restore QuickBooks order to see the original statement structure.</p>}{(scrollEdges.left || scrollEdges.right) && <div className="quickbooks-scroll-hint"><span role="status">{scrollEdges.right ? 'More columns to the right →' : '← More columns to the left'} <small>Scroll horizontally or use the arrows.</small></span><div><button type="button" className="secondary-btn" aria-label="Scroll report columns left" aria-controls={scrollId} disabled={!scrollEdges.left} onClick={() => scrollColumns(-1)}>← Left</button><button type="button" className="secondary-btn" aria-label="Scroll report columns right" aria-controls={scrollId} disabled={!scrollEdges.right} onClick={() => scrollColumns(1)}>Right →</button></div></div>}<div className="quickbooks-report-table" id={scrollId} ref={scrollRef} tabIndex={0} role="region" aria-label="QuickBooks report, horizontally scrollable"><div className="quickbooks-report-title"><strong>{report.Header?.ReportName || reportType}</strong><span>{report.Header?.StartPeriod} to {report.Header?.EndPeriod}</span></div><table><thead><tr>{columns.map((column: any, index: number) => <th key={index}><button type="button" className="quickbooks-sort-button" onClick={() => changeSort(index)} aria-label={`Sort by ${column.ColTitle || (index === 0 ? 'Account' : `column ${index + 1}`)}`}>{column.ColTitle || (index === 0 ? 'Account' : '')}{sortIndicator(index)}</button></th>)}</tr></thead><tbody>{visibleLines.map((line, index) => <tr className={line.heading ? 'heading' : ''} key={`${line.label}-${index}`}><td style={{ paddingLeft: `${0.4 + line.depth * 0.65}rem` }}>{line.label}</td>{Array.from({ length: Math.max(0, columns.length - 1) }, (_, valueIndex) => <td key={valueIndex}>{line.values[valueIndex] || ''}</td>)}</tr>)}</tbody></table>{!visibleLines.length && <div className="empty-state"><strong>No report rows found</strong><span>Try a different search.</span></div>}</div></>}
   </section>;
 };
 
