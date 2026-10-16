@@ -112,7 +112,8 @@ async function requireAdmin(request, ownerOnly = false) {
   const snapshot = await db.doc(`admins/${request.auth.uid}`).get();
   const data = snapshot.data() || {};
   if (!snapshot.exists || data.isAdmin !== true) throw new HttpsError('permission-denied', 'Administrator access is required.');
-  if (!request.auth.token.firebase?.sign_in_second_factor) {
+  const isOwner = data.role === 'owner' || data.bootstrap === true;
+  if (isOwner && !request.auth.token.firebase?.sign_in_second_factor) {
     throw new HttpsError('permission-denied', 'Multi-factor authentication is required for privileged access. Sign out and sign in with MFA.');
   }
   if (ownerOnly && data.role !== 'owner' && data.bootstrap !== true) {
@@ -807,7 +808,7 @@ async function usableQuickBooksConnection(actorUid, waitAttempt = 0) {
 
 exports.getQuickBooksStatus = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
   const access = await requireDepartmentAccess(request, 'fundraising', true);
-  requireMfa(request);
+  if (access.isOwner) requireMfa(request);
   const snapshot = await db.doc('quickbooksConnections/primary').get();
   const data = snapshot.data() || {};
   const connected = snapshot.exists && data.environment === QUICKBOOKS_ENVIRONMENT && data.reconnectRequired !== true;
@@ -853,8 +854,8 @@ exports.quickBooksOAuthCallback = onRequest({ region: 'us-central1', maxInstance
 });
 
 exports.getQuickBooksReport = onCall({ region: 'us-central1', maxInstances: 4, secrets: [quickBooksClientId, quickBooksClientSecret] }, async (request) => {
-  await requireDepartmentAccess(request, 'fundraising', true);
-  requireMfa(request);
+  const access = await requireDepartmentAccess(request, 'fundraising', true);
+  if (access.isOwner) requireMfa(request);
   const report = String(request.data?.report || 'ProfitAndLoss');
   if (!['ProfitAndLoss', 'BalanceSheet', 'TransactionList'].includes(report)) throw new HttpsError('invalid-argument', 'Choose a supported QuickBooks report.');
   const startDate = String(request.data?.startDate || ''); const endDate = String(request.data?.endDate || '');
@@ -1002,9 +1003,11 @@ exports.trashTask = onCall({ region: 'us-central1', maxInstances: 4 }, async (re
   if (!selected.exists) throw new HttpsError('not-found', 'Task was not found.');
   const selectedData = selected.data();
   const adminDoc = await db.doc(`admins/${request.auth.uid}`).get();
-  const isAdmin = adminDoc.data()?.isAdmin === true;
+  const adminData = adminDoc.data() || {};
+  const isAdmin = adminData.isAdmin === true;
+  const isOwner = isAdmin && (adminData.role === 'owner' || adminData.bootstrap === true);
   if (!isAdmin && selectedData.createdBy !== request.auth.uid) throw new HttpsError('permission-denied', 'You can move only tasks you created to Trash.');
-  if (isAdmin) requireMfa(request);
+  if (isOwner) requireMfa(request);
 
   let targets = [selected];
   if (scope === 'future' && selectedData.seriesId) {
@@ -1143,7 +1146,8 @@ exports.manageVolunteerTaskAssignment = onCall({ region: 'us-central1', maxInsta
     if (taskData.createdBy !== request.auth.uid && callerAdmin.data()?.isAdmin !== true) {
       throw new HttpsError('permission-denied', 'Only the task creator or an administrator can manage assignments.');
     }
-    if (callerAdmin.data()?.isAdmin === true) requireMfa(request);
+    const callerAdminData = callerAdmin.data() || {};
+    if (callerAdminData.isAdmin === true && (callerAdminData.role === 'owner' || callerAdminData.bootstrap === true)) requireMfa(request);
     if (!volunteer.exists || volunteer.data().deleted === true || volunteer.data().participationStatus === 'inactive'
       || volunteer.data().whatsappOptIn !== true || !volunteer.data().phoneNumber) {
       throw new HttpsError('failed-precondition', 'This volunteer is not active for task assignments.');

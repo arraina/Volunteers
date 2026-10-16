@@ -61,14 +61,14 @@ const Protected: React.FC<{ admin?: boolean; children: React.ReactElement }> = (
   admin,
   children,
 }) => {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, isOwner, loading } = useAuth();
   const location = useLocation();
   if (loading) return <Loading />;
   const returnTo = `${location.pathname}${location.search}`;
   if (!user) return <Navigate to={`/login?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   if (!user.emailVerified) return <Navigate to={`/verify-email?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   if (admin && !isAdmin) return <Navigate to="/dashboard" replace />;
-  if (admin && isAdmin && multiFactor(user).enrolledFactors.length === 0) return <Navigate to="/security/mfa" replace />;
+  if (admin && isOwner && multiFactor(user).enrolledFactors.length === 0) return <Navigate to="/security/mfa" replace />;
   return children;
 };
 
