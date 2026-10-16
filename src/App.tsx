@@ -6,6 +6,7 @@ import VolunteerDashboard from './pages/VolunteerDashboard';
 import VerifyEmail from './pages/VerifyEmail';
 import HelpCenter from './pages/HelpCenter';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfUse from './pages/TermsOfUse';
 import ClaimPortalInvite from './pages/ClaimPortalInvite';
 import ClaimLinkSent from './pages/ClaimLinkSent';
 import SharedTask from './pages/SharedTask';
@@ -94,6 +95,7 @@ function App() {
       <Router basename={routerBasename}>
         <Routes>
           <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfUse />} />
           <Route path="/claim" element={<ClaimPortalInvite />} />
           <Route path="/claim-link-sent" element={<ClaimLinkSent />} />
           <Route
