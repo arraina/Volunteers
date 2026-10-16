@@ -2,7 +2,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '../config/firebase';
 
 export type QuickBooksReportType = 'ProfitAndLoss' | 'BalanceSheet' | 'TransactionList';
-export interface QuickBooksStatus { connected: boolean; companyId: string; environment: 'sandbox'; connectedAtMillis: number | null; }
+export interface QuickBooksStatus { connected: boolean; canManageConnection: boolean; companyId: string; environment: 'production'; connectedAtMillis: number | null; }
 
 export async function getQuickBooksStatus(): Promise<QuickBooksStatus> {
   const call = httpsCallable<void, QuickBooksStatus>(functions, 'getQuickBooksStatus');
@@ -19,6 +19,7 @@ export async function getQuickBooksReport(report: QuickBooksReportType, startDat
   return (await call({ report, startDate, endDate })).data;
 }
 
-export async function disconnectQuickBooks(): Promise<void> {
-  const call = httpsCallable<void, { disconnected: boolean }>(functions, 'disconnectQuickBooks'); await call();
+export async function disconnectQuickBooks(): Promise<{ disconnected: boolean; revocationConfirmed: boolean }> {
+  const call = httpsCallable<void, { disconnected: boolean; revocationConfirmed: boolean }>(functions, 'disconnectQuickBooks');
+  return (await call()).data;
 }

@@ -4,6 +4,13 @@ const { defineSecret } = require('firebase-functions/params');
 const { onDocumentWrittenWithAuthContext } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const admin = require('firebase-admin');
+const {
+  QUICKBOOKS_LOG_RETENTION_DAYS,
+  accessTokenUsable,
+  quickBooksErrorCode,
+  quickBooksEvent,
+  refreshLeaseActive,
+} = require('./quickbooksSecurity');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -25,6 +32,8 @@ const QUICKBOOKS_REDIRECT_URI = 'https://us-central1-temple-volunteers-8ff23.clo
 const QUICKBOOKS_APP_RETURN_URL = 'https://arraina.github.io/Volunteers/department/fundraising';
 const QUICKBOOKS_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 const QUICKBOOKS_AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2';
+const QUICKBOOKS_API_URL = 'https://quickbooks.api.intuit.com';
+const QUICKBOOKS_ENVIRONMENT = 'production';
 
 // Require App Check centrally so future callable functions inherit the same protection.
 const onCall = (options, handler) => firebaseOnCall({ ...options, enforceAppCheck: true }, handler);
@@ -705,7 +714,18 @@ function quickBooksBasicAuth() {
   return Buffer.from(`${quickBooksClientId.value()}:${quickBooksClientSecret.value()}`).toString('base64');
 }
 
-async function quickBooksTokenRequest(parameters) {
+async function recordQuickBooksSecurityEvent(details) {
+  const event = quickBooksEvent(details);
+  console.error('QuickBooks request failed', event);
+  await db.collection('securityEvents').add({
+    ...event,
+    occurredAt: admin.firestore.FieldValue.serverTimestamp(),
+    expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + QUICKBOOKS_LOG_RETENTION_DAYS * 86400000),
+  }).catch(error => console.error('QuickBooks security event could not be stored', error?.message || error));
+  return event;
+}
+
+async function quickBooksTokenRequest(parameters, actorUid = '') {
   const response = await fetch(QUICKBOOKS_TOKEN_URL, {
     method: 'POST',
     headers: { Authorization: `Basic ${quickBooksBasicAuth()}`, Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -713,47 +733,92 @@ async function quickBooksTokenRequest(parameters) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload.access_token) {
-    console.error('QuickBooks token request failed', response.status, payload.error || 'unknown_error');
-    throw new Error(payload.error_description || 'QuickBooks authorization failed.');
+    const event = await recordQuickBooksSecurityEvent({ operation: `oauth_${parameters.grant_type || 'token'}`, response, payload, actorUid });
+    const error = new Error('QuickBooks authorization failed.');
+    error.quickBooksCode = event.errorCode;
+    throw error;
   }
   return payload;
 }
 
-async function usableQuickBooksConnection() {
+const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+async function usableQuickBooksConnection(actorUid, waitAttempt = 0) {
   const ref = db.doc('quickbooksConnections/primary');
   const snapshot = await ref.get();
   if (!snapshot.exists) throw new HttpsError('failed-precondition', 'Connect QuickBooks before loading reports.');
   let connection = snapshot.data() || {};
-  const expiresAtMillis = connection.accessTokenExpiresAt?.toMillis?.() || 0;
-  if (expiresAtMillis > Date.now() + 120000) return connection;
+  if (connection.environment !== QUICKBOOKS_ENVIRONMENT) {
+    throw new HttpsError('failed-precondition', 'Reconnect QuickBooks to the live company before loading reports.');
+  }
+  if (connection.reconnectRequired === true) throw new HttpsError('unauthenticated', 'QuickBooks authorization expired. Ask the Owner to reconnect QuickBooks.');
+  if (accessTokenUsable(connection)) return connection;
+
+  const leaseId = randomUUID();
+  const leaseResult = await db.runTransaction(async transaction => {
+    const currentSnapshot = await transaction.get(ref);
+    if (!currentSnapshot.exists) return { missing: true };
+    const current = currentSnapshot.data() || {};
+    if (accessTokenUsable(current)) return { connection: current };
+    if (refreshLeaseActive(current)) return { waiting: true };
+    transaction.set(ref, {
+      refreshLeaseId: leaseId,
+      refreshLeaseExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 30000),
+    }, { merge: true });
+    return { connection: current, acquired: true };
+  });
+  if (leaseResult.missing) throw new HttpsError('failed-precondition', 'Connect QuickBooks before loading reports.');
+  if (leaseResult.connection && !leaseResult.acquired) return leaseResult.connection;
+  if (leaseResult.waiting) {
+    if (waitAttempt >= 12) throw new HttpsError('unavailable', 'QuickBooks authorization is being refreshed. Try the report again.');
+    await wait(500);
+    return usableQuickBooksConnection(actorUid, waitAttempt + 1);
+  }
+  connection = leaseResult.connection;
   try {
-    const tokens = await quickBooksTokenRequest({ grant_type: 'refresh_token', refresh_token: String(connection.refreshToken || '') });
+    const tokens = await quickBooksTokenRequest({ grant_type: 'refresh_token', refresh_token: String(connection.refreshToken || '') }, actorUid);
     connection = {
       ...connection, accessToken: tokens.access_token, refreshToken: tokens.refresh_token || connection.refreshToken,
       accessTokenExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + Number(tokens.expires_in || 3600) * 1000),
       refreshTokenExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + Number(tokens.x_refresh_token_expires_in || 8726400) * 1000),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      reconnectRequired: false,
     };
-    await ref.set(connection, { merge: true });
+    await ref.set({
+      accessToken: connection.accessToken,
+      refreshToken: connection.refreshToken,
+      accessTokenExpiresAt: connection.accessTokenExpiresAt,
+      refreshTokenExpiresAt: connection.refreshTokenExpiresAt,
+      reconnectRequired: false,
+      refreshLeaseId: admin.firestore.FieldValue.delete(),
+      refreshLeaseExpiresAt: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
     return connection;
   } catch (error) {
-    console.error('QuickBooks refresh failed', error?.message || error);
-    throw new HttpsError('unauthenticated', 'QuickBooks authorization expired. Reconnect QuickBooks.');
+    await ref.set({
+      reconnectRequired: true,
+      refreshLeaseId: admin.firestore.FieldValue.delete(),
+      refreshLeaseExpiresAt: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    throw new HttpsError('unauthenticated', 'QuickBooks authorization expired. Ask the Owner to reconnect QuickBooks.');
   }
 }
 
 exports.getQuickBooksStatus = onCall({ region: 'us-central1', maxInstances: 2 }, async (request) => {
-  await requireDepartmentAccess(request, 'fundraising', true);
+  const access = await requireDepartmentAccess(request, 'fundraising', true);
+  requireMfa(request);
   const snapshot = await db.doc('quickbooksConnections/primary').get();
   const data = snapshot.data() || {};
-  return { connected: snapshot.exists, companyId: snapshot.exists ? String(data.realmId || '') : '', environment: 'sandbox', connectedAtMillis: data.connectedAt?.toMillis?.() || null };
+  const connected = snapshot.exists && data.environment === QUICKBOOKS_ENVIRONMENT && data.reconnectRequired !== true;
+  return { connected, canManageConnection: access.isOwner, companyId: connected ? String(data.realmId || '') : '', environment: QUICKBOOKS_ENVIRONMENT, connectedAtMillis: connected ? data.connectedAt?.toMillis?.() || null : null };
 });
 
 exports.startQuickBooksOAuth = onCall({ region: 'us-central1', maxInstances: 2, secrets: [quickBooksClientId] }, async (request) => {
-  await requireDepartmentAccess(request, 'fundraising', true);
+  await requireAdmin(request, true);
   const state = randomBytes(32).toString('base64url');
   await db.doc(`quickbooksOAuthStates/${tokenHash(state)}`).set({
-    createdBy: request.auth.uid, environment: 'sandbox',
+    createdBy: request.auth.uid, environment: QUICKBOOKS_ENVIRONMENT,
     expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + 10 * 60 * 1000),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
@@ -772,12 +837,12 @@ exports.quickBooksOAuthCallback = onRequest({ region: 'us-central1', maxInstance
     const stateSnapshot = await stateRef.get(); const stateData = stateSnapshot.data() || {};
     if (!stateSnapshot.exists || !stateData.expiresAt || stateData.expiresAt.toMillis() < Date.now()) throw new Error('The QuickBooks connection request expired. Start again.');
     await stateRef.delete();
-    const tokens = await quickBooksTokenRequest({ grant_type: 'authorization_code', code, redirect_uri: QUICKBOOKS_REDIRECT_URI });
+    const tokens = await quickBooksTokenRequest({ grant_type: 'authorization_code', code, redirect_uri: QUICKBOOKS_REDIRECT_URI }, stateData.createdBy || '');
     await db.doc('quickbooksConnections/primary').set({
-      realmId, environment: 'sandbox', accessToken: tokens.access_token, refreshToken: tokens.refresh_token,
+      realmId, environment: QUICKBOOKS_ENVIRONMENT, accessToken: tokens.access_token, refreshToken: tokens.refresh_token,
       accessTokenExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + Number(tokens.expires_in || 3600) * 1000),
       refreshTokenExpiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + Number(tokens.x_refresh_token_expires_in || 8726400) * 1000),
-      connectedBy: stateData.createdBy || null, connectedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      reconnectRequired: false, connectedBy: stateData.createdBy || null, connectedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     response.redirect(`${QUICKBOOKS_APP_RETURN_URL}?quickbooks=connected`);
   } catch (error) {
@@ -789,32 +854,48 @@ exports.quickBooksOAuthCallback = onRequest({ region: 'us-central1', maxInstance
 
 exports.getQuickBooksReport = onCall({ region: 'us-central1', maxInstances: 4, secrets: [quickBooksClientId, quickBooksClientSecret] }, async (request) => {
   await requireDepartmentAccess(request, 'fundraising', true);
+  requireMfa(request);
   const report = String(request.data?.report || 'ProfitAndLoss');
   if (!['ProfitAndLoss', 'BalanceSheet', 'TransactionList'].includes(report)) throw new HttpsError('invalid-argument', 'Choose a supported QuickBooks report.');
   const startDate = String(request.data?.startDate || ''); const endDate = String(request.data?.endDate || '');
   if ((startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) || (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate))) throw new HttpsError('invalid-argument', 'Use valid report dates.');
-  const connection = await usableQuickBooksConnection();
+  const connection = await usableQuickBooksConnection(request.auth.uid);
   const params = new URLSearchParams({ minorversion: '75' });
   if (startDate) params.set('start_date', startDate); if (endDate) params.set('end_date', endDate);
-  const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${encodeURIComponent(connection.realmId)}/reports/${report}?${params.toString()}`;
+  const url = `${QUICKBOOKS_API_URL}/v3/company/${encodeURIComponent(connection.realmId)}/reports/${report}?${params.toString()}`;
   const apiResponse = await fetch(url, { headers: { Authorization: `Bearer ${connection.accessToken}`, Accept: 'application/json' } });
   const payload = await apiResponse.json().catch(() => ({}));
   if (!apiResponse.ok) {
-    console.error('QuickBooks report failed', apiResponse.status, payload?.Fault?.type || 'unknown');
-    throw new HttpsError('internal', payload?.Fault?.Error?.[0]?.Message || 'QuickBooks could not create this report.');
+    await recordQuickBooksSecurityEvent({ operation: `report_${report}`, response: apiResponse, payload, actorUid: request.auth.uid });
+    const code = quickBooksErrorCode(payload);
+    if (apiResponse.status === 401 || code === '3200') {
+      await db.doc('quickbooksConnections/primary').set({ reconnectRequired: true, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      throw new HttpsError('unauthenticated', 'QuickBooks authorization expired. Ask the Owner to reconnect QuickBooks.');
+    }
+    throw new HttpsError('internal', 'QuickBooks could not create this report. The troubleshooting ID was recorded for support.');
   }
   return { report: payload, fetchedAtMillis: Date.now() };
 });
 
 exports.disconnectQuickBooks = onCall({ region: 'us-central1', maxInstances: 2, secrets: [quickBooksClientId, quickBooksClientSecret] }, async (request) => {
-  await requireDepartmentAccess(request, 'fundraising', true);
+  await requireAdmin(request, true);
   const ref = db.doc('quickbooksConnections/primary'); const snapshot = await ref.get();
+  let revocationConfirmed = true;
   if (snapshot.exists) {
     const token = String(snapshot.data()?.refreshToken || '');
-    if (token) await fetch('https://developer.api.intuit.com/v2/oauth2/tokens/revoke', { method: 'POST', headers: { Authorization: `Basic ${quickBooksBasicAuth()}`, Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) }).catch(() => undefined);
+    if (token) {
+      try {
+        const revokeResponse = await fetch('https://developer.api.intuit.com/v2/oauth2/tokens/revoke', { method: 'POST', headers: { Authorization: `Basic ${quickBooksBasicAuth()}`, Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
+        revocationConfirmed = revokeResponse.ok;
+        if (!revokeResponse.ok) await recordQuickBooksSecurityEvent({ operation: 'disconnect_revoke', response: revokeResponse, payload: {}, actorUid: request.auth.uid });
+      } catch (error) {
+        revocationConfirmed = false;
+        await recordQuickBooksSecurityEvent({ operation: 'disconnect_revoke', response: null, payload: { error: 'network_error' }, actorUid: request.auth.uid });
+      }
+    }
     await ref.delete();
   }
-  return { disconnected: true };
+  return { disconnected: true, revocationConfirmed };
 });
 
 exports.createOfflineVolunteer = onCall({ region: 'us-central1', maxInstances: 4 }, async (request) => {

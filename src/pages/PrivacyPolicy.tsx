@@ -8,7 +8,7 @@ const PrivacyPolicy: React.FC = () => (
       <header className="privacy-header">
         <p className="privacy-eyebrow">ISKCON Parsippany Community Hub</p>
         <h1>Community Hub Privacy Policy</h1>
-        <p>Effective September 13, 2026</p>
+        <p>Effective October 16, 2026</p>
       </header>
 
       <p>
@@ -58,6 +58,18 @@ const PrivacyPolicy: React.FC = () => (
         sell personal information or use volunteer information for third-party advertising.
         We may disclose information when required by law or necessary to protect users, the
         temple, or the Application.
+      </p>
+
+      <h2>QuickBooks information</h2>
+      <p>
+        When the Hub Owner connects the temple&apos;s QuickBooks Online company, the Application
+        receives authorization tokens and reads accounting reports requested by authorized
+        users. Tokens are stored in a server-only database protected by access controls and
+        encryption at rest. Report contents are displayed on demand and are not permanently
+        stored by the Application. QuickBooks information is not sold, used for advertising,
+        or supplied to the Application&apos;s generative-AI features. Disconnecting QuickBooks
+        revokes the authorization when Intuit confirms the request and deletes the locally
+        stored connection tokens.
       </p>
 
       <h2>Retention and deletion</h2>
