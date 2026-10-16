@@ -5,6 +5,15 @@ export function comparePledgeDates(a: { id: string; pledgeDate: Date | null }, b
   const difference = leftKnown && rightKnown ? left! - right! : 0;
   return (direction === 'asc' ? difference : -difference) || a.id.localeCompare(b.id);
 }
+export function comparePledgeDisplayOrder(
+  a: { id: string; pledgeDate: Date | null; status: string },
+  b: { id: string; pledgeDate: Date | null; status: string },
+  direction: 'asc' | 'desc',
+): number {
+  const aCancelled = a.status === 'cancelled'; const bCancelled = b.status === 'cancelled';
+  if (aCancelled !== bCancelled) return aCancelled ? 1 : -1;
+  return comparePledgeDates(a, b, direction);
+}
 export function eventPledgeDate(eventId: string, fallback: Date | null, events: Array<{ id: string; date?: Date }>): Date | null {
   const date = events.find(event => event.id === eventId)?.date;
   return date && Number.isFinite(date.getTime()) ? date : fallback;

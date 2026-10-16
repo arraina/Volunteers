@@ -5,7 +5,7 @@ import { addDonorInteraction, CampaignSummary, donorDuplicateKeys, DonorContactI
 import QuickBooksReports from './QuickBooksReports';
 import { getDepartmentDirectory } from '../helpers/departments';
 import { pledgeReviewReasons } from '../helpers/pledgeReview';
-import { comparePledgeDates, eventPledgeDate } from '../helpers/pledgeEditing';
+import { comparePledgeDisplayOrder, eventPledgeDate } from '../helpers/pledgeEditing';
 import { syncEventPledgeDate } from '../helpers/fundraisingCrm';
 import PledgeFollowUpPanel from '../components/PledgeFollowUpPanel';
 import DepartmentWorkspacePage from './DepartmentWorkspacePage';
@@ -138,7 +138,7 @@ const FundraisingCrm: React.FC<{ events: TempleEvent[]; uid?: string; setError: 
       const eventName = events.find((event) => event.id === pledge.eventId)?.name || campaigns.find((campaign) => campaign.eventId === pledge.eventId)?.name || pledge.purpose;
       const haystack = `${linkedDonor ? donorName(linkedDonor) : `${pledge.donorFirstName} ${pledge.donorLastName}`} ${eventName} ${pledge.notes} ${pledge.status} ${pledge.pledgedAmount} ${pledge.paidAmount} ${Math.max(0, pledge.pledgedAmount - pledge.paidAmount)} ${pledge.cancellationReason}`.toLowerCase().replace(/[$,]/g, '');
       return terms.every((term) => haystack.includes(term));
-    }).sort((a, b) => comparePledgeDates(a, b, pledgeDateSort));
+    }).sort((a, b) => comparePledgeDisplayOrder(a, b, pledgeDateSort));
   }, [campaigns, displayedPledges, donors, events, pledgeSearch, pledgeDateSort]);
   const activePledges = displayedPledges.filter((pledge) => pledge.status !== 'cancelled');
   const reviewItems = displayedPledges.map((pledge) => ({ pledge, reasons: pledgeReviewReasons(pledge, displayedPledges, pledgePayments, checkReviewDays) })).filter((item) => item.reasons.length);
