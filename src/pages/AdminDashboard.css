@@ -51,7 +51,7 @@
 .reminder-delivery-compact > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
 .reminder-adjustment { font-size: 0.8rem; color: #92400e; }
 .reminder-adjustment p { max-width: 40rem; }
-.fundraising-receipt-head, .fundraising-receipt-list > button { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.3fr 1.3fr; gap: 1rem; align-items: center; padding: 1rem; }
+.fundraising-receipt-head, .fundraising-receipt-list > button { display: grid; grid-template-columns: 1.5fr 1fr 0.8fr 1.2fr 1.2fr 1.15fr; gap: 1rem; align-items: center; padding: 1rem; }
 .fundraising-receipt-head { font-weight: 800; border-bottom: 1px solid var(--line); }
 .fundraising-receipt-list > button { width: 100%; text-align: left; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 12px; margin-top: 0.65rem; cursor: pointer; }
 .fundraising-receipt-list small { display: block; margin-top: 0.25rem; color: var(--muted); }
@@ -130,8 +130,8 @@
 .fundraising-donor-answer small { color: var(--muted); }
 .fundraising-pledge-totals { margin-bottom: 1rem; }
 .fundraising-pledge-list { display: grid; gap: 0.65rem; }
-.fundraising-pledge-list > button { display: grid; grid-template-columns: minmax(12rem, 1.4fr) repeat(5, minmax(7rem, 0.6fr)); align-items: center; gap: 0.8rem; width: 100%; padding: 0.9rem; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fbfefb; text-align: left; }
-.fundraising-pledge-list-head { display: grid; grid-template-columns: minmax(12rem, 1.4fr) repeat(5, minmax(7rem, 0.6fr)); align-items: center; gap: 0.8rem; padding: 0.9rem; font-weight: 700; }
+.fundraising-pledge-list > button { display: grid; grid-template-columns: minmax(12rem, 1.4fr) repeat(5, minmax(7rem, 0.6fr)) minmax(10rem, 0.8fr); align-items: center; gap: 0.8rem; width: 100%; padding: 0.9rem; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: #fbfefb; text-align: left; }
+.fundraising-pledge-list-head { display: grid; grid-template-columns: minmax(12rem, 1.4fr) repeat(5, minmax(7rem, 0.6fr)) minmax(10rem, 0.8fr); align-items: center; gap: 0.8rem; padding: 0.9rem; font-weight: 700; }
 .fundraising-pledge-list-head button { text-align: left; font-weight: 700; }
 .fundraising-pledge-list > button:hover { border-color: var(--green-500); }
 .fundraising-pledge-list > button.overdue { border-color: #f59e0b; background: #fffbeb; }
