@@ -1,0 +1,18 @@
+import { visibleQuickBooksLines, QuickBooksReportLine } from './quickbooksReport';
+
+const lines: QuickBooksReportLine[] = [
+  { label: 'Catering', values: ['5,132.00'], depth: 1, heading: false },
+  { label: 'Facility Income', values: ['10,815.00'], depth: 1, heading: false },
+  { label: 'Refund', values: ['(25.00)'], depth: 1, heading: false },
+];
+
+test('searches labels and values without changing QuickBooks order', () => {
+  expect(visibleQuickBooksLines(lines, 'facility', null).map(line => line.label)).toEqual(['Facility Income']);
+  expect(visibleQuickBooksLines(lines, '5,132', null).map(line => line.label)).toEqual(['Catering']);
+});
+
+test('sorts accounting values numerically and restores original order without a sort', () => {
+  expect(visibleQuickBooksLines(lines, '', { column: 1, direction: 'asc' }).map(line => line.label)).toEqual(['Refund', 'Catering', 'Facility Income']);
+  expect(visibleQuickBooksLines(lines, '', { column: 0, direction: 'desc' }).map(line => line.label)).toEqual(['Refund', 'Facility Income', 'Catering']);
+  expect(visibleQuickBooksLines(lines, '', null)).toEqual(lines);
+});

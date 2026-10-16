@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { connectQuickBooks, disconnectQuickBooks, getQuickBooksReport, getQuickBooksStatus, QuickBooksReportType, QuickBooksStatus } from '../helpers/quickbooks';
+import { QuickBooksReportLine, QuickBooksReportSort, visibleQuickBooksLines } from '../helpers/quickbooksReport';
 
-interface ReportLine { label: string; values: string[]; depth: number; heading: boolean; }
 const isoDate = (date: Date) => date.toISOString().slice(0, 10);
 
-function reportLines(rows: any[], depth = 0): ReportLine[] {
+function reportLines(rows: any[], depth = 0): QuickBooksReportLine[] {
   return (rows || []).flatMap((row) => {
     const header = row.Header?.ColData || []; const summary = row.Summary?.ColData || []; const data = row.ColData?.length ? row.ColData : header.length ? header : summary;
     const line = data.length ? [{ label: String(data[0]?.value || ''), values: data.slice(1).map((cell: any) => String(cell?.value || '')), depth, heading: Boolean(row.Header) }] : [];
@@ -18,6 +18,7 @@ const QuickBooksReports: React.FC<{ setError: (message: string) => void }> = ({ 
   const [reportType, setReportType] = useState<QuickBooksReportType>('ProfitAndLoss');
   const [startDate, setStartDate] = useState(isoDate(yearStart)); const [endDate, setEndDate] = useState(isoDate(now));
   const [report, setReport] = useState<any>(null); const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState(''); const [sort, setSort] = useState<QuickBooksReportSort | null>(null);
 
   useEffect(() => { getQuickBooksStatus().then(setStatus).catch((error) => setError(error.message)); }, [setError]);
   useEffect(() => {
@@ -26,11 +27,16 @@ const QuickBooksReports: React.FC<{ setError: (message: string) => void }> = ({ 
     if (result === 'error') setError('QuickBooks could not be connected. Check the production callback URI and credentials, then try again.');
   }, [setError]);
   const columns = report?.Columns?.Column || []; const lines = useMemo(() => reportLines(report?.Rows?.Row || []), [report]);
+  const visibleLines = useMemo(() => visibleQuickBooksLines(lines, search, sort), [lines, search, sort]);
+  const changeSort = (column: number) => setSort(current => current?.column === column
+    ? current.direction === 'asc' ? { column, direction: 'desc' } : null
+    : { column, direction: 'asc' });
+  const sortIndicator = (column: number) => sort?.column === column ? sort.direction === 'asc' ? ' ↑' : ' ↓' : '';
 
-  const load = async () => { setLoading(true); setError(''); try { const result = await getQuickBooksReport(reportType, startDate, endDate); setReport(result.report); } catch (error) { setError(error instanceof Error ? error.message : 'Could not load QuickBooks report.'); } finally { setLoading(false); } };
+  const load = async () => { setLoading(true); setError(''); setSearch(''); setSort(null); try { const result = await getQuickBooksReport(reportType, startDate, endDate); setReport(result.report); } catch (error) { setError(error instanceof Error ? error.message : 'Could not load QuickBooks report.'); } finally { setLoading(false); } };
   const exportCsv = () => {
     if (!report) return; const quote = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-    const rows = [[report?.Header?.ReportName || reportType, ...columns.slice(1).map((column: any) => column.ColTitle || '')], ...lines.map((line) => [`${'  '.repeat(line.depth)}${line.label}`, ...line.values])];
+    const rows = [[report?.Header?.ReportName || reportType, ...columns.slice(1).map((column: any) => column.ColTitle || '')], ...visibleLines.map((line) => [`${'  '.repeat(line.depth)}${line.label}`, ...line.values])];
     const url = URL.createObjectURL(new Blob([`\uFEFF${rows.map((row) => row.map(quote).join(',')).join('\r\n')}`], { type: 'text/csv;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = `quickbooks-${reportType}-${endDate}.csv`; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   };
 
@@ -38,8 +44,8 @@ const QuickBooksReports: React.FC<{ setError: (message: string) => void }> = ({ 
   if (!status.connected) return <section className="panel quickbooks-connect"><div><p className="eyebrow">FUNDRAISING ADMIN ACCESS</p><h2>QuickBooks reports</h2><p>{status.canManageConnection ? "Connect the temple's live QuickBooks Online company to securely view accounting reports. No credentials or tokens are exposed in the browser." : 'QuickBooks is not connected. Ask the Hub Owner to connect or reconnect the temple company.'}</p></div>{status.canManageConnection && <button className="primary-btn" onClick={() => connectQuickBooks().catch((error) => setError(error.message))}>Connect QuickBooks</button>}</section>;
 
   return <section className="panel quickbooks-reports"><div className="panel-head"><div><p className="eyebrow">QUICKBOOKS ONLINE · LIVE</p><h2>Accounting reports</h2><p className="muted small">Connected company ID: {status.companyId}</p></div>{status.canManageConnection && <button className="danger-btn" onClick={async () => { if (!window.confirm('Disconnect QuickBooks? Reports will stop loading until the Owner reconnects.')) return; const result = await disconnectQuickBooks(); setStatus({ ...status, connected: false }); setReport(null); if (!result.revocationConfirmed) setError('The Hub removed its local QuickBooks connection, but Intuit did not confirm remote revocation. Review the QuickBooks app connections and contact support if it remains listed.'); }}>Disconnect</button>}</div>
-    <div className="quickbooks-controls"><label><span>Report</span><select value={reportType} onChange={(event) => { setReportType(event.target.value as QuickBooksReportType); setReport(null); }}><option value="ProfitAndLoss">Profit &amp; Loss</option><option value="BalanceSheet">Balance Sheet</option><option value="TransactionList">Transaction List</option></select></label><label><span>Start date</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label><span>End date</span><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label><button className="primary-btn" disabled={loading} onClick={load}>{loading ? 'Loading…' : 'Run report'}</button>{report && <button className="secondary-btn" onClick={exportCsv}>Export CSV</button>}</div>
-    {report && <div className="quickbooks-report-table"><div className="quickbooks-report-title"><strong>{report.Header?.ReportName || reportType}</strong><span>{report.Header?.StartPeriod} to {report.Header?.EndPeriod}</span></div><table><thead><tr>{columns.map((column: any, index: number) => <th key={index}>{column.ColTitle || (index === 0 ? 'Account' : '')}</th>)}</tr></thead><tbody>{lines.map((line, index) => <tr className={line.heading ? 'heading' : ''} key={index}><td style={{ paddingLeft: `${0.75 + line.depth * 1.1}rem` }}>{line.label}</td>{Array.from({ length: Math.max(0, columns.length - 1) }, (_, valueIndex) => <td key={valueIndex}>{line.values[valueIndex] || ''}</td>)}</tr>)}</tbody></table></div>}
+    <div className="quickbooks-controls"><label><span>Report</span><select value={reportType} onChange={(event) => { setReportType(event.target.value as QuickBooksReportType); setReport(null); setSearch(''); setSort(null); }}><option value="ProfitAndLoss">Profit &amp; Loss</option><option value="BalanceSheet">Balance Sheet</option><option value="TransactionList">Transaction List</option></select></label><label><span>Start date</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label><span>End date</span><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label><button className="primary-btn" disabled={loading} onClick={load}>{loading ? 'Loading…' : 'Run report'}</button>{report && <button className="secondary-btn" onClick={exportCsv}>Export CSV</button>}</div>
+    {report && <><div className="quickbooks-report-tools"><label><span>Search report</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search accounts, names, dates, or amounts" /></label><span className="muted small">Showing {visibleLines.length.toLocaleString()} of {lines.length.toLocaleString()} rows</span>{sort && <button type="button" className="secondary-btn" onClick={() => setSort(null)}>Restore QuickBooks order</button>}</div>{sort && <p className="muted small quickbooks-sort-note">Sorted view temporarily flattens the accounting hierarchy. Restore QuickBooks order to see the original statement structure.</p>}<div className="quickbooks-report-table"><div className="quickbooks-report-title"><strong>{report.Header?.ReportName || reportType}</strong><span>{report.Header?.StartPeriod} to {report.Header?.EndPeriod}</span></div><table><thead><tr>{columns.map((column: any, index: number) => <th key={index}><button type="button" className="quickbooks-sort-button" onClick={() => changeSort(index)} aria-label={`Sort by ${column.ColTitle || (index === 0 ? 'Account' : `column ${index + 1}`)}`}>{column.ColTitle || (index === 0 ? 'Account' : '')}{sortIndicator(index)}</button></th>)}</tr></thead><tbody>{visibleLines.map((line, index) => <tr className={line.heading ? 'heading' : ''} key={`${line.label}-${index}`}><td style={{ paddingLeft: `${0.75 + line.depth * 1.1}rem` }}>{line.label}</td>{Array.from({ length: Math.max(0, columns.length - 1) }, (_, valueIndex) => <td key={valueIndex}>{line.values[valueIndex] || ''}</td>)}</tr>)}</tbody></table>{!visibleLines.length && <div className="empty-state"><strong>No report rows found</strong><span>Try a different search.</span></div>}</div></>}
   </section>;
 };
 
