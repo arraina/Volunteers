@@ -6,7 +6,11 @@ export function fromEasternDateTimeInput(value: string): Date {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
   if (!match) return new Date(NaN);
   const [, year, month, day, hour, minute] = match.map(Number);
+  // Date.UTC silently turns years 00–99 into 1900–1999. Never infer a century.
+  if (year < 100 || month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59) return new Date(NaN);
   const wallClockUtc = Date.UTC(year, month - 1, day, hour, minute);
+  const calendarDate = new Date(wallClockUtc);
+  if (calendarDate.getUTCFullYear() !== year || calendarDate.getUTCMonth() !== month - 1 || calendarDate.getUTCDate() !== day) return new Date(NaN);
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: EASTERN_TIME_ZONE,
     year: 'numeric', month: '2-digit', day: '2-digit',

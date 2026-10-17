@@ -500,6 +500,11 @@ service cloud.firestore {
 
     // Follow-ups remain private to the fundraising team and keep their lineage.
     match /fundraisingPledgeFollowUps/{followUpId} {
+      function validFollowUpYear() {
+        // Include the full Eastern calendar years, including the UTC offset.
+        return request.resource.data.dueAt >= timestamp.date(2000, 1, 1) + duration.value(5, 'h')
+          && request.resource.data.dueAt < timestamp.date(2101, 1, 1) + duration.value(5, 'h');
+      }
       function validFollowUp() {
         return (isOwner() || isDepartmentAdmin('fundraising'))
           && request.resource.data.pledgeId is string
@@ -516,10 +521,14 @@ service cloud.firestore {
           && request.resource.data.updatedBy == request.auth.uid && request.resource.data.updatedAt == request.time;
       }
       allow read: if isOwner() || isDepartmentAdmin('fundraising');
-      allow create: if validFollowUp() && request.resource.data.createdBy == request.auth.uid && request.resource.data.createdAt == request.time
+      allow create: if validFollowUp() && validFollowUpYear() && request.resource.data.createdBy == request.auth.uid && request.resource.data.createdAt == request.time
+        && request.resource.data.dueAt > request.time
         && request.resource.data.status == 'open' && request.resource.data.completedAt == null
         && get(/databases/$(database)/documents/fundraisingPledges/$(request.resource.data.pledgeId)).data.status != 'cancelled';
       allow update: if validFollowUp()
+        && ((request.resource.data.dueAt == resource.data.dueAt
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt', 'updatedBy', 'updatedAt']))
+          || (validFollowUpYear() && request.resource.data.dueAt > request.time))
         && request.resource.data.pledgeId == resource.data.pledgeId
         && request.resource.data.donorId == resource.data.donorId
         && request.resource.data.createdBy == resource.data.createdBy && request.resource.data.createdAt == resource.data.createdAt

@@ -46,7 +46,7 @@ const PledgeFollowUpPanel: React.FC<{ pledge?: FundraisingPledge; uid?: string; 
       <h4 className="full">{editing ? 'Edit follow-up' : 'Create a task or reminder'}</h4>
       <label><span>Type</span><select value={kind} onChange={(event) => setKind(event.target.value as 'task' | 'reminder')}><option value="task">To-do task</option><option value="reminder">Reminder</option></select></label>
       <label><span>Title *</span><input autoFocus={focusTask} maxLength={180} value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-      <label><span>Due date and time (Eastern) *</span><input type="datetime-local" value={due} onChange={(event) => setDue(event.target.value)} /></label>
+      <label><span>Due date and time (Eastern) *</span><input type="datetime-local" min={toEasternDateTimeInput(new Date(Date.now() + 60000))} max="2100-12-31T23:59" value={due} onChange={(event) => setDue(event.target.value)} /><small>Choose a future date and time, using the full four-digit year.</small></label>
       <label><span>Assigned fundraiser</span><input list="fundraising-admin-name-options" value={assignee} onChange={(event) => setAssignee(event.target.value)} placeholder="Choose admin or enter a name" /></label>
       <label className="full"><span>Details</span><textarea rows={4} maxLength={5000} value={details} onChange={(event) => setDetails(event.target.value)} /></label>
       <div className="full row"><button type="button" className="primary-btn" disabled={busy || !title.trim() || !due} onClick={save}>{editing ? 'Save follow-up changes' : 'Create follow-up'}</button>{editing && <button type="button" className="secondary-btn" onClick={reset}>Cancel edit</button>}</div>

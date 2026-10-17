@@ -13,10 +13,13 @@ export function subscribeOpenPledgeFollowUpCount(callback: (count: number) => vo
     snapshot => callback(snapshot.size), onError);
 }
 
-export function validateFollowUp(title: string, details: string, dueAt: Date): string {
+export function validateFollowUp(title: string, details: string, dueAt: Date, now = new Date()): string {
   if (!title.trim() || title.trim().length > 180) return 'Enter a task title of 1–180 characters.';
   if (details.length > 5000) return 'Keep task details within 5,000 characters.';
   if (!Number.isFinite(dueAt.getTime())) return 'Choose a valid due date and time.';
+  const year = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric' }).format(dueAt));
+  if (year < 2000 || year > 2100) return 'Enter a four-digit follow-up year between 2000 and 2100 (for example, 2027).';
+  if (dueAt <= now) return 'Choose a follow-up date and time in the future.';
   return '';
 }
 
