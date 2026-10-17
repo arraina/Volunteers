@@ -53,6 +53,7 @@ export interface FundraisingDonor {
   futurePledge: boolean;
   fiveKAmount: number;
   spouseName: string;
+  spouseInitiatedName: string;
   weddingAnniversary: Date | null;
   birthDate: Date | null;
   spouseBirthDate: Date | null;
@@ -160,7 +161,7 @@ function donorFromSnapshot(item: QueryDocumentSnapshot): FundraisingDonor {
     phoneAppendDate: data.phoneAppendDate ? firestoreTimestampToDate(data.phoneAppendDate) : null, doNotCall: data.doNotCall === true, doNotMail: data.doNotMail === true,
     noMailReason: String(data.noMailReason || ''), receiptDelivery: String(data.receiptDelivery || ''), receiptingPreference: String(data.receiptingPreference || ''),
     pictureUrl: String(data.pictureUrl || ''), picturePath: String(data.picturePath || ''), futurePledge: data.futurePledge === true, fiveKAmount: Number(data.fiveKAmount) || 0,
-    spouseName: String(data.spouseName || ''), weddingAnniversary: data.weddingAnniversary ? firestoreTimestampToDate(data.weddingAnniversary) : null,
+    spouseName: String(data.spouseName || ''), spouseInitiatedName: String(data.spouseInitiatedName || ''), weddingAnniversary: data.weddingAnniversary ? firestoreTimestampToDate(data.weddingAnniversary) : null,
     birthDate: data.birthDate ? firestoreTimestampToDate(data.birthDate) : null,
     spouseBirthDate: data.spouseBirthDate ? firestoreTimestampToDate(data.spouseBirthDate) : null,
     children: Array.from({ length: 5 }, (_, index) => {
@@ -218,7 +219,7 @@ export async function saveFundraisingDonor(donor: Omit<FundraisingDonor, 'id' | 
     city: donor.city.trim(), state: donor.state.trim(), postalCode: donor.postalCode.trim(), country: donor.country.trim(), homePhone: donor.homePhone.trim(), previousHomePhone: donor.previousHomePhone.trim(),
     phoneVerified: donor.phoneVerified, phoneAppendDate: donor.phoneAppendDate, doNotCall: donor.doNotCall, doNotMail: donor.doNotMail, noMailReason: donor.noMailReason.trim(),
     receiptDelivery: donor.receiptDelivery.trim(), receiptingPreference: donor.receiptingPreference.trim(), pictureUrl: donor.pictureUrl.trim(), picturePath: donor.picturePath.trim(), futurePledge: donor.futurePledge, fiveKAmount: Math.max(0, donor.fiveKAmount),
-    spouseName: donor.spouseName.trim(), weddingAnniversary: donor.weddingAnniversary, birthDate: donor.birthDate, spouseBirthDate: donor.spouseBirthDate,
+    spouseName: donor.spouseName.trim(), spouseInitiatedName: (donor.spouseInitiatedName || '').trim(), weddingAnniversary: donor.weddingAnniversary, birthDate: donor.birthDate, spouseBirthDate: donor.spouseBirthDate,
     children: donor.children.slice(0, 5).map((child) => ({ name: child.name.trim(), birthDate: child.birthDate })),
     lastDonationDate: donor.lastDonationDate, lastDonationAmount: Math.max(0, donor.lastDonationAmount),
     biggestDonationDate: donor.biggestDonationDate, biggestDonationAmount: Math.max(0, donor.biggestDonationAmount),
