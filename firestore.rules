@@ -427,9 +427,21 @@ service cloud.firestore {
       allow read: if isOwner() || isDepartmentAdmin('fundraising');
       allow write: if false;
     }
+    match /fundraisingReconciliationCodes/{code} {
+      allow read: if isOwner() || isDepartmentAdmin('fundraising');
+      allow write: if false;
+    }
+    match /fundraisingReconciliationKeys/{key} { allow read, write: if false; }
+    match /fundraisingReconciliationCounters/{prefix} { allow read, write: if false; }
     match /fundraisingPledges/{pledgeId} {
+      function validCode() {
+        let code = request.resource.data.get('reconciliationCode', '');
+        let mapping = get(/databases/$(database)/documents/fundraisingReconciliationCodes/$(code)).data;
+        return code.matches('PLG-[0-9]{4,}') && mapping.kind == 'pledge' && mapping.recordId == pledgeId;
+      }
       allow read: if isOwner() || isDepartmentAdmin('fundraising');
       allow create, update: if (isOwner() || isDepartmentAdmin('fundraising'))
+        && (request.method == 'create' ? validCode() : (request.resource.data.get('reconciliationCode', '') == resource.data.get('reconciliationCode', '') || (resource.data.get('reconciliationCode', '') == '' && validCode())))
         && request.resource.data.updatedBy == request.auth.uid
         && request.resource.data.donorId is string
         && request.resource.data.donorFirstName is string

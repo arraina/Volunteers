@@ -157,6 +157,23 @@ async function requireDepartmentAccess(request, departmentId, manage = false) {
 }
 
 const fundraisingReceipts = require('./fundraisingReceipts');
+const reconciliationCodes = require('./fundraisingReconciliation');
+exports.assignFundraisingReconciliationCodes = onDocumentWrittenWithAuthContext({ document: '{collectionId}/{documentId}', region: 'us-central1', maxInstances: 2, retry: true }, async event => {
+  if (!['fundraisingPledges', 'fundraisingReceipts', 'fundraisingCampaigns'].includes(event.params.collectionId) || !event.data?.after?.exists) return;
+  await reconciliationCodes.ensureDocumentCodes(db, event.params.collectionId, event.params.documentId, event.authId || event.data.after.data().updatedBy || 'system', () => admin.firestore.FieldValue.serverTimestamp());
+});
+exports.getFundraisingReconciliationCode = onCall({ region: 'us-central1', maxInstances: 4 }, async request => {
+  await requireDepartmentAccess(request, 'fundraising', true);
+  const input = { kind: request.data?.kind, id: request.data?.id || '', eventId: request.data?.eventId || '', sourceCampaignEntryId: request.data?.sourceCampaignEntryId || '' };
+  try {
+    reconciliationCodes.identity(input);
+    if (input.sourceCampaignEntryId) {
+      const campaign = await db.doc(`fundraisingCampaigns/${input.eventId}`).get();
+      if (!(campaign.data()?.entries || []).some(entry => entry.id === input.sourceCampaignEntryId && entry.type === input.kind)) throw new Error('The source campaign entry was not found.');
+    }
+    return { code: await reconciliationCodes.allocateCode(db, input, request.auth.uid, () => admin.firestore.FieldValue.serverTimestamp()) };
+  } catch (error) { throw new HttpsError('failed-precondition', error.message); }
+});
 exports.saveFundraisingReceipt = onCall({ region: 'us-central1', maxInstances: 4 }, async request => {
   await requireDepartmentAccess(request, 'fundraising', true);
   if (request.data?.action === 'cancel') {
@@ -185,6 +202,7 @@ exports.saveFundraisingReceipt = onCall({ region: 'us-central1', maxInstances: 4
   // Deterministic source IDs prevent duplicate conversion of dashboard entries.
   const sourceId = input.sourceCampaignEntryId ? tokenHash(`${input.eventId}:${input.sourceCampaignEntryId}:${input.kind}`) : '';
   const ref = id ? db.doc(`fundraisingReceipts/${id}`) : sourceId ? db.doc(`fundraisingReceipts/source_${sourceId}`) : db.collection('fundraisingReceipts').doc();
+  const reconciliationCode = await reconciliationCodes.allocateCode(db, { kind: input.kind, id: ref.id, eventId: input.eventId, sourceCampaignEntryId: input.sourceCampaignEntryId }, request.auth.uid, () => admin.firestore.FieldValue.serverTimestamp());
   await db.runTransaction(async transaction => {
     const existing = await transaction.get(ref);
     const donor = await transaction.get(db.doc(`fundraisingCuratedDonors/${input.donorId}`));
@@ -197,7 +215,7 @@ exports.saveFundraisingReceipt = onCall({ region: 'us-central1', maxInstances: 4
     const payments = before?.repayments || [];
     const repaidAmount = fundraisingReceipts.returned(payments);
     if (input.amount < repaidAmount || payments.some(payment => payment.paidDate < input.receivedDate)) throw new HttpsError('failed-precondition', 'Loan principal or received date conflicts with recorded repayments.');
-    transaction.set(ref, { ...input, donorName: [donor.data().firstName, donor.data().lastName].filter(Boolean).join(' ') || donor.data().organization, repayments: payments, repaidAmount, createdBy: before?.createdBy || request.auth.uid, createdAt: before?.createdAt || admin.firestore.FieldValue.serverTimestamp(), updatedBy: request.auth.uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    transaction.set(ref, { ...input, reconciliationCode: before?.reconciliationCode || reconciliationCode, donorName: [donor.data().firstName, donor.data().lastName].filter(Boolean).join(' ') || donor.data().organization, repayments: payments, repaidAmount, createdBy: before?.createdBy || request.auth.uid, createdAt: before?.createdAt || admin.firestore.FieldValue.serverTimestamp(), updatedBy: request.auth.uid, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
   });
   return { id: ref.id };
 });

@@ -32,7 +32,7 @@ function financialValues(collection, data) {
 }
 
 function lineage(data) {
-  return Object.fromEntries(['donorId', 'pledgeId', 'eventId', 'sourceCampaignEntryId', 'sourceImportKey', 'openBalanceSource', 'purpose', 'designation', 'assignedTo'].filter((key) => data?.[key] != null).map((key) => [key, data[key]]));
+  return Object.fromEntries(['reconciliationCode', 'donorId', 'pledgeId', 'eventId', 'sourceCampaignEntryId', 'sourceImportKey', 'openBalanceSource', 'purpose', 'designation', 'assignedTo'].filter((key) => data?.[key] != null).map((key) => [key, data[key]]));
 }
 
 module.exports = { COLLECTIONS, changes, financialValues, lineage, safeSnapshot };

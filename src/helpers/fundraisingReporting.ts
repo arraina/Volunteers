@@ -35,7 +35,14 @@ export function buildFundingReport(receipts: FundraisingReceipt[], pledges: Fund
     const pledge = pledges.find(pledge => pledge.id === payment.pledgeId);
     activities.push({ id: payment.id, date: day(payment.receivedAt), type: 'Pledge payment received', name: pledge ? `${pledge.donorFirstName} ${pledge.donorLastName}`.trim() : 'Unlinked pledge payment', eventId: pledge?.eventId || '', amount: payment.amount, reference: payment.reference, source: 'Recorded pledge payment' });
   });
-  return { records, activities };
+  const codes = new Map<string, string>();
+  receipts.forEach(receipt => codes.set(receipt.id, receipt.reconciliationCode || ''));
+  pledges.forEach(pledge => codes.set(pledge.id, pledge.reconciliationCode || ''));
+  campaigns.forEach(campaign => campaign.entries.forEach(entry => codes.set(`dashboard:${campaign.eventId}:${entry.id}`, entry.reconciliationCode || '')));
+  return {
+    records: records.map(record => ({ ...record, reconciliationCode: codes.get(record.id) || '' })),
+    activities: activities.map(activity => ({ ...activity, reconciliationCode: codes.get(activity.id) || (activity.type === 'Loan returned' ? codes.get(activity.id.split(':')[0]) : '') || '' })),
+  };
 }
 export function fundingActivityTotals(activities: FundingActivity[]) {
   const sum = (type: FundingActivity['type']) => cents(activities.filter(activity => activity.type === type).reduce((total, activity) => total + activity.amount, 0));

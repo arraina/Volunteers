@@ -1,5 +1,6 @@
 import { addDoc, collection, doc, documentId, DocumentData, getDocs, limit, onSnapshot, orderBy, query, Query, QueryDocumentSnapshot, QuerySnapshot, runTransaction, serverTimestamp, startAfter, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { allocateReconciliationCode } from './reconciliationCodes';
 import { functions } from '../config/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { firestoreTimestampToDate } from './types';
@@ -96,10 +97,11 @@ export interface CampaignSummary {
   loans: number;
   donorCount: number;
   locked: boolean;
-  entries: Array<{ id: string; firstName: string; lastName: string; type: 'pledge' | 'loan' | 'donation'; amount: number; comments: string }>;
+  entries: Array<{ id: string; firstName: string; lastName: string; type: 'pledge' | 'loan' | 'donation'; amount: number; comments: string; reconciliationCode?: string }>;
 }
 
 export interface FundraisingPledge {
+  reconciliationCode?: string;
   id: string;
   donorId: string;
   eventId: string;
@@ -269,7 +271,7 @@ export async function loadCampaignSummaries(eventNames: Record<string, string>):
       entries: entries.map((entry: any) => ({
         id: String(entry.id || ''), firstName: String(entry.firstName || ''), lastName: String(entry.lastName || ''),
         type: ['pledge', 'loan', 'donation'].includes(entry.type) ? entry.type : 'donation', amount: Number(entry.amount) || 0,
-        comments: String(entry.comments || ''),
+        comments: String(entry.comments || ''), reconciliationCode: String(entry.reconciliationCode || ''),
       })),
     };
   }).sort((a, b) => b.current - a.current);
@@ -282,7 +284,7 @@ export function subscribeFundraisingPledges(cb: (pledges: FundraisingPledge[]) =
       return {
         id: item.id, donorId: String(data.donorId || ''), eventId: String(data.eventId || ''),
         donorFirstName: String(data.donorFirstName || ''), donorLastName: String(data.donorLastName || ''),
-        sourceCampaignEntryId: String(data.sourceCampaignEntryId || ''), purpose: String(data.purpose || ''),
+        sourceCampaignEntryId: String(data.sourceCampaignEntryId || ''), purpose: String(data.purpose || ''), reconciliationCode: String(data.reconciliationCode || ''),
         pledgedAmount: Number(data.pledgedAmount) || 0, paidAmount: Number(data.paidAmount) || 0,
         openBalanceKnown: data.openBalanceKnown !== false, openBalanceSource: String(data.openBalanceSource || ''),
         pledgeDate: data.pledgeDate ? firestoreTimestampToDate(data.pledgeDate) : null,
@@ -301,7 +303,15 @@ export function subscribeFundraisingPledges(cb: (pledges: FundraisingPledge[]) =
 }
 
 export async function saveFundraisingPledge(pledge: Omit<FundraisingPledge, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }, uid?: string) {
+  let id = pledge.id || '';
+  if (!id && pledge.sourceCampaignEntryId) {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([pledge.eventId, pledge.sourceCampaignEntryId])));
+    id = `source_${Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('')}`;
+  }
+  const ref = id ? doc(db, 'fundraisingPledges', id) : doc(collection(db, 'fundraisingPledges'));
+  const reconciliationCode = await allocateReconciliationCode('pledge', ref.id, pledge.eventId, pledge.sourceCampaignEntryId);
   const payload = {
+    reconciliationCode,
     donorId: pledge.donorId, eventId: pledge.eventId,
     donorFirstName: pledge.donorFirstName.trim(), donorLastName: pledge.donorLastName.trim(),
     sourceCampaignEntryId: pledge.sourceCampaignEntryId, purpose: pledge.purpose.trim(),
@@ -313,8 +323,12 @@ export async function saveFundraisingPledge(pledge: Omit<FundraisingPledge, 'id'
     notes: pledge.notes.trim(),
     updatedAt: serverTimestamp(), updatedBy: uid || null,
   };
-  if (pledge.id) return updateDoc(doc(db, 'fundraisingPledges', pledge.id), payload);
-  return addDoc(collection(db, 'fundraisingPledges'), { ...payload, createdAt: serverTimestamp(), createdBy: uid || null });
+  if (pledge.id) return updateDoc(ref, payload);
+  return runTransaction(db, async transaction => {
+    const existing = await transaction.get(ref);
+    if (existing.exists()) throw new Error('This event pledge has already been saved. Refresh and open its existing record.');
+    transaction.set(ref, { ...payload, createdAt: serverTimestamp(), createdBy: uid || null });
+  });
 }
 
 export function subscribeFundraisingPledgePayments(cb: (payments: FundraisingPledgePayment[]) => void, onError?: (error: Error) => void) {

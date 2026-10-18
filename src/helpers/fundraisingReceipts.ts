@@ -4,6 +4,7 @@ import { db, functions } from '../config/firebase';
 import { firestoreTimestampToDate } from './types';
 export interface LoanRepayment { id: string; amount: number; paidDate: string; method: string; reference: string; paidBy: string; notes: string; updatedBy?: string; updatedAt?: string; }
 export interface FundraisingReceipt {
+  reconciliationCode?: string;
   status?: 'cancelled'; cancellationReason?: string;
   id: string; kind: 'loan' | 'donation'; donorId: string; donorName: string; eventId: string; sourceCampaignEntryId: string;
   amount: number; receivedDate: string; method: string; reference: string; receivedBy: string; designation: string; receiptNumber: string; notes: string;

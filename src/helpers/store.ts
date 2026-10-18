@@ -52,6 +52,7 @@ import {
 } from './types';
 
 export interface FundraisingEntry {
+  reconciliationCode?: string;
   id: string;
   firstName: string;
   lastName: string;
@@ -95,7 +96,7 @@ export function subscribeFundraisingCampaign(
         lastName: String(entry.lastName || ''),
         type: ['pledge', 'loan', 'donation'].includes(entry.type) ? entry.type : 'donation',
         amount: Number(entry.amount) || 0,
-        comments: String(entry.comments || ''),
+        comments: String(entry.comments || ''), reconciliationCode: String(entry.reconciliationCode || ''),
       })) : [],
       updatedBy: data.updatedBy || undefined,
       locked: data.locked === true,
@@ -125,6 +126,7 @@ export async function saveFundraisingCampaign(campaign: FundraisingCampaign): Pr
       type: entry.type,
       amount: Math.max(0, entry.amount),
       comments: entry.comments.trim(),
+      ...(entry.reconciliationCode ? { reconciliationCode: entry.reconciliationCode } : {}),
     })),
     updatedBy: campaign.updatedBy || null,
     updatedAt: serverTimestamp(),
