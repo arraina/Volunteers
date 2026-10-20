@@ -875,12 +875,18 @@ exports.getQuickBooksReport = onCall({ region: 'us-central1', maxInstances: 4, s
   const access = await requireDepartmentAccess(request, 'fundraising', true);
   if (access.isOwner) requireMfa(request);
   const report = String(request.data?.report || 'ProfitAndLoss');
-  if (!['ProfitAndLoss', 'BalanceSheet', 'TransactionList'].includes(report)) throw new HttpsError('invalid-argument', 'Choose a supported QuickBooks report.');
+  if (!['ProfitAndLoss', 'BalanceSheet', 'TransactionList', 'AgedReceivables', 'AgedReceivableDetail'].includes(report)) throw new HttpsError('invalid-argument', 'Choose a supported QuickBooks report.');
   const startDate = String(request.data?.startDate || ''); const endDate = String(request.data?.endDate || '');
   if ((startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) || (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate))) throw new HttpsError('invalid-argument', 'Use valid report dates.');
   const connection = await usableQuickBooksConnection(request.auth.uid);
   const params = new URLSearchParams({ minorversion: '75' });
-  if (startDate) params.set('start_date', startDate); if (endDate) params.set('end_date', endDate);
+  if (['AgedReceivables', 'AgedReceivableDetail'].includes(report)) {
+    if (!endDate) throw new HttpsError('invalid-argument', 'Choose an as-of date for accounts receivable.');
+    params.set('report_date', endDate);
+    params.set('aging_method', 'Report_Date');
+  } else {
+    if (startDate) params.set('start_date', startDate); if (endDate) params.set('end_date', endDate);
+  }
   const url = `${QUICKBOOKS_API_URL}/v3/company/${encodeURIComponent(connection.realmId)}/reports/${report}?${params.toString()}`;
   const apiResponse = await fetch(url, { headers: { Authorization: `Bearer ${connection.accessToken}`, Accept: 'application/json' } });
   const payload = await apiResponse.json().catch(() => ({}));

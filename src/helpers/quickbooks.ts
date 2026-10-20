@@ -1,7 +1,7 @@
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../config/firebase';
 
-export type QuickBooksReportType = 'ProfitAndLoss' | 'BalanceSheet' | 'TransactionList';
+export type QuickBooksReportType = 'ProfitAndLoss' | 'BalanceSheet' | 'TransactionList' | 'AgedReceivables' | 'AgedReceivableDetail';
 export interface QuickBooksStatus { connected: boolean; canManageConnection: boolean; companyId: string; environment: 'production'; connectedAtMillis: number | null; }
 
 export async function getQuickBooksStatus(): Promise<QuickBooksStatus> {
