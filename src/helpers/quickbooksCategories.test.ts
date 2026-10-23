@@ -1,4 +1,4 @@
-import { availableSplitCategories, splitCategory, splitColumnIndex } from './quickbooksCategories';
+import { availableSplitCategories, splitCategory, splitColumnIndex, transactionSelectionTotal } from './quickbooksCategories';
 
 test('finds Split by title or API column key, not by fixed position', () => {
   expect(splitColumnIndex([{ColTitle:'Date'},{ColTitle:'Split'}])).toBe(1);
@@ -23,4 +23,18 @@ test('offers only categories present in returned rows, excludes report headings'
   const rows=[{label:'date',values:['Catering'],heading:false,depth:0},{label:'date2',values:['Catering'],heading:false,depth:0},{label:'Total',values:['Insurance'],heading:true,depth:0}];
   expect(availableSplitCategories(rows,1)).toEqual([{key:'Active income/Catering',group:'Active income',label:'Catering',count:2,accounts:['Catering']}]);
   expect(availableSplitCategories(rows,-1)).toEqual([]);
+});
+
+test('totals only selected transaction amounts in cents, preserving signs and excluding summaries', () => {
+  const row=(value:string,heading=false)=>({label:'date',values:[value],depth:0,heading});
+  expect(transactionSelectionTotal([row('1,200.10'),row('(20.05)'),row('-10.00'),row('99999',true)], [{ColTitle:'Date'},{ColTitle:'Amount'}]).cents).toBe(117005);
+  expect(transactionSelectionTotal([row('0.10'),row('0.20')],[{}, {MetaData:[{Name:'ColKey',Value:'amount'}]}]).cents).toBe(30);
+  expect(transactionSelectionTotal([row('0.20')],[{}, {ColTitle:'Amount'}]).cents).toBe(20);
+});
+
+test('does not silently treat missing or malformed amounts as zero or use a balance column', () => {
+  const row=(value:string)=>({label:'date',values:[value],depth:0,heading:false});
+  for(const value of ['', 'n/a', '1,2', '2.345']) expect(transactionSelectionTotal([row(value)],[{}, {ColTitle:'Amount'}]).cents).toBeNull();
+  expect(transactionSelectionTotal([row('20')],[{}, {ColTitle:'Balance'}]).cents).toBeNull();
+  expect(transactionSelectionTotal([],[{ColTitle:'Amount'}]).cents).toBe(0);
 });

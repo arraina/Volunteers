@@ -2,7 +2,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { connectQuickBooks, disconnectQuickBooks, getQuickBooksReport, getQuickBooksStatus, QuickBooksReportType, QuickBooksStatus } from '../helpers/quickbooks';
 import { quickBooksReportLines, QuickBooksReportSort, visibleQuickBooksLines } from '../helpers/quickbooksReport';
 import QuickBooksSplitFilter from '../components/QuickBooksSplitFilter';
-import { availableSplitCategories, lineSplit, splitCategory, splitColumnIndex } from '../helpers/quickbooksCategories';
+import { availableSplitCategories, lineSplit, splitCategory, splitColumnIndex, transactionSelectionTotal } from '../helpers/quickbooksCategories';
 
 const isoDate = (date: Date) => date.toISOString().slice(0, 10);
 
@@ -33,6 +33,9 @@ const QuickBooksReports: React.FC<{ setError: (message: string) => void }> = ({ 
       ? lines.filter(line => !line.heading && splitCategory(lineSplit(line, splitIndex)).key === category)
       : lines, search, sort
   ), [lines, search, sort, category, splitIndex, reportType]);
+  const selectionTotal = useMemo(() => transactionSelectionTotal(visibleLines, report?.Columns?.Column || []), [visibleLines, report]);
+  const selectionCurrency = report?.Header?.Currency || 'USD';
+  const totalDisplay = selectionTotal.cents === null ? 'Unavailable' : new Intl.NumberFormat('en-US', { style: 'currency', currency: selectionCurrency }).format(selectionTotal.cents / 100);
   useEffect(() => {
     const viewport = scrollRef.current;
     if (!viewport) return;
@@ -54,6 +57,10 @@ const QuickBooksReports: React.FC<{ setError: (message: string) => void }> = ({ 
   const exportCsv = () => {
     if (!report) return; const quote = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
     const rows = [[report?.Header?.ReportName || reportType, ...columns.slice(1).map((column: any) => column.ColTitle || '')], ...visibleLines.map((line) => [`${'  '.repeat(line.depth)}${line.label}`, ...line.values])];
+    if (reportType === 'TransactionList' && selectionTotal.cents !== null) {
+      const totalRow = Array(columns.length).fill(''); totalRow[0] = 'Selected transactions total';
+      totalRow[selectionTotal.amountIndex] = (selectionTotal.cents / 100).toFixed(2); rows.push(totalRow);
+    }
     const url = URL.createObjectURL(new Blob([`\uFEFF${rows.map((row) => row.map(quote).join(',')).join('\r\n')}`], { type: 'text/csv;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = `quickbooks-${reportType}-${endDate}.csv`; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   };
 
@@ -64,6 +71,11 @@ const QuickBooksReports: React.FC<{ setError: (message: string) => void }> = ({ 
     <div className="quickbooks-controls"><label><span>Report</span><select disabled={loading} value={reportType} onChange={(event) => { setReportType(event.target.value as QuickBooksReportType); setCategory(''); setReport(null); setSearch(''); setSort(null); }}><option value="ProfitAndLoss">Profit &amp; Loss</option><option value="BalanceSheet">Balance Sheet</option><option value="TransactionList">Transaction List</option><option value="AgedReceivables">Accounts Receivable Aging Summary</option><option value="AgedReceivableDetail">Accounts Receivable Aging Detail</option></select></label><label><span>Start date{isReceivables ? ' (not used)' : ''}</span><input type="date" value={startDate} disabled={loading || isReceivables} onChange={(event) => { setStartDate(event.target.value); setReport(null); setCategory(''); }} /></label><label><span>{isReceivables ? 'As-of date' : 'End date'}</span><input type="date" value={endDate} disabled={loading} onChange={(event) => { setEndDate(event.target.value); setReport(null); setCategory(''); }} /></label><button className="primary-btn" disabled={loading} onClick={load}>{loading ? 'Loading…' : 'Run report'}</button>{report && <button className="secondary-btn" onClick={exportCsv}>Export CSV</button>}</div>
     {isReceivables && <p className="muted small">Outstanding QuickBooks receivables as of the selected date. Aging is calculated using that date, not today. Hub-only pledges are not included unless recorded in QuickBooks as receivables.</p>}
     {report && reportType === 'TransactionList' && <QuickBooksSplitFilter categories={categories} selected={category} onChange={setCategory} available={splitIndex >= 0} />}
+    {report && reportType === 'TransactionList' && <div className="quickbooks-category-filter" role="status" aria-live="polite">
+      <span>Total dollar value of selection</span><h3>{totalDisplay}</h3>
+      <p className="muted small">{selectionTotal.rows} transaction rows · {selectionCurrency}. Follows the selected category and search. Signed sum of QuickBooks Amount values; negative amounts reduce the total. Not a profit or bank-balance calculation.</p>
+      {selectionTotal.cents === null && <p className="muted small">{selectionTotal.amountIndex < 0 ? 'QuickBooks did not return an Amount column.' : `${selectionTotal.missing} rows have missing or unsupported amounts; a complete total cannot be calculated.`}</p>}
+    </div>}
     {report && <><div className="quickbooks-report-tools"><label><span>Search report</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search accounts, names, dates, or amounts" /></label><span className="muted small">Showing {visibleLines.length.toLocaleString()} of {lines.length.toLocaleString()} rows</span>{sort && <button type="button" className="secondary-btn" onClick={() => setSort(null)}>Restore QuickBooks order</button>}</div>{sort && <p className="muted small quickbooks-sort-note">Sorted view temporarily flattens the accounting hierarchy. Restore QuickBooks order to see the original statement structure.</p>}{(scrollEdges.left || scrollEdges.right) && <div className="quickbooks-scroll-hint"><span role="status">{scrollEdges.right ? 'More columns to the right →' : '← More columns to the left'} <small>Scroll horizontally or use the arrows.</small></span><div><button type="button" className="secondary-btn" aria-label="Scroll report columns left" aria-controls={scrollId} disabled={!scrollEdges.left} onClick={() => scrollColumns(-1)}>← Left</button><button type="button" className="secondary-btn" aria-label="Scroll report columns right" aria-controls={scrollId} disabled={!scrollEdges.right} onClick={() => scrollColumns(1)}>Right →</button></div></div>}<div className="quickbooks-report-table" id={scrollId} ref={scrollRef} tabIndex={0} role="region" aria-label="QuickBooks report, horizontally scrollable"><div className="quickbooks-report-title"><strong>{report.Header?.ReportName || reportType}</strong><span>{report.Header?.StartPeriod} to {report.Header?.EndPeriod}</span></div><table><thead><tr>{columns.map((column: any, index: number) => <th key={index}><button type="button" className="quickbooks-sort-button" onClick={() => changeSort(index)} aria-label={`Sort by ${column.ColTitle || (index === 0 ? 'Account' : `column ${index + 1}`)}`}>{column.ColTitle || (index === 0 ? 'Account' : '')}{sortIndicator(index)}</button></th>)}</tr></thead><tbody>{visibleLines.map((line, index) => <tr className={line.heading ? 'heading' : ''} key={`${line.label}-${index}`}><td style={{ paddingLeft: `${0.4 + line.depth * 0.65}rem` }}>{line.label}</td>{Array.from({ length: Math.max(0, columns.length - 1) }, (_, valueIndex) => <td key={valueIndex}>{line.values[valueIndex] || ''}</td>)}</tr>)}</tbody></table>{!visibleLines.length && <div className="empty-state"><strong>No report rows found</strong><span>Try a different search.</span></div>}</div></>}
   </section>;
 };

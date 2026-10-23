@@ -25,6 +25,26 @@ const definitions = [
 
 export interface SplitCategory { key: string; group: string; label: string; count: number; accounts: string[]; }
 
+export function transactionSelectionTotal(lines: QuickBooksReportLine[], columns: any[]) {
+  const index = columns.findIndex(column => [column.ColTitle, ...(column.MetaData || []).filter((m: any) => m.Name === 'ColKey').map((m: any) => m.Value)]
+    .some(value => normalize(String(value || '')) === 'amount'));
+  const rows = lines.filter(line => !line.heading);
+  let cents = 0; let missing = 0;
+  for (const row of rows) {
+    let raw = (index < 0 ? '' : lineSplit(row, index)).trim();
+    const parentheses = /^\(.*\)$/.test(raw);
+    if (parentheses) raw = raw.slice(1, -1).trim();
+    const sign = raw.startsWith('-') ? -1 : 1;
+    raw = raw.replace(/^[+-]/, '').replace(/^\$/, '');
+    if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(raw) || (parentheses && sign < 0)) { missing++; continue; }
+    const [whole, fraction = ''] = raw.replace(/,/g, '').split('.');
+    const value = (Number(whole) * 100 + Number(fraction.padEnd(2, '0'))) * (parentheses ? -1 : sign);
+    if (!Number.isSafeInteger(value) || !Number.isSafeInteger(cents + value)) { missing++; continue; }
+    cents += value;
+  }
+  return { amountIndex: index, rows: rows.length, missing, cents: index < 0 || missing ? null : cents };
+}
+
 export function splitColumnIndex(columns: any[]): number {
   return columns.findIndex(column => [column.ColTitle, ...(column.MetaData || []).filter((m: any) => m.Name === 'ColKey').map((m: any) => m.Value)]
     .some(value => ['split', 'split acc', 'split account'].includes(normalize(String(value || '')))));
