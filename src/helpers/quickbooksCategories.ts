@@ -29,20 +29,27 @@ export function transactionSelectionTotal(lines: QuickBooksReportLine[], columns
   const index = columns.findIndex(column => [column.ColTitle, ...(column.MetaData || []).filter((m: any) => m.Name === 'ColKey').map((m: any) => m.Value)]
     .some(value => normalize(String(value || '')) === 'amount'));
   const rows = lines.filter(line => !line.heading);
-  let cents = 0; let missing = 0;
-  for (const row of rows) {
-    let raw = (index < 0 ? '' : lineSplit(row, index)).trim();
+  let cents = 0;
+  const excluded: { row: QuickBooksReportLine; rowNumber: number; rawAmount: string; reason: string }[] = [];
+  for (let rowIndex = 0; rowIndex < lines.length; rowIndex++) {
+    const row = lines[rowIndex];
+    if (row.heading) continue;
+    const original = index < 0 ? '' : lineSplit(row, index);
+    const exclude = (reason: string) => excluded.push({ row, rowNumber: rowIndex + 1, rawAmount: original, reason });
+    let raw = original.trim();
     const parentheses = /^\(.*\)$/.test(raw);
     if (parentheses) raw = raw.slice(1, -1).trim();
     const sign = raw.startsWith('-') ? -1 : 1;
     raw = raw.replace(/^[+-]/, '').replace(/^\$/, '');
-    if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(raw) || (parentheses && sign < 0)) { missing++; continue; }
+    if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(raw) || (parentheses && sign < 0)) {
+      exclude(index < 0 ? 'Amount column not returned by QuickBooks' : !original.trim() ? 'Missing amount' : 'Unsupported amount format'); continue;
+    }
     const [whole, fraction = ''] = raw.replace(/,/g, '').split('.');
     const value = (Number(whole) * 100 + Number(fraction.padEnd(2, '0'))) * (parentheses ? -1 : sign);
-    if (!Number.isSafeInteger(value) || !Number.isSafeInteger(cents + value)) { missing++; continue; }
+    if (!Number.isSafeInteger(value) || !Number.isSafeInteger(cents + value)) { exclude('Amount exceeds safe calculation precision'); continue; }
     cents += value;
   }
-  return { amountIndex: index, rows: rows.length, missing, cents: index < 0 || missing ? null : cents };
+  return { amountIndex: index, rows: rows.length, missing: excluded.length, included: rows.length - excluded.length, excluded, cents: index < 0 ? null : cents };
 }
 
 export function splitColumnIndex(columns: any[]): number {
