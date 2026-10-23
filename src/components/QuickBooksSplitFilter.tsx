@@ -8,7 +8,7 @@ export default function QuickBooksSplitFilter({ categories, selected, onChange, 
   const groups = Array.from(new Set(categories.map(category => category.group)));
   const current = categories.find(category => category.key === selected);
   return <div className="quickbooks-category-filter">
-    <label><span>Category from QuickBooks Split</span><select value={selected} onChange={event => onChange(event.target.value)}>
+    <label><span>Temple Categories</span><select value={selected} onChange={event => onChange(event.target.value)}>
       <option value="">All categories</option>
       {groups.map(group => <optgroup label={group} key={group}>{categories.filter(category => category.group === group).map(category =>
         <option key={category.key} value={category.key}>{category.label} ({category.count} rows)</option>
