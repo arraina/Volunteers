@@ -170,6 +170,10 @@
 .quickbooks-report-tools { display: flex; align-items: end; gap: 0.75rem; margin: 0 0 0.75rem; }
 .quickbooks-report-tools label { display: grid; flex: 1; gap: 0.35rem; font-weight: 700; }
 .quickbooks-report-tools input { width: 100%; }
+.quickbooks-category-filter { margin: 0 0 1rem; padding: 0.8rem; border: 1px solid #cde2d3; border-radius: 0.6rem; background: #f5faf6; }
+.quickbooks-category-filter label { display: grid; gap: 0.35rem; max-width: 34rem; font-weight: 700; }
+.quickbooks-category-filter select { width: 100%; min-width: 0; }
+.quickbooks-category-filter p { margin: 0.5rem 0 0; }
 .quickbooks-sort-note { margin: -0.25rem 0 0.75rem; }
 .quickbooks-report-table { max-width: 100%; min-width: 0; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; scrollbar-width: auto; scrollbar-color: var(--green-600) #eef3ef; }
 .quickbooks-report-title { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem; background: #eff8f1; }

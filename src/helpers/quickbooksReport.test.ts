@@ -1,4 +1,4 @@
-import { visibleQuickBooksLines, QuickBooksReportLine } from './quickbooksReport';
+import { visibleQuickBooksLines, QuickBooksReportLine, quickBooksReportLines } from './quickbooksReport';
 
 const lines: QuickBooksReportLine[] = [
   { label: 'Catering', values: ['5,132.00'], depth: 1, heading: false },
@@ -15,4 +15,10 @@ test('sorts accounting values numerically and restores original order without a 
   expect(visibleQuickBooksLines(lines, '', { column: 1, direction: 'asc' }).map(line => line.label)).toEqual(['Refund', 'Catering', 'Facility Income']);
   expect(visibleQuickBooksLines(lines, '', { column: 0, direction: 'desc' }).map(line => line.label)).toEqual(['Refund', 'Facility Income', 'Catering']);
   expect(visibleQuickBooksLines(lines, '', null)).toEqual(lines);
+});
+
+test('emits summaries once and identifies them as non-transaction rows', () => {
+  expect(quickBooksReportLines([{Summary:{ColData:[{value:'Total'},{value:'100'}]}}])).toEqual([
+    {label:'Total',values:['100'],depth:0,heading:true},
+  ]);
 });
