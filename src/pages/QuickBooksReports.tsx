@@ -3,7 +3,7 @@ import { connectQuickBooks, disconnectQuickBooks, getQuickBooksReport, getQuickB
 import { quickBooksReportLines, QuickBooksReportSort, visibleQuickBooksLines } from '../helpers/quickbooksReport';
 import QuickBooksSplitFilter from '../components/QuickBooksSplitFilter';
 import QuickBooksExcludedAmounts from '../components/QuickBooksExcludedAmounts';
-import { availableSplitCategories, lineSplit, splitCategory, splitColumnIndex, transactionSelectionTotal } from '../helpers/quickbooksCategories';
+import { availableSplitCategories, filterSplitSelection, splitColumnIndex, transactionSelectionTotal } from '../helpers/quickbooksCategories';
 
 const isoDate = (date: Date) => date.toISOString().slice(0, 10);
 
@@ -31,7 +31,7 @@ const QuickBooksReports: React.FC<{ setError: (message: string) => void }> = ({ 
   const categories = useMemo(() => availableSplitCategories(lines, splitIndex), [lines, splitIndex]);
   const visibleLines = useMemo(() => visibleQuickBooksLines(
     reportType === 'TransactionList' && category && splitIndex >= 0
-      ? lines.filter(line => !line.heading && splitCategory(lineSplit(line, splitIndex)).key === category)
+      ? filterSplitSelection(lines, splitIndex, category)
       : lines, search, sort
   ), [lines, search, sort, category, splitIndex, reportType]);
   const selectionTotal = useMemo(() => transactionSelectionTotal(visibleLines, report?.Columns?.Column || []), [visibleLines, report]);

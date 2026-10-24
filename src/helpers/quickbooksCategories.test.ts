@@ -1,4 +1,4 @@
-import { availableSplitCategories, splitCategory, splitColumnIndex, transactionSelectionTotal } from './quickbooksCategories';
+import { availableSplitCategories, filterSplitSelection, splitCategory, splitColumnIndex, transactionSelectionTotal } from './quickbooksCategories';
 
 test('finds Split by title or API column key, not by fixed position', () => {
   expect(splitColumnIndex([{ColTitle:'Date'},{ColTitle:'Split'}])).toBe(1);
@@ -7,12 +7,42 @@ test('finds Split by title or API column key, not by fixed position', () => {
 });
 test('matches requested account aliases and respects parent context', () => {
   expect(splitCategory('Activities Income:Govinda Snacks').key).toBe('Active income/Govinda Snacks');
-  expect(splitCategory('General Donation Income').key).toBe('General donation/General donation');
+  expect(splitCategory('General Donation Income').key).toBe('General Income/General donation');
   expect(splitCategory('General Expenses:Utilities').key).toBe('General Expenses/Utility');
   expect(splitCategory('Active Income:Other').key).not.toBe(splitCategory('General Expenses:Other').key);
   expect(splitCategory('Other').key).toBe('raw:Other');
   expect(splitCategory('New Temple:Donation').key).toBe('New Temple/New Temple Donation');
   expect(splitCategory('New Temple Expense').key).toBe('New Temple/New Temple Expense');
+});
+
+test('groups New Temple anywhere in a path before all other rules', () => {
+  for(const value of ['Expenses:New Temple Building:Utilities','Festival Income:New temple construction donations','General Donation Income:New Temple fund','New-Temple:Roof Repairs']) {
+    expect(splitCategory(value).group).toBe('New Temple');
+  }
+});
+
+test('routes festival and general income/expenses into exclusive groups', () => {
+  expect(splitCategory('Festival Expense:Janmashtami').group).toBe('Festival Expenses');
+  expect(splitCategory('Activities Income:Festival Income').group).toBe('Festival Income');
+  expect(splitCategory('Festival Donations:Diwali').group).toBe('Festival Income');
+  expect(splitCategory('General Donation Expense').group).toBe('General Expenses');
+  expect(splitCategory('General Donation Income:Unrestricted').group).toBe('General Income');
+  expect(splitCategory('General Expenses:Administration').group).toBe('General Expenses');
+  expect(splitCategory('General Income:Other').group).toBe('General Income');
+});
+
+test('group selection totals original rows once, never category totals plus group totals', () => {
+  const row=(label:string,account:string,value:string,heading=false)=>({label,values:[account,value],heading,depth:0});
+  const rows=[row('a','Festival Income:New Temple Donation','100.00'),row('b','New Temple Expense','-20.00'),row('c','Festival Income','30.00'),row('d','General Donation Income','50.00'),row('total','New Temple','9999.00',true)];
+  const categories=availableSplitCategories(rows,1);
+  expect(categories.reduce((sum,category)=>sum+category.count,0)).toBe(4);
+  const selected=filterSplitSelection(rows,1,'group:New Temple');
+  expect(selected.map(row=>row.label)).toEqual(['a','b']);
+  expect(transactionSelectionTotal(selected,[{ColTitle:'Date'},{ColTitle:'Split'},{ColTitle:'Amount'}]).cents).toBe(8000);
+  const groupedRows=['New Temple','Festival Income','General Income'].flatMap(group=>filterSplitSelection(rows,1,`group:${group}`));
+  expect(groupedRows.length).toBe(4); expect(new Set(groupedRows).size).toBe(4);
+  expect(filterSplitSelection(rows,1,'New Temple/New Temple Expense').map(row=>row.label)).toEqual(['b']);
+  expect(filterSplitSelection(rows,1,'')).toBe(rows);
 });
 test('keeps unknown, blank and multiple-account values visible without guessing', () => {
   expect(splitCategory('-Split-').key).toBe('multiple');

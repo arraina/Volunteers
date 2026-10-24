@@ -2,7 +2,7 @@ import { QuickBooksReportLine } from './quickbooksReport';
 
 const normalize = (value: string) => value.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
 const definitions = [
-  ['General donation', 'General donation', ['general donation', 'general donation income']],
+  ['General Income', 'General donation', ['general donation', 'general donation income']],
   ['Active income', 'Govinda Snacks', ['govinda snak', 'govinda snack', 'govinda snacks', 'govinda snaks']],
   ['Active income', 'Facility Income', ['facility income']],
   ['Active income', 'Religious Ceremony', ['religious ceremony', 'religious ceremonies']],
@@ -62,9 +62,26 @@ export function splitCategory(value: string): Omit<SplitCategory, 'count' | 'acc
   if (!raw) return { key: 'blank', group: 'Unmapped / other accounts', label: 'No Split value' };
   if (['split', 'multiple', 'multiple accounts'].includes(normalized)) return { key: 'multiple', group: 'Unmapped / other accounts', label: 'Multiple accounts — detail unavailable' };
   const parts = raw.split(':').map(normalize); const leaf = parts[parts.length - 1];
+  const grouped = (group: string, label = raw) => ({ key: `${group}/${label}`, group, label });
+  // One exclusive result per row. New Temple takes precedence even when an
+  // account path also contains "Festival", "General Income", or "Expenses".
+  if (/\bnew temple\b/.test(normalized)) {
+    if (['new temple donation', 'new temple donations', 'donation', 'donations'].includes(leaf)) return grouped('New Temple', 'New Temple Donation');
+    if (['new temple expense', 'new temple expenses', 'expense', 'expenses'].includes(leaf)) return grouped('New Temple', 'New Temple Expense');
+    if (normalized === 'new temple') return grouped('New Temple', 'New Temple');
+    return grouped('New Temple');
+  }
+  // Prefer the most specific subaccount's direction over a parent label.
+  const direction = parts.slice().reverse().find(part => /\b(expenses?|income|donations?)\b/.test(part)) || '';
+  const isExpense = /\bexpenses?\b/.test(direction);
+  const isIncome = /\b(income|donations?)\b/.test(direction);
+  if (/\bfestivals?\b/.test(normalized) && (isExpense || isIncome)) return grouped(isExpense ? 'Festival Expenses' : 'Festival Income');
+  if (/\bgeneral donations?\b/.test(normalized)) {
+    return grouped(isExpense ? 'General Expenses' : 'General Income',
+      ['general donation', 'general donation income'].includes(leaf) && !isExpense ? 'General donation' : raw);
+  }
   const active = parts.some(p => ['active income', 'activities income', 'activity income'].includes(p));
   const expense = parts.some(p => ['general expenses', 'general expense', 'expenses'].includes(p));
-  const newTemple = parts.some(p => p === 'new temple');
   for (const [group, label, aliases] of definitions) {
     if (!(aliases as readonly string[]).includes(leaf)) continue;
     // "Other" needs its parent to distinguish income from expenses.
@@ -74,11 +91,18 @@ export function splitCategory(value: string): Omit<SplitCategory, 'count' | 'acc
     if (group === 'New Temple' && label === 'New Temple' && parts.length > 1) continue;
     return { key: `${group}/${label}`, group, label };
   }
-  if (newTemple && ['donation', 'donations', 'expense', 'expenses'].includes(leaf)) {
-    const label = leaf.startsWith('donation') ? 'New Temple Donation' : 'New Temple Expense';
-    return { key: `New Temple/${label}`, group: 'New Temple', label };
-  }
+  if (/\bgeneral (income|expenses?)\b/.test(normalized)) return grouped(isExpense ? 'General Expenses' : 'General Income');
   return { key: `raw:${raw}`, group: 'Unmapped / other accounts', label: raw };
+}
+
+/** Filtering is a predicate on original rows, never a concatenation of group/category lists. */
+export function filterSplitSelection(lines: QuickBooksReportLine[], index: number, selection: string): QuickBooksReportLine[] {
+  if (!selection || index < 0) return lines;
+  return lines.filter(line => {
+    if (line.heading) return false;
+    const category = splitCategory(lineSplit(line, index));
+    return selection.startsWith('group:') ? category.group === selection.slice(6) : category.key === selection;
+  });
 }
 
 export function lineSplit(line: QuickBooksReportLine, index: number): string {
@@ -94,6 +118,6 @@ export function availableSplitCategories(lines: QuickBooksReportLine[], index: n
     item.count++; if (raw && !item.accounts.includes(raw)) item.accounts.push(raw);
     categories.set(category.key, item);
   }
-  const groups = ['General donation', 'Active income', 'General Expenses', 'New Temple', 'Unmapped / other accounts'];
+  const groups = ['General Income', 'Active income', 'Festival Income', 'General Expenses', 'Festival Expenses', 'New Temple', 'Unmapped / other accounts'];
   return Array.from(categories.values()).sort((a,b) => groups.indexOf(a.group) - groups.indexOf(b.group) || a.label.localeCompare(b.label));
 }
