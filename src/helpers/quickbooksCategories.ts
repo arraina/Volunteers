@@ -96,12 +96,13 @@ export function splitCategory(value: string): Omit<SplitCategory, 'count' | 'acc
 }
 
 /** Filtering is a predicate on original rows, never a concatenation of group/category lists. */
-export function filterSplitSelection(lines: QuickBooksReportLine[], index: number, selection: string): QuickBooksReportLine[] {
-  if (!selection || index < 0) return lines;
+export function filterSplitSelection(lines: QuickBooksReportLine[], index: number, selection: string | string[]): QuickBooksReportLine[] {
+  const selections = Array.isArray(selection) ? selection : selection ? [selection] : [];
+  if (!selections.length || index < 0) return lines;
   return lines.filter(line => {
     if (line.heading) return false;
     const category = splitCategory(lineSplit(line, index));
-    return selection.startsWith('group:') ? category.group === selection.slice(6) : category.key === selection;
+    return selections.some(key => key.startsWith('group:') ? category.group === key.slice(6) : category.key === key);
   });
 }
 

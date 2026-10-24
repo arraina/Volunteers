@@ -80,3 +80,12 @@ test('returns a partial total and detailed exclusions without losing valid value
   expect(total.excluded.map(item=>[item.rowNumber,item.row.label,item.reason])).toEqual([[2,'10/02','Missing amount'],[3,'10/03','Unsupported amount format']]);
   expect(transactionSelectionTotal([row('10/04','(5.05)')],[{}, {ColTitle:'Amount'}]).missing).toBe(0);
 });
+
+test('multi-selection unions rows once even for overlapping groups and duplicate keys', () => {
+  const row=(label:string,account:string,amount:string)=>({label,values:[account,amount],depth:0,heading:false});
+  const rows=[row('a','New Temple Donation','100'),row('b','Festival Income','20'),row('c','New Temple Expense','-5'),row('d','General Donation Income','10')];
+  const selected=filterSplitSelection(rows,1,['group:New Temple','New Temple/New Temple Donation','group:Festival Income','group:New Temple']);
+  expect(selected.map(row=>row.label)).toEqual(['a','b','c']);
+  expect(transactionSelectionTotal(selected,[{ColTitle:'Date'},{ColTitle:'Split'},{ColTitle:'Amount'}]).cents).toBe(11500);
+  expect(filterSplitSelection(rows,1,[])).toBe(rows);
+});
