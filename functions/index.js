@@ -884,6 +884,11 @@ exports.getQuickBooksReport = onCall({ region: 'us-central1', maxInstances: 4, s
     if (!endDate) throw new HttpsError('invalid-argument', 'Choose an as-of date for accounts receivable.');
     params.set('report_date', endDate);
     params.set('aging_method', 'Report_Date');
+    if (report === 'AgedReceivableDetail') {
+      // Explicitly request Memo/Description and the identifying detail columns.
+      // QuickBooks supplies the report's monetary amount/open-balance columns.
+      params.set('columns', 'tx_date,txn_type,doc_num,cust_name,due_date,past_due,memo');
+    }
   } else {
     if (startDate) params.set('start_date', startDate); if (endDate) params.set('end_date', endDate);
   }

@@ -22,3 +22,10 @@ test('emits summaries once and identifies them as non-transaction rows', () => {
     {label:'Total',values:['100'],depth:0,heading:true},
   ]);
 });
+
+test('keeps A/R memo and pledge codes aligned with all other returned columns', () => {
+  const cells=['11/01/2026','Invoice','22','Manu Kunjappan','11/01/2028','10000.00','10000.00','PLG-0026'];
+  const lines=quickBooksReportLines([{type:'Data',ColData:cells.map(value=>({value}))}]);
+  expect([lines[0].label,...lines[0].values]).toEqual(cells);
+  expect(visibleQuickBooksLines(lines,'PLG-0026',null)).toEqual(lines);
+});
