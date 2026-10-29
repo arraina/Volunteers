@@ -1,5 +1,24 @@
 import type { FundraisingPledge, FundraisingPledgePayment } from './fundraisingCrm';
 
+export function pledgeReviewFingerprint(pledge: FundraisingPledge, pledges: FundraisingPledge[], payments: FundraisingPledgePayment[]): string {
+  const date = (value: Date | null) => value instanceof Date && Number.isFinite(value.getTime()) ? value.toISOString() : null;
+  const name = (value: FundraisingPledge) => `${value.donorFirstName} ${value.donorLastName}`.toLowerCase().replace(/\s+/g, ' ').trim();
+  const duplicates = pledges.filter(other => other.id !== pledge.id && other.status !== 'cancelled'
+    && ((pledge.donorId && pledge.donorId === other.donorId) || (name(pledge) && name(pledge) === name(other)))
+    && (pledge.eventId || pledge.purpose) === (other.eventId || other.purpose)
+    && pledge.pledgedAmount === other.pledgedAmount
+    && pledge.pledgeDate && other.pledgeDate && pledge.pledgeDate.toLocaleDateString() === other.pledgeDate.toLocaleDateString())
+    .map(other => other.id).sort();
+  return JSON.stringify([pledge.pledgedAmount, pledge.paidAmount, pledge.openBalanceKnown, pledge.openBalanceSource,
+    pledge.status, pledge.donorId, pledge.eventId, pledge.purpose, date(pledge.pledgeDate), date(pledge.dueDate), date(pledge.nextPaymentDate), duplicates,
+    payments.filter(payment => payment.pledgeId === pledge.id).map(payment => [payment.id, payment.amount, date(payment.receivedAt), payment.method, payment.status, payment.reference])
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0])))]);
+}
+
+export function isPledgeReviewConfirmed(pledge: FundraisingPledge, pledges: FundraisingPledge[], payments: FundraisingPledgePayment[]): boolean {
+  return Boolean(pledge.reviewConfirmation?.confirmedBy && pledge.reviewConfirmation.fingerprint === pledgeReviewFingerprint(pledge, pledges, payments));
+}
+
 export function pledgeReviewReasons(pledge: FundraisingPledge, pledges: FundraisingPledge[], payments: FundraisingPledgePayment[], checkDays: number, now = new Date()): string[] {
   if (pledge.status === 'cancelled') return [];
   const reasons: string[] = [];
@@ -26,5 +45,5 @@ export function pledgeReviewReasons(pledge: FundraisingPledge, pledges: Fundrais
     if (!validDate || !payment.method) reasons.push(`Receipt of ${format(payment.amount)} is missing ${!validDate ? 'a valid received date' : 'a payment mode'}. Complete the receipt details.`);
     if (validDate && payment.method === 'check' && payment.status !== 'cleared' && (Number(today) - Number(payment.receivedAt)) / 86400000 >= checkDays) reasons.push(`Check for ${format(payment.amount)} received ${payment.receivedAt.toLocaleDateString()} has not been marked cleared after ${checkDays} days. Verify its clearing status${payment.reference ? ` (reference ${payment.reference})` : ''}.`);
   });
-  return reasons;
+  return isPledgeReviewConfirmed(pledge, pledges, payments) ? reasons.filter(reason => !pledge.reviewConfirmation!.reasons.includes(reason)) : reasons;
 }

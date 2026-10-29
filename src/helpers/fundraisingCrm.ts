@@ -113,6 +113,7 @@ export interface FundraisingPledge {
   paidAmount: number;
   openBalanceKnown: boolean;
   openBalanceSource: string;
+  reviewConfirmation?: { fingerprint: string; reasons: string[]; confirmedBy: string; confirmedAt?: unknown; note?: string };
   pledgeDate: Date | null;
   dueDate: Date | null;
   nextPaymentDate: Date | null;
@@ -287,6 +288,7 @@ export function subscribeFundraisingPledges(cb: (pledges: FundraisingPledge[]) =
         sourceCampaignEntryId: String(data.sourceCampaignEntryId || ''), purpose: String(data.purpose || ''), reconciliationCode: String(data.reconciliationCode || ''),
         pledgedAmount: Number(data.pledgedAmount) || 0, paidAmount: Number(data.paidAmount) || 0,
         openBalanceKnown: data.openBalanceKnown !== false, openBalanceSource: String(data.openBalanceSource || ''),
+        reviewConfirmation: data.reviewConfirmation,
         pledgeDate: data.pledgeDate ? firestoreTimestampToDate(data.pledgeDate) : null,
         dueDate: data.dueDate ? firestoreTimestampToDate(data.dueDate) : null,
         nextPaymentDate: data.nextPaymentDate ? firestoreTimestampToDate(data.nextPaymentDate) : null,
